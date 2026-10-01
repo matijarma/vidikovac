@@ -20,6 +20,26 @@ export const FROZEN_AFTER_S = 300;
 export const RETURN_MIN_SEEN = 10;
 /** ...held for this many minutes with data (the events stage's seen-rising-past rule). */
 export const RETURN_HOLD_MIN = 5;
+/** A difference between the published number and the vehicles with a position counts as a ghost only where it
+ *  cannot be the lag between the minute's two samples: a small fleet (under this many in motion)... */
+export const GHOST_SMALL_FLEET = 20;
+/** ...and at least this many more published; or any published vehicle while none had a position. */
+export const GHOST_MIN_EXCESS = 2;
+
+/** The ghosts of one minute (published minus seen) under the rule above, or null where the minute does not count. */
+export function ghostExcess(published: number | null | undefined, seen: number | null | undefined): number | null {
+  if (published === null || published === undefined || seen === null || seen === undefined) return null;
+  const diff = published - seen;
+  if (seen === 0 && published > 0) return diff;
+  return seen < GHOST_SMALL_FLEET && diff >= GHOST_MIN_EXCESS ? diff : null;
+}
+
+/** ZET's data did not change at this minute (the newest header older than five minutes). */
+export function frozenAt(s: SeriesFile, m: number): boolean {
+  const age = s.feed.headerAgeS[m];
+  return age !== null && age !== undefined && age > FROZEN_AFTER_S;
+}
+
 /** The quartet's and the peak card's minute of day. */
 export const MORNING_S = 7 * 3600 + 45 * 60;
 
@@ -75,7 +95,7 @@ export function silentMinutes(s: SeriesFile): SilentResult {
   return { total, byDay, fromSec: first < 0 ? null : atOf(s, first), toSec: last < 0 ? null : atOf(s, last) + 60 };
 }
 
-export interface PeakResult { days: { day: number; atSec: number; seen: number | null; expected: number | null }[]; normal: number | null }
+export interface PeakResult { days: { day: number; atSec: number; seen: number | null; expected: number | null; frozen: boolean }[]; normal: number | null }
 
 /** Vehicles in motion at 07:45 on every morning of the window, and on the comparison day at the same minute. */
 export function peakAt0745(s: SeriesFile, comparison: SeriesFile | null): PeakResult {
@@ -84,7 +104,9 @@ export function peakAt0745(s: SeriesFile, comparison: SeriesFile | null): PeakRe
     const atSec = day + MORNING_S;
     const m = minuteOf(s, atSec);
     if (m === null) continue;
-    days.push({ day, atSec, seen: s.seen.all[m] ?? null, expected: s.expected.all[m] ?? null });
+    const seen = s.seen.all[m] ?? null;
+    // A missing count while ZET's data stood still is not a gap in the recording: the card says which.
+    days.push({ day, atSec, seen, expected: s.expected.all[m] ?? null, frozen: seen === null && frozenAt(s, m) });
   }
   let normal: number | null = null;
   if (comparison) {
@@ -148,8 +170,9 @@ export interface GhostResult {
 }
 
 /** The number the product published against the vehicles with a position, minute by minute: how many minutes it
- *  said more, by how much at most, and when, in all and per day. Only minutes where both numbers exist count. Null
- *  without a published series (the comparison day). */
+ *  counted vehicles that were not there (ghostExcess: a small fleet and at least two more, or any while none had a
+ *  position), by how much at most, and when, in all and per day. Only minutes where both numbers exist are compared.
+ *  Null without a published series (the comparison day). */
 export function ghostInflation(s: SeriesFile): GhostResult | null {
   const p = s.published;
   if (!p) return null;
@@ -168,8 +191,8 @@ export function ghostInflation(s: SeriesFile): GhostResult | null {
     compared++;
     const row = byDay[days.indexOf(midnightOf(atOf(s, m)))];
     if (row) row.compared++;
-    const diff = pub - seen;
-    if (diff <= 0) continue;
+    const diff = ghostExcess(pub, seen);
+    if (diff === null) continue;
     minutes++;
     if (row) { row.minutes++; row.max = Math.max(row.max, diff); }
     if (first < 0) first = m;
@@ -416,9 +439,9 @@ function silentCard(s: SeriesFile): HTMLElement {
 
 function peakCard(s: SeriesFile, comparison: SeriesFile | null): HTMLElement {
   const r = peakAt0745(s, comparison);
-  const text = (v: number | null): string => (v === null ? SN.strip.noValue : count(v, VOZILO));
+  const text = (v: number | null, frozen = false): string => (v === null ? (frozen ? R.feedFrozen : SN.strip.noValue) : count(v, VOZILO));
   const items = [
-    ...r.days.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.seen, text: text(d.seen) })),
+    ...r.days.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.seen, text: text(d.seen, d.frozen) })),
     { key: 'normal', label: R.peakCompare, value: r.normal, text: text(r.normal) },
   ];
   return card({ id: 'vidjelo-jutra', title: R.peak, body: [nullableBars(items, R.peak)], method: R.peakMethod });

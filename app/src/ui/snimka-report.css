@@ -2,17 +2,16 @@
 /* The chart roles, from the layer-2 tokens alone, so both themes follow the
    page's own switch. Validated with the dataviz validator against the strip's
    surface (surface-1) in light and dark: seen against the comparison grey
-   (normal vision 28.0 / 22.3), the screen's number against seen (26.1 / 22.2),
-   the service ramp normal 45 %, reduced 75 %, silent 100 % (monotone L,
+   (normal vision 28.0 / 22.3), the service ramp normal 45 %, reduced 75 %, silent 100 % (monotone L,
    adjacent CVD 9.2 / 9.6, normal vision 16.0 / 15.3; status hues, never
-   without their words). */
+   without their words). The ghost columns are one series on their own panel,
+   in the urgency role (contrast over 3:1 in both themes). */
 .sn-body {
   --sn-seen: var(--tone-action-brand);
   --sn-expected-fill: color-mix(in oklab, var(--tone-text-muted) 16%, transparent);
   --sn-expected-key: color-mix(in oklab, var(--tone-text-muted) 30%, var(--tone-surface-1));
   --sn-compare: color-mix(in oklab, var(--tone-text-muted) 55%, var(--tone-surface-1));
-  --sn-screen: var(--tone-text-primary);
-  --sn-ghost: color-mix(in oklab, var(--tone-urgency) 14%, transparent);
+  --sn-ghost: var(--tone-urgency);
   --sn-bike: var(--tone-bike);
   --sn-bike-fill: color-mix(in oklab, var(--tone-bike) 12%, transparent);
   --sn-state-normal: color-mix(in oklab, var(--tone-state-success) 45%, var(--tone-surface-1));
@@ -104,8 +103,6 @@
 .sn-tone-seen { --key: var(--sn-seen); }
 .sn-tone-expected { --key: var(--sn-expected-key); }
 .sn-tone-compare { --key: var(--sn-compare); }
-.sn-tone-screen { --key: var(--sn-screen); }
-.sn-tone-ghost { --key: color-mix(in oklab, var(--tone-urgency) 28%, var(--tone-surface-1)); }
 .sn-tone-bike-empty { --key: var(--sn-bike); }
 .sn-tone-feed-empty { --key: var(--sn-feed-mark); }
 .sn-tone-feed-frozen { background: repeating-linear-gradient(135deg, var(--sn-feed-mark) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--sn-feed-mark); }
@@ -125,11 +122,10 @@
 .sn-curves [hidden] { display: none; }
 .sn-line-seen { stroke: var(--sn-seen); }
 .sn-line-compare { stroke: var(--sn-compare); }
-.sn-line-screen { stroke: var(--sn-screen); }
 .sn-line-bike { stroke: var(--sn-bike); }
 .sn-curves .sn-area-expected { fill: var(--sn-expected-fill); stroke: none; }
 .sn-curves .sn-area-bike { fill: var(--sn-bike-fill); stroke: none; }
-.sn-curves .sn-wash-ghost { fill: var(--sn-ghost); stroke: none; }
+.sn-curves .sn-cols-ghost { fill: var(--sn-ghost); stroke: none; }
 .sn-scale { position: absolute; z-index: 1; inset-block-start: 0.15rem; inset-inline-start: 0.15rem; padding: 0 0.25rem; border-radius: 3px; background: color-mix(in oklab, var(--tone-surface-1) 82%, transparent); font-size: var(--type-meta); line-height: 1.3; color: var(--tone-text-muted); font-variant-numeric: tabular-nums; pointer-events: none; }
 .sn-dayline { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: 1px; background: var(--tone-stroke); pointer-events: none; }
 /* The cursor is a full-width box moved by one transform per frame (a percent of its own width: no layout read). */

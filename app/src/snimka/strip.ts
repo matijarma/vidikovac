@@ -14,7 +14,7 @@ import { columns, hideTip, showTip, tableDetails } from '../statistika/charts';
 import { escapeHtml } from '../ui/dom/escape';
 import type { SnimkaContext } from './context';
 import { num, zagrebClock, zagrebDateTime, zagrebDay } from './format';
-import { FROZEN_AFTER_S, midnightOf } from './reckoning';
+import { FROZEN_AFTER_S, frozenAt, ghostExcess, midnightOf } from './reckoning';
 import { SN, fill } from './strings';
 
 /** The viewBox height of every curve; x runs in minutes. */
@@ -105,16 +105,23 @@ export function areaPath(values: readonly (number | null | undefined)[], max: nu
     .join('');
 }
 
-/** The band between `upper` and `lower` in the minutes where upper is the larger (the published number above the
- *  real one), half a minute either side so one minute of difference still has a width. */
-export function washPath(upper: readonly (number | null | undefined)[], lower: readonly (number | null | undefined)[], max: number): string {
-  const n = Math.min(upper.length, lower.length);
-  const above = Array.from({ length: n }, (_, k) => (present(upper[k]) && present(lower[k]) && upper[k]! > lower[k]! ? 1 : null));
-  return presentRuns(above)
+/** Columns from the baseline, one minute wide, for the present values only (a null minute has no column). */
+export function columnsPath(values: readonly (number | null | undefined)[], max: number): string {
+  return presentRuns(values)
     .map(([start, end]) => {
-      const top = upper.slice(start, end).map((v) => tenths(v!, max));
-      const bottom = lower.slice(start, end).map((v) => tenths(v!, max)).reverse();
-      return `M${start - 0.5} ${fmt(top[0]!)}h0.5${stepsOf(top, 1)}h0.5V${fmt(bottom[0]!)}h-0.5${stepsOf(bottom, -1)}h-0.5Z`;
+      let d = `M${start - 0.5} ${PLOT_H}`;
+      let prev = -1;
+      let flat = 0;
+      for (let k = start; k < end; k++) {
+        const y = tenths(values[k]!, max);
+        if (y === prev) { flat++; continue; }
+        if (flat > 0) d += `h${flat}`;
+        flat = 0;
+        d += `V${fmt(y)}h1`;
+        prev = y;
+      }
+      if (flat > 0) d += `h${flat}`;
+      return `${d}V${PLOT_H}Z`;
     })
     .join('');
 }
@@ -328,6 +335,8 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
   const keep = (p: Plot): HTMLElement => { plots.push(p); return p.el; };
   const S = SN.strip;
   let compare = o.compare;
+  /** A missing count while ZET's data stood still says so; "bez podatka" is kept for a true gap. */
+  const seenCell = (m: number): string => (s.seen.all[m] === null && frozenAt(s, m) ? SN.reckoning.feedFrozen : cell(s.seen.all[m]));
 
   // 1. Vehicles in motion: seen (the line that matters), the timetable as a grey silhouette, the normal day as a grey line.
   const compareCol: (number | null)[] = new Array(n).fill(null);
@@ -346,7 +355,7 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
     { d: areaPath(s.expected.all, fleetMax), cls: 'sn-area-expected' },
     { d: linePath(compareCol, fleetMax), cls: 'sn-line-compare', layer: 'compare' },
     { d: linePath(s.seen.all, fleetMax), cls: 'sn-line-seen' },
-  ])], days, num(fleetMax), 'tall'))], tableDetails(`${S.fleet}, ${S.table}`, [S.hour, S.fleetSeen, S.fleetExpected, S.fleetCompare], hourRows(s, (m) => [cell(s.seen.all[m]), cell(s.expected.all[m]), cell(compareCol[m])]), S.table));
+  ])], days, num(fleetMax), 'tall'))], tableDetails(`${S.fleet}, ${S.table}`, [S.hour, S.fleetSeen, S.fleetExpected, S.fleetCompare], hourRows(s, (m) => [seenCell(m), cell(s.expected.all[m]), cell(compareCol[m])]), S.table));
 
   // 2. The service state: one band, a hatch where the machine held its verdict, an overlay where it was computed afterwards.
   const liveFrom = Math.max(0, Math.min(n, Math.ceil((o.serviceLiveFromSec - s.t0) / 60)));
@@ -413,20 +422,30 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
     minutesIn(m, (k) => (s.feed.headerAgeS[k] === null || s.feed.headerAgeS[k] === undefined ? null : isFrozen(s.feed.headerAgeS[k]))),
   ]), S.table));
 
-  // 5. The number the screen showed against the vehicles with a position; where it said more, a light wash between.
-  let product: HTMLElement | null = null;
+  // 5. The vehicles the screen counted that had no position: published minus seen, on its own small scale, only in
+  // the minutes where the difference cannot be the lag between two samples (reckoning.ts ghostExcess).
+  let ghosts: HTMLElement | null = null;
   if (s.published) {
     const pub = s.published.vehicles;
-    const max = colMax(pub, s.seen.all);
-    product = panel('product', S.product, [
-      { kind: 'line', tone: 'sn-tone-screen', label: S.productScreen },
-      { kind: 'line', tone: 'sn-tone-seen', label: S.productFeed },
-      { kind: 'wash', tone: 'sn-tone-ghost', label: SN.reckoning.ghosts },
-    ], [keep(plot('product', [svg(n, [
-      { d: washPath(pub, s.seen.all, max), cls: 'sn-wash-ghost' },
-      { d: linePath(s.seen.all, max), cls: 'sn-line-seen' },
-      { d: linePath(pub, max), cls: 'sn-line-screen' },
-    ])], days, num(max), 'tall'))], tableDetails(`${S.product}, ${S.table}`, [S.hour, S.productScreen, S.productFeed], hourRows(s, (m) => [cell(pub[m]), cell(s.seen.all[m])]), S.table));
+    const excess = Array.from({ length: n }, (_, m) => ghostExcess(pub[m], s.seen.all[m]));
+    const max = colMax(excess);
+    const R = SN.reckoning;
+    const hourGhosts = (m0: number): string[] => {
+      let compared = 0;
+      let minutes = 0;
+      let most = 0;
+      for (let m = m0; m < Math.min(n, m0 + 60); m++) {
+        if (pub[m] === null || pub[m] === undefined || s.seen.all[m] === null || s.seen.all[m] === undefined) continue;
+        compared++;
+        const e = excess[m];
+        if (e === null || e === undefined) continue;
+        minutes++;
+        most = Math.max(most, e);
+      }
+      return compared === 0 ? [S.noValue, S.noValue] : [num(most), `${num(minutes)} min`];
+    };
+    ghosts = panel('ghosts', S.ghosts, null, [keep(plot('ghosts', [svg(n, [{ d: columnsPath(excess, max), cls: 'sn-cols-ghost' }])], days, max > 0 ? num(max) : null, 'short'))],
+      tableDetails(`${S.ghosts}, ${S.table}`, [S.hour, R.ghostsMax, R.ghostsMinutes], hourRows(s, (m) => hourGhosts(m)), S.table));
   }
 
   // 6. Press items per hour: the report's own columns, on the same axis.
@@ -467,7 +486,7 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
   frame.setAttribute('role', 'group');
   frame.setAttribute('aria-label', S.plotsLabel);
   frame.setAttribute('aria-describedby', readout.id);
-  frame.append(axis, fleet, statePanel, ...(bikes ? [bikes] : []), feedPanel, ...(product ? [product] : []), ...(news ? [news] : []));
+  frame.append(axis, fleet, statePanel, ...(bikes ? [bikes] : []), feedPanel, ...(ghosts ? [ghosts] : []), ...(news ? [news] : []));
   root.replaceChildren(frame, readout);
   root.removeAttribute('aria-busy');
 

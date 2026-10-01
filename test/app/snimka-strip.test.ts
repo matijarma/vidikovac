@@ -11,7 +11,7 @@ import { createReplayClock } from '../../app/src/snimka/clock';
 import { createLayerStore, type SnimkaContext } from '../../app/src/snimka/context';
 import type { FrameLoop } from '../../app/src/snimka/frames';
 import {
-  areaPath, comparisonMinute, cursorFraction, dayLines, linePath, mountStrip, readoutText, readoutValues, renderStrip, runsOf, seekTime, stateClass, subpaths, washPath,
+  areaPath, comparisonMinute, cursorFraction, dayLines, linePath, mountStrip, readoutText, readoutValues, renderStrip, runsOf, seekTime, stateClass, subpaths, columnsPath,
 } from '../../app/src/snimka/strip';
 import { MARKS, buildComparisonSeries, buildWindowSeries } from '../../e2e/snimka-fixtures';
 
@@ -42,19 +42,18 @@ describe('linePath', () => {
   });
 });
 
-describe('areaPath and washPath', () => {
+describe('areaPath and columnsPath', () => {
   it('a silhouette closes once per stretch of values', () => {
     const d = areaPath([1, 1, null, 2], 10);
     expect((d.match(/Z/g) ?? []).length).toBe(2);
     expect(d).toBe('M-0.5 100V90h0.5h1h0.5V100ZM2.5 100V80h0.5h0.5V100Z');
   });
-  it('the wash covers only the minutes where the published number is above the real one', () => {
-    const upper: Col<number> = [5, 5, 2, null, 9];
-    const lower: Col<number> = [0, 1, 2, 3, 4];
-    const d = washPath(upper, lower, 10);
-    expect((d.match(/Z/g) ?? []).length).toBe(2); // minutes 0 to 1, and minute 4; minute 2 is equal, minute 3 has no published number
-    expect(d.startsWith('M-0.5 50h0.5h1h0.5V90h-0.5l-1 10h-0.5Z')).toBe(true);
-    expect(washPath([1, 1], [1, 2], 10)).toBe('');
+  it('columns stand on the baseline one minute wide, a null minute has none', () => {
+    const values: Col<number> = [5, 5, 2, null, 10];
+    const d = columnsPath(values, 10);
+    expect(d).toBe('M-0.5 100V50h1h1V80h1V100ZM3.5 100V0h1V100Z');
+    expect((d.match(/Z/g) ?? []).length).toBe(2);
+    expect(columnsPath([null, null], 10)).toBe('');
   });
 });
 
@@ -178,7 +177,7 @@ describe('mountStrip', () => {
     document.body.append(root);
     const off = mountStrip(ctx, root);
     const panels = [...root.querySelectorAll<HTMLElement>('.sn-panel')].map((p) => p.dataset.panel);
-    expect(panels).toEqual(['fleet', 'state', 'bikes', 'feed', 'product', 'news']);
+    expect(panels).toEqual(['fleet', 'state', 'bikes', 'feed', 'ghosts', 'news']);
     expect(root.hasAttribute('aria-busy')).toBe(false);
     for (const p of root.querySelectorAll('.sn-panel')) {
       expect(p.querySelector('.st-table summary')?.textContent).toBe('Brojevi po satu');
@@ -196,7 +195,7 @@ describe('mountStrip', () => {
     document.body.append(root);
     const off = mountStrip(ctx, root);
     const cursors = [...root.querySelectorAll<HTMLElement>('.sn-cursor')];
-    expect(cursors.length).toBe(7); // fleet, state, two bike plots, feed, product, news
+    expect(cursors.length).toBe(7); // fleet, state, two bike plots, feed, ghosts, news
     expect(cursors.every((c) => c.style.transform === 'translateX(0.0000%)')).toBe(true);
     frames.emit(END);
     expect(cursors.every((c) => c.style.transform === 'translateX(100.0000%)')).toBe(true);
@@ -228,6 +227,28 @@ describe('mountStrip', () => {
     plot.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 0, pointerId: 1, pointerType: 'mouse' }));
     plot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 100, pointerId: 1, pointerType: 'mouse' }));
     expect(clock.now()).toBe(seekTime(0.75, START, END));
+    off();
+  });
+  it('the ghosts panel draws a column only in the minutes the ghost rule counts, on its own scale', () => {
+    const { ctx } = context(MARKS.monday0745 * 1000);
+    const root = document.createElement('div');
+    document.body.append(root);
+    const off = mountStrip(ctx, root);
+    const panel = root.querySelector<HTMLElement>('[data-panel="ghosts"]')!;
+    expect(panel.querySelector('h3')!.textContent).toBe('Vozila koja je zaslon brojio, a nisu imala položaj');
+    // The fixture publishes five more than seen on Monday 17:00 to 21:00, in the silence: one run of columns at 5.
+    expect(panel.querySelector('.sn-scale')!.textContent).toBe('5');
+    const d = panel.querySelector('path.sn-cols-ghost')!.getAttribute('d')!;
+    expect((d.match(/Z/g) ?? []).length).toBe(1);
+    expect(d.startsWith(`M${minuteOf(Date.UTC(2026, 8, 28, 15, 0) / 1000) - 0.5} 100V0h1`)).toBe(true);
+    const rows = [...panel.querySelectorAll('.st-table tbody tr')];
+    expect(rows.length).toBe(84);
+    const at17 = rows.find((r) => r.querySelector('th')!.textContent === 'pon 28. 9. u 17:00')!;
+    expect([...at17.querySelectorAll('td')].map((c) => c.textContent)).toEqual(['5', '60 min']);
+    const at07 = rows.find((r) => r.querySelector('th')!.textContent === 'pon 28. 9. u 07:00')!;
+    expect([...at07.querySelectorAll('td')].map((c) => c.textContent)).toEqual(['0', '0 min']);
+    // Before the first published minute (Sunday 22:07) there is nothing to compare.
+    expect([...rows[0]!.querySelectorAll('td')].map((c) => c.textContent)).toEqual(['bez podatka', 'bez podatka']);
     off();
   });
   it('the keyboard steps the replay ten minutes, an hour with Shift', () => {

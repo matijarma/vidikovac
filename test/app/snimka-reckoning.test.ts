@@ -3,10 +3,11 @@
 // missing minute counts for nothing, a function that finds nothing says so
 // (null), never a zero it did not see. The last block reads the e2e fixture's
 // strike outline end to end through the hero tiles.
+import { Window } from 'happy-dom';
 import { describe, expect, it } from 'vitest';
 import { SNIMKA_COMPARISON, SNIMKA_WINDOW, type Col, type ScreenIndex, type SeriesFile, type SnimkaState } from '../../shared/snimka';
 import {
-  FROZEN_AFTER_S, bikeDrain, feedHealth, ghostInflation, heroTiles, longestSilent, midnightOf, minutesText, peakAt0745, returnDuration, sentenceFamilies, silentMinutes,
+  FROZEN_AFTER_S, bikeDrain, ghostExcess, feedHealth, ghostInflation, heroTiles, longestSilent, midnightOf, minutesText, peakAt0745, renderReckoning, returnDuration, sentenceFamilies, silentMinutes,
 } from '../../app/src/snimka/reckoning';
 import { MARKS, buildComparisonSeries, buildWindowSeries } from '../../e2e/snimka-fixtures';
 
@@ -33,6 +34,21 @@ function blank(n: number = N, t0: number = T0): SeriesFile {
     closures: { active: nulls(n), version: nulls(n) },
     hourly: { t0, n: Math.ceil(n / 60), tempC: nulls(Math.ceil(n / 60)), weather: nulls(Math.ceil(n / 60)), newsPulse: new Array(Math.ceil(n / 60)).fill(0) },
   };
+}
+
+/** The reckoning's cards on a page of their own (this file runs in node; the cards need a document). */
+function renderCards(s: SeriesFile): HTMLElement {
+  const win = new Window({ url: 'http://localhost/snimka/' });
+  const g = globalThis as Record<string, unknown>;
+  const before = g.document;
+  g.document = win.document;
+  try {
+    const root = win.document.createElement('div') as unknown as HTMLElement;
+    renderReckoning(root, s, null);
+    return root;
+  } finally {
+    g.document = before;
+  }
 }
 
 const fillRange = <T,>(col: Col<T>, from: number, to: number, value: T | ((m: number) => T)): void => {
@@ -78,6 +94,20 @@ describe('peakAt0745', () => {
     expect(r.days[0]!.expected).toBe(230);
     expect(r.normal).toBe(234);
     expect(peakAt0745(s, null).normal).toBeNull();
+    expect(r.days.map((d) => d.frozen)).toEqual([false, false, false, false]);
+  });
+  it('a morning without a count while ZET\'s data stood still is marked frozen, a true gap is not', () => {
+    const s = blank();
+    s.feed.headerAgeS[zm(9, 29, 7, 45)] = 4714; // Tuesday: the header over an hour old, no count
+    s.feed.headerAgeS[zm(9, 30, 7, 45)] = 12; // Wednesday: fresh data and still no count is a gap
+    const r = peakAt0745(s, null);
+    expect(r.days.map((d) => d.frozen)).toEqual([false, true, false, false]);
+    // The card says which.
+    const card = renderCards(s);
+    const tuesday = card.querySelector('#vidjelo-jutra [data-key="' + midnightOf(at(zm(9, 29, 7, 45))) + '"] .st-bar-value')!;
+    expect(tuesday.textContent).toBe('ZET-ovi podaci se ne mijenjaju');
+    const wednesday = card.querySelector('#vidjelo-jutra [data-key="' + midnightOf(at(zm(9, 30, 7, 45))) + '"] .st-bar-value')!;
+    expect(wednesday.textContent).toBe('bez podatka');
   });
 });
 
@@ -112,6 +142,20 @@ describe('bikeDrain', () => {
   });
 });
 
+describe('ghostExcess', () => {
+  it('counts a difference only where it cannot be the lag between two samples', () => {
+    expect(ghostExcess(5, 0)).toBe(5); // vehicles published on an empty feed
+    expect(ghostExcess(1, 0)).toBe(1); // even one, while none had a position
+    expect(ghostExcess(17, 15)).toBe(2); // a small fleet and at least two more
+    expect(ghostExcess(16, 15)).toBeNull(); // one more in a small fleet: sampling
+    expect(ghostExcess(41, 20)).toBeNull(); // twenty in motion is a fleet: a big difference there is the collapse's lag
+    expect(ghostExcess(0, 0)).toBeNull();
+    expect(ghostExcess(3, 5)).toBeNull();
+    expect(ghostExcess(null, 0)).toBeNull();
+    expect(ghostExcess(4, null)).toBeNull();
+  });
+});
+
 describe('ghostInflation', () => {
   it('compares only minutes where both numbers exist and finds the largest excess', () => {
     const s = blank();
@@ -123,6 +167,10 @@ describe('ghostInflation', () => {
     s.seen.all[70] = 10;
     s.published!.vehicles[70] = 4; // less than the feed: not a ghost
     s.published!.vehicles[200] = 50; // no seen value
+    fillRange(s.seen.all, 100, 200, 150);
+    fillRange(s.published!.vehicles, 100, 200, 183); // a normal fleet: the difference is the samples' lag, not ghosts
+    s.seen.all[210] = 15;
+    s.published!.vehicles[210] = 16; // one more in a small fleet: not counted
     const r = ghostInflation(s)!;
     expect(r.max).toBe(12);
     expect(r.maxAt).toBe(at(45));

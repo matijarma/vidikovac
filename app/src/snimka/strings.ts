@@ -154,6 +154,8 @@ export const SN = {
     readout: '{day} u {time}: {values}',
     table: 'Brojevi po satu',
     noValue: 'bez podatka',
+    // New for the read-through (lane S3, after the integration review): the ghosts panel that replaces the two lines.
+    ghosts: 'Vozila koja je zaslon brojio, a nisu imala položaj',
     // New for the read-through (lane S3): the plots' name, the first column of every table.
     plotsLabel: 'Tijek na jednoj osi; strelice lijevo i desno pomiču snimku za deset minuta, sa Shiftom za sat.',
     hour: 'Sat',
@@ -169,7 +171,7 @@ export const SN = {
     bikesMethod: 'Najmanji zbroj bicikala i najveći broj praznih stanica po danu, iz podataka nextbikea svake minute.',
     ghosts: 'Broj koji nije bio točan',
     ghostsLede: 'U ponedjeljak je zaslon brojio vozila kojih nije bilo: ZET je u ponoć vozilima upisao vrijeme dan unaprijed.',
-    ghostsMethod: 'Razlika između broja koji je aplikacija objavila i broja vozila s položajem u ZET-ovim podacima, po minutama.',
+    ghostsMethod: 'Razlika između broja koji je aplikacija objavila i broja vozila s položajem u ZET-ovim podacima, po minutama. Broje se samo minute u kojima razlika ne može biti razmak između dvaju uzoraka: manje od 20 vozila u pokretu i barem dva viška, ili nijedno vozilo s položajem uz objavljen broj veći od nule.',
     return: 'Povratak',
     returnMethod: 'Od prve minute s najmanje deset vozila u pokretu u srijedu navečer do prve minute uobičajenog stanja.',
     feed: 'ZET-ovi podaci',
