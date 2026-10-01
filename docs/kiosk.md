@@ -22,8 +22,21 @@ upute o pretraživanju dodirom. Ukratko:
   osobno istraživanje dostupno je na telefonu.
 - Uz kartu stoji popis „U blizini · 2 km · ~15 min” (naslov ispisuje
   izmjereni polumjer kruga i vrijeme hoda; primjer vrijedi za krug od 2 km):
-  najviše tri polaska, plavo „za N min” za praćeno vozilo i sivi sat za vozni
-  red, zatim retci s vremenom i na kraju jedan redak „uvijek”.
+  prvi je redak polazaka, s najviše tri polaska jedan do drugoga, svaki s
+  brojem linije, vremenom i odredištem, plavo „za N min” za praćeno vozilo i
+  sivi sat za vozni red; zatim retci s vremenom i na kraju jedan redak
+  „uvijek”. Kad tri odredišta ne stanu, drugi i treći polazak ostaju bez
+  odredišta. Telefon zadržava tri zasebna retka polazaka.
+- Popis je poredan po vrijednosti retka: koliko je njegov trenutak blizu, koje
+  je vrste i koliko dugo nije bio prikazan. U ritmu rečenice u zaglavlju
+  (Ritam 20, 30 ili 60 sekundi) zaslon povremeno otkrije ono što ne stane:
+  svaki treći takt najviše dva retka, koji nisu rezervirani i nisu unutar pola
+  sata od svojeg trenutka, zamijene se retcima s druge stranice, a kad je prvi
+  polazak dalje od deset minuta, redak polazaka svaki četvrti takt pokaže
+  sljedeće polaske s oznakom „zatim”. Odjednom se mijenja najviše jedan dio
+  zaslona i nijedan se ne pomiče dok je otvorena ploča na dodir, dok je zaslon
+  uparen ili dok zaglavlje drži stanje usluge; uz smanjeno kretanje i u
+  laganom prikazu retci se mijenjaju bez klizanja.
 - Ispod popisa trajno je rezerviran QR s uvodom
   „Skeniraj za 10 minuta grada.”, kodom i adresom za upis koda. Sam QR kod
   ima 226 CSS piksela na zaslonu 1920 × 1080 (113 mm na panelu od 43 inča)
@@ -237,6 +250,13 @@ upitnika: „Tramvajska linija”, uz disk s brojem „BAJS: slobodni bicikli”
 točku prazne stanice „BAJS: prazna stanica”, uz točku na prozoru cijeloga
 grada „BAJS stanica” i „Kultura večeras”; stavke kojih na karti nema legenda
 ne ispisuje, a pod `?lagano=1`, gdje karte nema, nema ni legende.
+
+Kad radar DHMZ-a pokazuje kišu unutar kvadrata od 30 km oko Zagreba, ili satna
+prognoza najbliže postaje najavljuje kišu unutar dva sata, u donjem lijevom
+kutu karte stoji isječak DHMZ-ova radarskog kompozita oko Zagreba, 240 × 240
+piksela, s navodom „Radar · Izvor: DHMZ”. Isječak se osvježava kad DHMZ objavi
+novu sliku; kad slika nije svježa ili se ne može pročitati, isječka nema, a
+zaslon ne tvrdi da kiše nema. U laganom prikazu isječka nema.
 
 Gradska četvrt više se ne bira. Dodir na karti služi samo za čitanje.
 Stajališta su dodirljivi prstenovi i na gradskom kadru, uz toleranciju
@@ -634,6 +654,15 @@ prvi, zadnji ili redak obavijesti, za jedan manje za svaki vlak koji stoji ispre
 manje samo kad puni popis ne može više. Popis bez oznake `data-fit-dropped` računa se kao
 neuspjeh. Redak `silent-departures` traži da nijedna rečenica u zaglavlju ne najavi polazak
 (osim vlaka) dok dvojnik javlja da ZET ne šalje položaje; u dan bez takvog stanja ostaje na nuli.
+Redak `departures` broji polaske u retku polazaka, od jedan do tri u svakom očitanju.
+Redak `reveal-cadence` traži najviše jedno otkrivanje u tri takta i da svako stoji barem jedan
+takt, a mirno kretanje na taktu s otkrivanjem dopušta do šest strukturnih promjena. Redak
+`shown-facts` samo se prati i ne mijenja izlazni kod: bilježi koliko je različitih redaka koji
+nisu polasci zaslon pokazao tijekom promatranja, a isto po satima ispisuje
+`node scripts/shown-facts.mjs <mapa promatranja> [--json <datoteka>]`. Promatranje nakon
+isporuke čita DEV zaslon mreže s koje se pokreće (`POST /api/dev/screen`, opisano u zaglavlju
+`worker/routes/dev.ts`), koji se nigdje ne broji; promatrač učitava samo njegov fragment, pa
+zaslon izgleda kao svaki drugi.
 
 Snimke i automatizirani rezultati nisu dokaz da je QR fizički skeniran s nekoliko
 metara ili da je aplikacija provjerena na iPhoneu i Androidu. Takva mjerenja
