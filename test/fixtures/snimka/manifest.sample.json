@@ -1,19 +1,19 @@
 {
  "version": 1,
- "builtAt": "2026-10-01T16:12:45.123Z",
+ "builtAt": "2026-10-01T16:35:27.098Z",
  "title": "Tri dana bez tramvaja",
  "build": {
-  "commit": "b07d1c1a77f0e02758aad4de5dc640491a7d0b07",
+  "commit": "be5ff5abe8913abbc6df57f9ce58985ee635a9bb",
   "inputs": {
-   "frames-window": "7ce84765bf6459e4bce74fb59f558cf9f36af1d2e942b1929363d4581c55dda2",
-   "frames-day": "9b8b314dbc2087249199cb2cd067a936b755c674a17f0dfd10dfe68c7c62caa7",
-   "bajs": "07e4533073829ba49f740b2a618652d5f92415bbc1c45e538d0188fa60397ffe",
+   "frames-window": "691c4b5e8bea8ec275ce5ec119cfd9e50ae35c5488e911473a6fcf46f963d93a",
+   "frames-day": "fa118342b1e6da817794a0ca34f79759c24db29a911c6342629d4964304c4c9d",
+   "bajs": "a56b4102a5ffe16c36ba597e4b3d7658df4a6ac74dacd073d1474fc71657d833",
    "closures": "8beacb4e4b19ecfc4eb69a6aaff5f36e2762fa98739dffc3f8ecd38b7e345fcb",
-   "news": "0882172bf003d42c1cf251867dfc984027ffa2701aa14fd6c400857647f16b17",
-   "series": "bedad951f752f87622138fae2c0efe67d3cea42d1a779b11f9fe545ed577bc9a",
-   "events": "7efc666dc8c7849d7685c030ebe435e19935a4354d1d87a2c5c7db87a83014a8",
-   "screen": "e224b1889deb513d734d7937e55a149524e26612df6943044aebccb1b9981054",
-   "captures": "b76065888da62543600bdd7e3e5f63f9905a537fc55b1eafbcd36a5fd34b6c4c",
+   "news": "4282e2df89bb38a10f8ee69762bf55a5884efe1495d31bd5b5da39adbcd608f6",
+   "series": "ab2c44f42fa146415c344ac22cd474179b62c137caca3813d29bede6ba867412",
+   "events": "b227abae9bfa794e3f64d2cf5d0ea35ef14a842c04676fd7e84af0722f6069de",
+   "screen": "5df3b269ecbccf64c104c544de91ae969f55d572a415bb841073e001c173d188",
+   "captures": "bf1ee67080fc5f41a1f9e5aba104b3678c0e8638b43b4dcf12fef1247e248e96",
    "manifest": "20079e74cee2b3aeb33572dc2c1d2b625939d9c8fefdcc1887018091520c9ae3"
   }
  },
@@ -82,9 +82,9 @@
    "sha256": "06daf4a5fdacae6b39af30e321c84b36f673ca772a84bb2045db57ef067e27ae"
   },
   "events": {
-   "path": "events/window.5cb39ec16f7109ed.json",
-   "bytes": 6074,
-   "sha256": "5cb39ec16f7109ed64cf0e2716b52f39d9bff5f2088ac02b3d9c9b830086a773"
+   "path": "events/window.e1d4379354b139f6.json",
+   "bytes": 6092,
+   "sha256": "e1d4379354b139f62f1137d82db499bc0180d875bab9f0edb317f5d6175d5917"
   },
   "notices": {
    "path": "notices/window.bb92c280be32bd05.json",
