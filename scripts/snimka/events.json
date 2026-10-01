@@ -6,7 +6,7 @@
    "at": "2026-09-27T20:00:00+02:00",
    "kind": "recording",
    "title": "Večer prije",
-   "text": "Nedjelja navečer: vozni park je uobičajen, a ZET je u 16:27 najavio štrajk od ponedjeljka.",
+   "text": "Nedjelja navečer: vozni park je uobičajen; ZET je u 16:27 objavio obavijest o štrajku najavljenom za ponedjeljak.",
    "sources": [],
    "chapter": true
   },
@@ -14,7 +14,7 @@
    "id": "obavijest-zet",
    "at": "2026-09-27T16:27:00+02:00",
    "kind": "zet",
-   "title": "ZET najavljuje štrajk",
+   "title": "ZET obavještava o najavljenom štrajku",
    "text": "Obavijest građanima, poslodavcima i ustanovama o najavljenom štrajku u ZET-u.",
    "sources": [
     {
@@ -65,7 +65,7 @@
    "at": "2026-09-28T07:45:00+02:00",
    "kind": "recording",
    "title": "Prvo jutro",
-   "text": "Jutarnja špica gotovo bez tramvaja i autobusa.",
+   "text": "Jutro kad se najviše putuje, gotovo bez tramvaja i autobusa.",
    "sources": [],
    "chapter": true
   },
