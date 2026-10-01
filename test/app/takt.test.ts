@@ -190,8 +190,13 @@ describe('the page turn: one beat in three, at most two rows, never a reserved, 
     const rows = wall();
     const history: TaktHistory = { beat: B3 - 1, shownAt: { 'opennow:p': NOW }, lastReveal: null };
     const r = takt(rows, history, at(B3), options({ capacity: 9 }));
-    // opening:m fresh 18 (×1.2) against opennow:p shown now, 30: the open row still leads; both are the page.
-    expect(r.reveal?.ids).toEqual(['opennow:p', 'opening:m']);
+    // opennow:p shown now waits (the repeat gate): the two rows go to the unseen by value, opening:m 18 and the sunset 12.
+    expect(r.reveal?.ids).toEqual(['opening:m', 'solar:sunset:2026-09-30']);
+    // Nothing seen: the value decides, opennow:p 36 and opening:m 18.
+    expect(takt(rows, EMPTY_HISTORY, at(B3), options({ capacity: 9 })).reveal?.ids).toEqual(['opennow:p', 'opening:m']);
+    // Every page-2 row seen within ten minutes: the page waits (no reveal) while page 2 holds more than one row.
+    const allSeen: TaktHistory = { beat: B3 - 1, shownAt: { 'opennow:p': NOW - 2 * MIN, 'opening:m': NOW - 4 * MIN, 'solar:sunset:2026-09-30': NOW - 3 * MIN, 'always:story:y': NOW - 3 * MIN }, lastReveal: null };
+    expect(takt(rows, allSeen, at(B3), options({ capacity: 9 })).reveal).toBeNull();
     const one = takt(rows.filter((x) => x.id !== 'opening:m' && x.id !== 'solar:sunset:2026-09-30' && x.id !== 'always:story:y'), EMPTY_HISTORY, at(B3), options({ capacity: 9 }));
     expect(one.reveal).toEqual({ kind: 'page', ids: ['opennow:p'], replaces: ['event:a'], beat: B3 });
     const none = takt(wall(), EMPTY_HISTORY, at(B3), options({ capacity: 20 }));
@@ -228,7 +233,9 @@ describe('the gap: nothing starts within REVEAL_GAP_BEATS of the last reveal', (
     expect(takt(rows, { ...EMPTY_HISTORY, lastReveal: { kind: 'page', beat: B0 + 6 } }, at(B0 + 8), options({ capacity: 9 })).reveal).toBeNull();
   });
   it('the cadence over twelve beats: advance at 0, page at 3, 6, 9, advance at 12', () => {
-    const rows = [...wall().map((x) => (x.id === 'departures' ? c('departures', 'departures', { at: NOW + 60 * MIN, reserved: true }) : x)), ...nexts()];
+    // Page 2 holds six rows (the wall's four plus two events), so three page turns of two find rows the gate lets through.
+    const rows = [...wall().map((x) => (x.id === 'departures' ? c('departures', 'departures', { at: NOW + 60 * MIN, reserved: true }) : x)),
+      c('event:c', 'event', { at: NOW + 4 * 3_600_000 }), c('event:d', 'event', { at: NOW + 4 * 3_600_000 }), ...nexts()];
     let history = EMPTY_HISTORY;
     const beats: string[] = [];
     for (let b = B0; b <= B0 + 12; b++) {
@@ -242,6 +249,41 @@ describe('the gap: nothing starts within REVEAL_GAP_BEATS of the last reveal', (
 
 describe('freshness ranks page 2 only', () => {
   const B3 = B0 + 3;
+  it('the repeat gate: a page-2 row seen in the last 10 min waits while page 2 holds one that was not, whatever the values', () => {
+    // A cut within two hours (70 × 0.8 × 1.2 = 67.2) fills page 1 beside the line and may move; page 2 holds two trains and an opening.
+    const rows = [
+      c('departures', 'departures', { at: NOW + 5 * MIN, reserved: true }),
+      c('cut:filler', 'cut', { at: NOW + 60 * MIN, until: NOW + 3 * 3_600_000 }),
+      c('rail:soon', 'rail', { at: NOW + 20 * MIN }),
+      c('rail:later', 'rail', { at: NOW + 50 * MIN }),
+      c('opening:m', 'opening', { at: NOW + 3 * 3_600_000 }),
+    ];
+    let history: TaktHistory = { beat: B3 - 1, shownAt: {}, lastReveal: null };
+    const turn = (b: number): string[] => {
+      const r = takt(rows, history, at(b), options({ capacity: 2 }));
+      expect(r.page1).toEqual(['departures', 'cut:filler']);
+      history = r.history;
+      return [...(r.reveal?.ids ?? [])];
+    };
+    // The train 20 min away (60 fresh) leads page 2; once seen it waits behind the later train (48 fresh) and the opening (18).
+    expect(turn(B3)).toEqual(['rail:soon']);
+    expect(turn(B3 + 3)).toEqual(['rail:later']);
+    expect(turn(B3 + 6)).toEqual(['opening:m']);
+    // Every page-2 row seen within ten minutes: the page waits.
+    expect(turn(B3 + 9)).toEqual([]);
+    expect(turn(B3 + 12)).toEqual([]);
+    // Past the window the opening counts as unseen again and goes, whatever its value against the trains'.
+    history = { ...history, shownAt: { ...history.shownAt, 'opening:m': at(B3 + 15) - FRESH_MS - 1 } };
+    expect(turn(B3 + 15)).toEqual(['opening:m']);
+    // A lone page-2 row is revealed on every eligible beat, seen or not.
+    const lone = rows.filter((x) => x.id !== 'rail:later' && x.id !== 'opening:m');
+    let h: TaktHistory = { beat: B3 - 1, shownAt: {}, lastReveal: null };
+    for (const b of [B3, B3 + 3, B3 + 6]) {
+      const r = takt(lone, h, at(b), options({ capacity: 2 }));
+      expect(r.reveal?.ids, String(b - B3)).toEqual(['rail:soon']);
+      h = r.history;
+    }
+  });
   const base = (): TaktCandidate[] => [
     c('departures', 'departures', { at: NOW + 5 * MIN, reserved: true }),
     c('event:shown', 'event', { at: NOW + 3 * 3_600_000 }),

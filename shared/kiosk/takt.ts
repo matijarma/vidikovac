@@ -139,7 +139,8 @@ const moves = (c: TaktCandidate): boolean =>
 
 /**
  * One beat of the wall (R2.md §0.2, rules 1 to 11). Page 1 is the reserved candidates and the most valuable of the
- * rest by the static value (R0's order, the fitter's), cut to `capacity`; freshness ranks page 2 only. A quiet beat,
+ * rest by the static value (R0's order, the fitter's), cut to `capacity`; freshness ranks page 2 only, and a page-2
+ * candidate seen in the last FRESH_MS waits while page 2 holds another (the repeat gate of R2.md Risks). A quiet beat,
  * a beat off the grid or one inside the gap after the last reveal carries none; else an advance when the beat and
  * the lead allow it, else a page turn of at most PAGE_MAX_ROWS rows. The history returned is a new object: `shownAt`
  * holds every page-1 and revealed id at `now`, pruned to FRESH_MS, keys sorted; `reduced` changes nothing here.
@@ -151,6 +152,8 @@ export function takt(candidates: readonly TaktCandidate[], history: TaktHistory,
   const order = (c: TaktCandidate): number => index.get(c.id)!;
   const still = (c: TaktCandidate): number => candidateValue(c, now, null);
   const fresh = (c: TaktCandidate): number => candidateValue(c, now, history);
+  /** On the wall (page 1 or a reveal) within the freshness window: R0's boundary, read the same way as candidateValue. */
+  const seen = (c: TaktCandidate): boolean => { const at = history.shownAt[c.id]; return at !== undefined && now - at <= FRESH_MS; };
   const listed = candidates.filter((c) => c.kind !== 'next-departures');
   const next = candidates.filter((c) => c.kind === 'next-departures');
   const reserved = listed.filter((c) => c.reserved);
@@ -165,8 +168,14 @@ export function takt(candidates: readonly TaktCandidate[], history: TaktHistory,
     if (b % ADVANCE_EVERY_BEATS === 0 && line?.atMs !== undefined && line.atMs - now > ADVANCE_LEAD_MS && next.length > 0) {
       reveal = { kind: 'advance', ids: next.slice(0, 3).map((c) => c.id), replaces: [line.id], beat: b };
     } else if (b % PAGE_EVERY_BEATS === 0) {
-      const page2 = listed.filter((c) => !onPage1.has(c.id) && moves(c) && fresh(c) > 0)
-        .sort((x, y) => fresh(y) - fresh(x) || order(x) - order(y));
+      // The repeat gate (R2.md Risks, measured on the fixture day: without it the ten minutes from 13:20 revealed the
+      // same train ten times, its value after one showing, 50, still over the next train's 48; with the unseen merely
+      // first, the best seen row filled the second slot every minute from 17:00, and the least recently seen first
+      // did the same from 19:00 over three rows and two slots): a page-2 candidate seen within FRESH_MS waits while
+      // page 2 holds another, so no revealed row returns within ten minutes while the list has anything else to show;
+      // a lone page-2 row is revealed on every eligible beat.
+      const page2All = listed.filter((c) => !onPage1.has(c.id) && moves(c) && fresh(c) > 0);
+      const page2 = (page2All.length > 1 ? page2All.filter((c) => !seen(c)) : page2All).sort((x, y) => fresh(y) - fresh(x) || order(x) - order(y));
       const out = listed.filter((c) => onPage1.has(c.id) && moves(c) && !c.imminent)
         .sort((x, y) => still(x) - still(y) || order(y) - order(x));
       const k = Math.min(PAGE_MAX_ROWS, out.length, page2.length);
