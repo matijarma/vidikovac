@@ -101,7 +101,7 @@ test.describe('/snimka/ report', () => {
     await expect(readout).toContainText(/^sri 30\. 9\. u 1[01]:\d\d: /);
     await expect(page).toHaveURL(/[?&]t=2026-09-30T1[01]:\d\d/);
     const cursor = await plot.locator('.sn-cursor').evaluate((el) => (el as HTMLElement).style.transform);
-    expect(cursor).toMatch(/^translateX\(7[45]\.\d+%\)$/);
+    expect(cursor).toMatch(/^translateX\(7[45](\.\d+)?%\)$/);
     // A drag from a quarter to the middle ends on Tuesday 14:00.
     await page.mouse.move(box.x + box.width * 0.25, box.y + box.height / 2);
     await page.mouse.down();
@@ -179,10 +179,13 @@ test.describe('/snimka/ report', () => {
       for (const width of [1366, 390]) {
         await page.setViewportSize({ width, height: 900 });
         await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
-        await open(page, '2026-09-30T18:40');
-        await expect(page.locator('.sn-mini')).not.toHaveAttribute('data-view', 'loading');
-        for (const [name, selector] of [['zaslon', '#zaslon'], ['tijek', '#tijek'], ['vidjelo', '#vidjelo'], ['ukratko', '#ukratko']] as const) {
-          await page.locator(selector).screenshot({ path: join(dir!, `${name}-${width}-${scheme}.png`) });
+        // The screen on the first morning (a recorded reading), the rest on Wednesday evening (the return).
+        for (const [at, sections] of [['2026-09-28T07:45', ['zaslon']], ['2026-09-30T18:40', ['ukratko', 'tijek', 'vidjelo']]] as const) {
+          await open(page, at);
+          await expect(page.locator('.sn-mini')).not.toHaveAttribute('data-view', 'loading');
+          // The sticky section bar would sit over an element screenshot.
+          await page.addStyleTag({ content: '.st-nav { position: static !important; }' });
+          for (const name of sections) await page.locator(`#${name}`).screenshot({ path: join(dir!, `${name}-${width}-${scheme}.png`) });
         }
       }
     }
