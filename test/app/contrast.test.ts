@@ -60,6 +60,11 @@ describe.each(['dark', 'light'] as const)('%s palette text pairs meet WCAG AA 4.
     const ratio = contrastRatio(palette(theme, 'on-accent'), palette(theme, 'transit'));
     expect(Number(ratio.toFixed(2)), `${theme} on-accent on transit = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_TEXT);
   });
+  // A pull-in's badge (ST, SD; ui/signage.css [data-depot]) is the tram's shape on the muted fill.
+  it('on-accent text is readable on the muted fill, which carries the depot badge', () => {
+    const ratio = contrastRatio(palette(theme, 'on-accent'), palette(theme, 'text-muted'));
+    expect(Number(ratio.toFixed(2)), `${theme} on-accent on text-muted = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_TEXT);
+  });
   it('keeps subtle and muted distinct so the hierarchy survives', () => {
     expect(palette(theme, 'text-subtle')).not.toBe(palette(theme, 'text-muted'));
   });

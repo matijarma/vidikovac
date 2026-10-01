@@ -10,6 +10,7 @@
 // Worker; every surface passes the same boards, the same vehicles and its own
 // `nowMs`, so every surface says the same thing at the same second.
 
+import { DEPOT_RUNS, depotRunOf, type DepotCode } from './depot-run';
 import type { DepartureBoard } from './types';
 
 /** A live vehicle as `arrivalsAt` needs it: the client's VehicleInfo and the
@@ -38,6 +39,9 @@ export interface ArrivalRow {
   live: boolean;
   vehicleId?: string;
   minutes: number | null;
+  /** A pull-in (depot-run.ts): `routeName` is then ST or SD and `headsign`
+   *  the depot, not the line it left; `routeId` stays the line's. */
+  depot?: DepotCode;
 }
 
 export interface ArrivalsOptions {
@@ -130,8 +134,11 @@ export function arrivalsAt(
       // ZET said it will not run this trip and no vehicle has taken it: the
       // departure is not a departure. A vehicle on the trip keeps the row (the
       // alert trip that ran, 1 in 83, and the vehicle is the better witness).
+      // A ZET pull-in is shown as its depot, under ST or SD (depot-run.ts).
+      const depot = departure.operator === 'zet' ? depotRunOf(departure.headsign) : null;
+      const routeName = depot ?? departure.routeName;
       if (cancelled && departure.operator === 'zet' && departure.tripId !== '' && cancelled.has(departure.tripId) && vehicle === undefined) {
-        skipped.push({ routeName: departure.routeName, scheduledMs: scheduled });
+        skipped.push({ routeName, scheduledMs: scheduled });
         continue;
       }
       let atMs = scheduled;
@@ -148,12 +155,13 @@ export function arrivalsAt(
       const row: ArrivalRow = {
         tripId: departure.tripId,
         routeId: departure.routeId,
-        routeName: departure.routeName,
-        headsign: departure.headsign,
+        routeName,
+        headsign: depot ? DEPOT_RUNS[depot].name : departure.headsign,
         atMs,
         live: vehicle !== undefined,
         ...(vehicle ? { vehicleId: vehicle.id } : {}),
         minutes: atMs - nowMs <= horizonMs ? Math.max(0, Math.round((atMs - nowMs) / 60_000)) : null,
+        ...(depot ? { depot } : {}),
       };
       // A board without trip ids (none is expected, but the field is a plain
       // string) must not fold its own departures into one row.

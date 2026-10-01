@@ -18,6 +18,7 @@ import { nearbyCountLine, type LinesBoard, type WeatherNow } from './local';
 import { plural, type KioskStrings } from './strings';
 import { externalHtml, optionalExternal } from './external';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
+import { isDepotCode } from '../../../shared/city/depot-run';
 
 export function kicker(text: string, meta = '', tone = ''): string {
   return `<p class="k-kicker${tone ? ` k-kicker--${escapeAttribute(tone)}` : ''}"><span>${escapeHtml(text)}</span>${meta ? `<span class="k-kicker-meta">${escapeHtml(meta)}</span>` : ''}</p>`;
@@ -26,7 +27,9 @@ export function kicker(text: string, meta = '', tone = ''): string {
 /** The one line badge (signage.css `.line`) at the kiosk's k size; `.k-line-badge` keeps the kiosk's geometry, `.line` paints the mode. */
 export function kBadge(label: string, kind: 'tram' | 'bus' | 'other', ariaLabel = ''): string {
   if (vetExternal('headsign', label, 'row') === null || (ariaLabel && vetExternal('name', ariaLabel, 'row') === null)) return '';
-  return `<span class="k-line-badge line" data-kind="${kind}" data-size="k"${ariaLabel ? ` aria-label="${escapeAttribute(ariaLabel)}"` : ''}>${escapeHtml(label)}</span>`;
+  // ST and SD on a tram are pull-ins (shared/city/depot-run.ts): the neutral badge, as lineBadge draws it.
+  const depot = kind === 'tram' && isDepotCode(label) ? ` data-depot="${label}"` : '';
+  return `<span class="k-line-badge line" data-kind="${kind}" data-size="k"${depot}${ariaLabel ? ` aria-label="${escapeAttribute(ariaLabel)}"` : ''}>${escapeHtml(label)}</span>`;
 }
 
 /** The hostname a person types, read from the code base: "zagreb.aningfilm.hr/s" in production, the dev host in a worktree. */
