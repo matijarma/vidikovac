@@ -2,7 +2,7 @@ import type { FetchContext } from '../../schema';
 import { compactData, type ItemInput } from '../../payload';
 import { decodeEntities, stripTags } from '../../html';
 import { streetPoint } from '../../geo/streets';
-import { addZagrebDays, zagrebDate, zagrebDayKey, zagrebIso, type ZagrebDate } from '../../time';
+import { addZagrebDays, isCalendarDate, zagrebDate, zagrebDayKey, zagrebIso, type ZagrebDate } from '../../time';
 import { cutId, type CutsResult } from './common';
 
 // Gradska plinara Zagreb (GPZ), "Novosti" (https://www.plinara-zagreb.hr/novosti/50): a list of notices, each a page
@@ -42,8 +42,10 @@ export function parseGpzList(html: string): GpzEntry[] {
   for (const match of html.slice(start).matchAll(ITEM)) {
     const href = match[4]!;
     if (!NOTICE_HREF.test(href)) continue;
+    const published = { year: Number(match[3]), month: Number(match[2]), day: Number(match[1]) };
+    if (!isCalendarDate(published)) continue;
     entries.push({
-      published: { year: Number(match[3]), month: Number(match[2]), day: Number(match[1]) },
+      published,
       href,
       url: `${GPZ_ORIGIN}${href}`,
       title: text(match[5]!),
@@ -55,9 +57,13 @@ export function parseGpzList(html: string): GpzEntry[] {
 /** The notice's own text block, without the page around it. */
 function userContent(html: string): string {
   const start = html.search(/<div class=['"]user-content['"]>/);
-  if (start < 0) return '';
-  const end = html.indexOf('<div class="clearfix">', start);
-  return html.slice(start, end < 0 ? undefined : end);
+  if (start < 0) throw new Error('gpz: no user-content on the notice page');
+  let depth = 0;
+  for (const tag of html.slice(start).matchAll(/<\/?div\b[^>]*>/gi)) {
+    depth += /^<\//.test(tag[0]) ? -1 : 1;
+    if (depth === 0) return html.slice(start, start + tag.index! + tag[0].length);
+  }
+  throw new Error('gpz: unclosed user-content on the notice page');
 }
 
 /**
@@ -96,18 +102,25 @@ export function splitZone(html: string): { street: string; houseNumbers: string 
 }
 
 /** The work days a notice names: "dana D.M.YYYY", or every day of "od D.M. do D.M.YYYY". */
-function noticeDays(content: string): ZagrebDate[] {
+function noticeDays(content: string, today: ZagrebDate): ZagrebDate[] {
   const range = RANGE.exec(content);
   if (range) {
     const endYear = Number(range[6]);
     const from = { year: range[3] ? Number(range[3]) : endYear, month: Number(range[2]), day: Number(range[1]) };
     const to = { year: endYear, month: Number(range[5]), day: Number(range[4]) };
+    if (!range[3] && from.month > to.month) from.year--;
+    if (!isCalendarDate(from) || !isCalendarDate(to) || zagrebDayKey(from) > zagrebDayKey(to)) throw new Error('gpz: invalid work date range');
     const days: ZagrebDate[] = [];
-    for (let day = from; zagrebDayKey(day) <= zagrebDayKey(to) && days.length < 31; day = addZagrebDays(day, 1)) days.push(day);
+    const begin = zagrebDayKey(from) < zagrebDayKey(today) ? today : from;
+    const horizon = zagrebDayKey(addZagrebDays(today, GPZ_AHEAD_DAYS));
+    for (let day = begin; zagrebDayKey(day) <= zagrebDayKey(to) && zagrebDayKey(day) <= horizon; day = addZagrebDays(day, 1)) days.push(day);
     return days;
   }
   const one = ONE_DAY.exec(content);
-  return one ? [{ year: Number(one[3]), month: Number(one[2]), day: Number(one[1]) }] : [];
+  if (!one) return [];
+  const date = { year: Number(one[3]), month: Number(one[2]), day: Number(one[1]) };
+  if (!isCalendarDate(date)) throw new Error('gpz: invalid work date');
+  return [date];
 }
 
 /**
@@ -121,14 +134,20 @@ export function parseGpzNotice(html: string, now: Date, link?: string, taken: Se
   const today = zagrebDate(now);
   const first = zagrebDayKey(today);
   const last = zagrebDayKey(addZagrebDays(today, GPZ_AHEAD_DAYS));
-  const days = noticeDays(content).filter((day) => zagrebDayKey(day) >= first && zagrebDayKey(day) <= last);
+  const days = noticeDays(content, today).filter((day) => zagrebDayKey(day) >= first && zagrebDayKey(day) <= last);
   const zoneAt = block.search(/ZONA OBUHVATA RADOVA/i);
   if (days.length === 0 || zoneAt < 0) return { items: [], total: 0 };
   const zoneHtml = block.slice(zoneAt).replace(/^ZONA OBUHVATA RADOVA/i, '');
   const linkAt = zoneHtml.search(/<a\s/i);
   const streets = splitZone(linkAt < 0 ? zoneHtml : zoneHtml.slice(0, linkAt));
   // The hours are read from the notice's own text only (the page's sidebar gives the office's opening hours).
-  const hours = HOURS.exec(content.replace(RANGE, ''));
+  const hours = HOURS.exec(text(block.slice(0, zoneAt)).replace(RANGE, ''));
+  if (hours) {
+    const start = Number(hours[1]) * 60 + Number(hours[2] ?? 0);
+    const end = Number(hours[3]) * 60 + Number(hours[4] ?? 0);
+    if (Number(hours[1]) > 23 || Number(hours[2] ?? 0) > 59 || Number(hours[3]) > 24
+      || Number(hours[4] ?? 0) > 59 || end > 1440 || end <= start) throw new Error('gpz: invalid work hours');
+  }
   const items: ItemInput[] = [];
   let total = 0;
   for (const day of days) {
@@ -166,10 +185,11 @@ export function parseGpzNotice(html: string, now: Date, link?: string, taken: Se
 
 function recent(entries: readonly GpzEntry[], now: Date, max: number, seen: Set<string>): GpzEntry[] {
   const since = zagrebDayKey(addZagrebDays(zagrebDate(now), -GPZ_LOOKBACK_DAYS));
+  const today = zagrebDayKey(zagrebDate(now));
   const kept: GpzEntry[] = [];
   for (const entry of entries) {
     if (kept.length >= max) break;
-    if (zagrebDayKey(entry.published) < since || seen.has(entry.url)) continue;
+    if (zagrebDayKey(entry.published) < since || zagrebDayKey(entry.published) > today || seen.has(entry.url)) continue;
     seen.add(entry.url);
     kept.push(entry);
   }

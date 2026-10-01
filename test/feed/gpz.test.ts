@@ -38,6 +38,32 @@ describe('the GPZ list', () => {
 });
 
 describe('a GPZ notice', () => {
+  it('does not read sidebar hours as the hours of the gas interruption', () => {
+    const html = '<div class="user-content">dana 31.8.2026. ZONA OBUHVATA RADOVA: <strong>ULICA DUNJEVAC - 17</strong></div>'
+      + '<aside>Radno vrijeme od 8 do 14 sati</aside>';
+    expect(cuts(parseGpzNotice(html, new Date('2026-08-30T10:00:00Z'))).items[0]?.data?.precision).toBe('day');
+  });
+
+  it('does not interpret house-number ranges after the zone heading as work hours', () => {
+    const html = '<div class="user-content">dana 31.8.2026. ZONA OBUHVATA RADOVA: '
+      + '<strong>ULICA DUNJEVAC - 17</strong>Kućni brojevi od 8 do 14</div>';
+    expect(cuts(parseGpzNotice(html, new Date('2026-08-30T10:00:00Z'))).items[0]?.data?.precision).toBe('day');
+  });
+
+  it('rejects a missing notice body, impossible work date and impossible clock range', () => {
+    const now = new Date('2026-08-30T10:00:00Z');
+    expect(() => parseGpzNotice('<html>Maintenance</html>', now)).toThrow(/user-content/);
+    expect(() => parseGpzNotice(N1576.replace('31.8.2026', '32.8.2026'), now)).toThrow(/date/);
+    expect(() => parseGpzNotice(N1576.replace('biti &nbsp;obustavljena', 'od 25 do 29 sati biti &nbsp;obustavljena'), now)).toThrow(/hours/);
+  });
+
+  it('intersects long work ranges with the observation window instead of truncating their first month', () => {
+    const html = N1576.replace('dana <strong>31.8.2026</strong>.', 'od 1.7. do 31.8.2026.');
+    const parsed = cuts(parseGpzNotice(html, new Date('2026-08-30T10:00:00Z')));
+    expect(parsed.items).toHaveLength(6);
+    expect(new Set(parsed.items.map(item => item.id.split(':')[2]))).toEqual(new Set(['2026-08-30', '2026-08-31']));
+  });
+
   it('gives the streets of 1576 as whole-day gas cuts, with the house numbers as written', () => {
     const result = cuts(parseGpzNotice(N1576, new Date('2026-08-30T10:00:00Z'), 'https://example.test/1576'));
     // All three streets are in the street index ("Ulica grada Gualda Tadina", "Dunjevac", "Kajfešov brijeg").
