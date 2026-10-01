@@ -78,6 +78,16 @@ test.describe('/snimka/ report', () => {
     await expect(page.locator('.sn-quartet-item[data-day="thu"] figcaption')).toContainText('Uobičajeno jutro.');
   });
 
+  test('a minute before a slot run the screen already shows its first reading, and the quartet\'s pictures load in view', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await open(page, '2026-09-29T07:44');
+    const mini = page.locator('.sn-mini');
+    await expect(mini).toHaveAttribute('data-view', 'reading');
+    await expect(mini.locator('.sn-mini-clock')).toHaveText('07:45');
+    await page.locator('.sn-quartet').scrollIntoViewIfNeeded();
+    await expect.poll(() => page.locator('.sn-quartet-item img').evaluateAll((imgs) => imgs.filter((i) => (i as HTMLImageElement).complete && (i as HTMLImageElement).naturalWidth > 0).length)).toBe(4);
+  });
+
   test('between recorded runs the screen gives the timetable board with its note', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await open(page, '2026-09-28T14:00');
@@ -132,6 +142,10 @@ test.describe('/snimka/ report', () => {
       await expect(cards.nth(i).locator('h3')).not.toHaveText('');
       await expect(cards.nth(i).locator('.st-method')).not.toHaveText('');
     }
+    // The ghosts panel: columns on their own scale, five more than seen on Monday evening in the fixture.
+    await expect(page.locator('[data-panel="ghosts"] h3')).toHaveText('Vozila koja je zaslon brojio, a nisu imala položaj');
+    await expect(page.locator('[data-panel="ghosts"] .sn-scale')).toHaveText('5');
+    await expect(page.locator('#vidjelo-broj .st-method')).toContainText('manje od 20 vozila u pokretu');
     await expect(page.locator('#vidjelo-broj .st-card-lede')).toHaveText('U ponedjeljak je zaslon brojio vozila kojih nije bilo: ZET je u ponoć vozilima upisao vrijeme dan unaprijed.');
     // A table twin opens with a row per hour.
     const table = page.locator('[data-panel="fleet"] .st-table');
