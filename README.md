@@ -68,6 +68,8 @@ These are different kinds of knowledge. ZET countdowns are **derived estimates**
 
 One device is enough: keep the screen in one tab and redeem its code in another. Opening a screen does not grant a personal session. This is the real data and pairing system, not a separate demo.
 
+Or watch a replay: [`/snimka/`](https://zagreb.aningfilm.hr/snimka/), "Tri dana bez tramvaja" (three days without trams), plays back the strike of 28 to 30 September 2026 minute by minute on one clock: the vehicles on the map, the bikes at the stations, the closed streets and the sentences the public screen wrote. It is a recording replayed with the product's own engine, never a simulation, and it never calls a live API. Its dataset is derived from the recorded days, raw ZET frames are not published, and the sources and licences are in [`docs/izvori.md`](docs/izvori.md).
+
 ## Under the hood
 
 ### Movement reconstructed, not dots connected
