@@ -1,0 +1,210 @@
+// Stage `frames` (lane S1): the recorded ZET frames of one segment replayed
+// through the product's own twin (replayPublished), turned into the minute
+// series of what the twin saw and judged, and into ten-minute motion chunks
+// of the vehicles it published. Raw frames never leave this stage: a chunk
+// holds only the positions the twin's plans put each published vehicle at,
+// every ten seconds, as metres along the engine's own paths and shapes.
+//
+// Resampling: for each tick T (every 10 s from the segment start) the latest
+// payload whose header is at most 30 s before T; each of its pins is placed
+// where its published plan puts it at T minus the header. No payload in the
+// 30 s before T: no sample (a gap, never a zero). Depot and parked vehicles
+// are not on the wire, so they are counted (feed.hidden*) and never placed.
+
+import { gzipSync } from 'node:zlib';
+import { loadRealEngine, loadZetRoutesFile, replayPublished, type PublishedTick } from '../replay-core';
+import { evalFreePlan, evalPathPlan } from '../../shared/motion/plan';
+import type { FreeKnot, PathKnot } from '../../shared/motion/track';
+import { encodeMotionChunk, type MotionSample } from '../../shared/snimka-codec';
+import { MOTION_CHUNK_S, MOTION_STEP_S, MOTION_TICKS, ZAGREB_OFFSET_S, type Col, type SnimkaState } from '../../shared/snimka';
+import type { ItemInput } from '../../worker/feed/payload';
+import { writeObject, writeWork, type Paths } from './paths';
+import { loadSegmentExpect, ROUTES_FILE, segmentOf, type SegmentKey } from './segments';
+
+/** A payload is used for a tick at most this long after its header. */
+export const SAMPLE_HOLD_S = 30;
+/** Budget of one chunk, gzip bytes (brief section 5). */
+export const CHUNK_GZIP_MAX = 150_000;
+
+export type Hold = 'stale' | 'below-min' | 'no-calendar' | 'gap';
+
+export interface MinutesWork {
+  segment: SegmentKey;
+  t0: number;
+  n: number;
+  frames: number;
+  dropped: number;
+  seen: { all: Col<number>; tram: Col<number>; bus: Col<number> };
+  service: { state: Col<SnimkaState>; since: Col<number>; ratio: Col<number>; hold: Col<Hold> };
+  feed: { headerAgeS: Col<number>; entities: Col<number>; rejectedFuture: Col<number>; hiddenDepot: Col<number>; hiddenParked: Col<number> };
+}
+
+export interface ChunkWork { path: string; sha256: string; bytes: number; gzip: number; net: '395' | '396'; t0: number; vehicles: number }
+export interface MotionWork { segment: SegmentKey; net: '395' | '396'; chunks: ChunkWork[] }
+
+/** `YYYYMMDD-HHMM` of an instant on Zagreb's clock (CEST all through the dataset). */
+export function zagrebStamp(sec: number): string {
+  const iso = new Date((sec + ZAGREB_OFFSET_S) * 1000).toISOString();
+  return `${iso.slice(0, 4)}${iso.slice(5, 7)}${iso.slice(8, 10)}-${iso.slice(11, 13)}${iso.slice(14, 16)}`;
+}
+
+interface Pin {
+  id: string;
+  route: string | null;
+  label: string | null;
+  kind: 0 | 3 | null;
+  at(tRel: number): MotionSample;
+}
+
+const blank = (n: number): null[] => new Array<null>(n).fill(null);
+
+export async function stageFrames(paths: Paths, key: SegmentKey, log: (line: string) => void): Promise<{ minutes: MinutesWork; motion: MotionWork }> {
+  const seg = segmentOf(paths, key);
+  const engine = await loadRealEngine(seg.network, seg.trips, seg.overrides);
+  const expect = await loadSegmentExpect(paths, key);
+  const routes = await loadZetRoutesFile(ROUTES_FILE(paths));
+  const net = engine.net;
+  const pathIndex = new Map(net.paths.map((p, i) => [p.id, i] as const));
+  const shapeIndex = new Map(net.shapes.map((s, i) => [s.id, i] as const));
+  const n = seg.minutes;
+  const t0 = seg.fromSec;
+  const end = t0 + n * 60;
+
+  const minutes: MinutesWork = {
+    segment: key, t0, n, frames: 0, dropped: 0,
+    seen: { all: blank(n), tram: blank(n), bus: blank(n) },
+    service: { state: blank(n), since: blank(n), ratio: blank(n), hold: blank(n) },
+    feed: { headerAgeS: blank(n), entities: blank(n), rejectedFuture: blank(n), hiddenDepot: blank(n), hiddenParked: blank(n) },
+  };
+  const lastHeaderOf: (number | null)[] = blank(n);
+  const hadFrame: boolean[] = new Array<boolean>(n).fill(false);
+
+  // ---- the pins of a payload, as motion samples --------------------------------
+  const clampS = (s: number, len: number): number => Math.min(Math.max(s, 0), len);
+  function pinOf(item: ItemInput): Pin {
+    const data = (item.data ?? {}) as Record<string, unknown>;
+    const routeType = data['routeType'];
+    const head = {
+      id: String(data['vehicleId'] ?? item.id.slice('vehicle:'.length)),
+      route: typeof data['routeId'] === 'string' ? (data['routeId'] as string) : null,
+      label: typeof data['routeShortName'] === 'string' ? (data['routeShortName'] as string) : null,
+      kind: routeType === 0 ? 0 : routeType === 3 ? 3 : null,
+    } as const;
+    const motion = item.motion as { path?: string; plan?: unknown[] } | undefined;
+    const [lon0, lat0] = item.geo && item.geo.type === 'Point' ? (item.geo.coordinates as [number, number]) : [NaN, NaN];
+    const still: MotionSample = { on: 2, idx: -1, lon: lon0, lat: lat0 };
+    if (motion?.plan && typeof motion.path === 'string') {
+      const knots = motion.plan as PathKnot[];
+      // As the client resolves a plan's geometry (app/src/motion/integrator.ts): a graph path first, else a bus shape.
+      const p = pathIndex.get(motion.path);
+      if (p !== undefined) return { ...head, at: (t) => ({ on: 0, idx: p, s: clampS(evalPathPlan(knots, t), net.paths[p].len) }) };
+      const s = shapeIndex.get(motion.path);
+      if (s !== undefined) return { ...head, at: (t) => ({ on: 1, idx: s, s: clampS(evalPathPlan(knots, t), net.shapes[s].len) }) };
+      return { ...head, at: () => still };
+    }
+    if (motion?.plan) {
+      const knots = motion.plan as FreeKnot[];
+      return { ...head, at: (t) => { const [lon, lat] = evalFreePlan(knots, t); return { on: 2, idx: -1, lon, lat }; } };
+    }
+    return { ...head, at: () => still };
+  }
+
+  // ---- ten-minute chunks --------------------------------------------------------
+  interface Builder { c: number; covered: number; vehicles: Map<string, { id: string; route: string | null; label: string | null; kind: 0 | 3 | null; samples: (MotionSample | null)[] }> }
+  const motion: MotionWork = { segment: key, net: seg.net, chunks: [] };
+  let builder: Builder | null = null;
+  const finalize = (b: Builder | null): void => {
+    if (!b || b.covered === 0) return;
+    const chunkT0 = t0 + b.c * MOTION_CHUNK_S;
+    const chunk = encodeMotionChunk({ net: seg.net, t0: chunkT0, vehicles: [...b.vehicles.values()] });
+    const json = JSON.stringify(chunk);
+    const gzip = gzipSync(json).length;
+    if (gzip > CHUNK_GZIP_MAX) throw new Error(`frames: chunk ${zagrebStamp(chunkT0)} is ${gzip} bytes gzip, over ${CHUNK_GZIP_MAX}`);
+    const ref = writeObject(paths, `motion/${seg.net}/${zagrebStamp(chunkT0)}`, 'json', json);
+    motion.chunks.push({ ...ref, gzip, net: seg.net, t0: chunkT0, vehicles: new Set(chunk.vehicles.map((v) => v.id)).size });
+  };
+  let current: { headerSec: number; pins: Pin[] } | null = null;
+  let nextTick = t0;
+  const sample = (T: number): void => {
+    const c = Math.floor((T - t0) / MOTION_CHUNK_S);
+    if (!builder || builder.c !== c) {
+      finalize(builder);
+      builder = { c, covered: 0, vehicles: new Map() };
+    }
+    if (!current || T - current.headerSec > SAMPLE_HOLD_S) return;
+    builder.covered++;
+    const k = (T - t0 - c * MOTION_CHUNK_S) / MOTION_STEP_S;
+    for (const pin of current.pins) {
+      // A vehicle that changes route inside a chunk is a new entry under the same id.
+      const id = `${pin.id}\t${pin.route ?? ''}`;
+      let v = builder.vehicles.get(id);
+      if (!v) {
+        v = { id: pin.id, route: pin.route, label: pin.label, kind: pin.kind, samples: new Array<MotionSample | null>(MOTION_TICKS).fill(null) };
+        builder.vehicles.set(id, v);
+      }
+      const s = pin.at(T - current.headerSec);
+      v.samples[k] = s.on === 2 && !(Number.isFinite(s.lon) && Number.isFinite(s.lat)) ? null : s;
+    }
+  };
+  const flushBefore = (limitSec: number): void => {
+    while (nextTick < limitSec && nextTick < end) {
+      sample(nextTick);
+      nextTick += MOTION_STEP_S;
+    }
+  };
+
+  // ---- the replay -----------------------------------------------------------------
+  let lastLogHour = -1;
+  const onTick = (tick: PublishedTick): void => {
+    const h = tick.headerSec;
+    flushBefore(h);
+    current = { headerSec: h, pins: tick.payload.items.filter((item) => item.id.startsWith('vehicle:')).map(pinOf) };
+    const m = Math.floor((h - t0) / 60);
+    if (m < 0 || m >= n) return;
+    const pins = tick.payload.items.filter((item) => item.id.startsWith('vehicle:'));
+    let tram = 0;
+    for (const item of pins) if ((item.data as Record<string, unknown> | undefined)?.['routeType'] === 0) tram++;
+    minutes.seen.all[m] = tick.payload.sources?.zet?.itemCount ?? pins.length;
+    minutes.seen.tram[m] = tram;
+    minutes.seen.bus[m] = pins.length - tram;
+    const svc = tick.service;
+    minutes.service.state[m] = svc.state;
+    minutes.service.since[m] = svc.sinceSec;
+    minutes.service.ratio[m] = svc.last?.ratio ?? null;
+    minutes.service.hold[m] = svc.reason === 'below-min' ? 'below-min' : svc.reason === 'no-calendar' ? 'no-calendar' : null;
+    minutes.feed.entities[m] = tick.entities;
+    minutes.feed.rejectedFuture[m] = Math.max(minutes.feed.rejectedFuture[m] ?? 0, tick.rejectedFuture);
+    minutes.feed.hiddenDepot[m] = tick.hidden.depot;
+    minutes.feed.hiddenParked[m] = tick.hidden.parked;
+    lastHeaderOf[m] = h;
+    hadFrame[m] = true;
+    const hour = Math.floor(m / 60);
+    if (hour !== lastLogHour && hour % 6 === 0) {
+      lastLogHour = hour;
+      log(`frames ${key}: ${zagrebStamp(h)} seen ${minutes.seen.all[m]} state ${svc.state}`);
+    }
+  };
+  const result = await replayPublished(seg.dirs, engine, { expect, routes, fromSec: t0 - seg.warmupSec, toSec: end, onTick });
+  flushBefore(end);
+  finalize(builder);
+  minutes.frames = result.frames;
+  minutes.dropped = result.dropped;
+
+  // Minutes without a frame: the state carried, the hold `gap`, every count null;
+  // the header age runs on from the newest header seen.
+  let lastHeader: number | null = null;
+  for (let m = 0; m < n; m++) {
+    if (lastHeaderOf[m] !== null) lastHeader = lastHeaderOf[m];
+    const minuteEnd = t0 + (m + 1) * 60;
+    minutes.feed.headerAgeS[m] = lastHeader === null ? null : minuteEnd - lastHeader;
+    if (!hadFrame[m]) {
+      minutes.service.state[m] = m > 0 ? minutes.service.state[m - 1] : null;
+      minutes.service.since[m] = m > 0 ? minutes.service.since[m - 1] : null;
+      minutes.service.hold[m] = 'gap';
+    }
+  }
+  writeWork(paths, `minutes-${key}.json`, minutes);
+  writeWork(paths, `motion-${key}.json`, motion);
+  log(`frames ${key}: ${result.frames} frames (${result.dropped} dropped), ${motion.chunks.length} chunks, largest ${Math.max(0, ...motion.chunks.map((c) => c.gzip))} B gzip`);
+  return { minutes, motion };
+}

@@ -65,8 +65,9 @@ export function fold(text: string): string {
 
 const STRIKE = /strajk|\bzet\b|\bzet-a\b|sindikat/;
 const HOLDING = /holding/;
-const TRANSPORT = /tramvaj|autobus|javn\w* prijevoz|\bprijevoz|bajs|bicikl|nextbike|romobil|taksi|taxi|\buber\b|\bbolt\b|guzv|linij\w* 228|vozac\w* (tramvaj|autobus)/;
-const ANCHOR = /zagreb|zagrepc|tomasevic|\bzet\b|\bzet-a\b|\brebr|\bkbc\b|jelacic|dubrav|sesvet|novi zagreb/;
+const TRANSPORT = /tramvaj|autobus|\bbus(evi|eva|om|a)?\b|javn\w* prijevoz|\bprijevoz|bajs|bicikl|nextbike|romobil|taksi|taxi|\buber\b|\bbolt\b|guzv|linij\w* 228|vozac\w* (tramvaj|autobus)/;
+/** Zagreb, or what only Zagreb has here: ZET, its trams (Osijek's two lines aside), Rebro, the mayor. */
+const ANCHOR = /zagreb|zagrepc|tomasevic|\bzet\b|\bzet-a\b|tramvaj|\brebr|\bkbc\b|jelacic|dubrav|sesvet|novi zagreb/;
 /** Not a sport, world or crime story, by the feed's category or the link's path. */
 const EXCLUDED = /sport|nogomet|kosark|rukomet|tenis|\batp\b|\bnba\b|euroliga|aba liga|vaterpolo|reprezentacij|hajduk|dinamo|\bhnl\b|liga nacija|svijet|world|regij|crna[ -]kronika|zvijezde|showbiz|lifestyle|horoskop|promo/;
 const LIVE = /\buzivo\b|\blive\b|\bblog\b/;
