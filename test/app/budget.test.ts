@@ -34,6 +34,8 @@ const MAP_RUNTIME_ENTRIES = ['src/motion/integrator.ts', '../shared/motion/netwo
 /** Keep the newly deferred, formerly static touch code in comparable map accounting. Its pre-existing dynamic
  * phone-row graph was never in that metric; report the broader touch-open graph separately below. */
 const TOUCH_RUNTIME_ENTRY = 'src/kiosk/touch-content.ts';
+/** Decision 16: deferred session-sheet bytes remain in the comparable phone map-open budget. */
+const SESSION_RUNTIME_ENTRY = 'src/experience/session-sheet.ts';
 /** Manifest keys of the chunks the lightweight path must never reference. */
 const FORBIDDEN_CHUNKS = ['src/ui/fonts.css', 'src/map/maplibre-entry.ts', 'src/motion/schema-map.ts'] as const;
 const NETWORK_ARTEFACT = 'zet-network.json';
@@ -150,6 +152,10 @@ describe('lightweight transfer: 200 kB, kiosk 210 kB under reveal-pass decision 
       expect(js, `${key} carries the U blizini selection`).not.toContain('always:heritage:');
     }
   });
+  it('defers the phone session sheet without hiding its bytes from comparable map accounting', () => {
+    expect(manifest[SESSION_RUNTIME_ENTRY]?.isDynamicEntry).toBe(true);
+    expect(staticGraph('d/index.html')).not.toContain(SESSION_RUNTIME_ENTRY);
+  });
   for (const entry of LIGHTWEIGHT_ENTRIES) {
     const budget = entry === 'kiosk/index.html' ? KIOSK_BUDGET_BYTES : BUDGET_BYTES;
     it(`/${entry.replace('index.html', '')} transfers under ${budget} bytes gzipped`, () => {
@@ -208,7 +214,7 @@ describe('full map JavaScript budget, including the separate MapLibre v6 worker'
     it(`/${entry.replace('index.html', '')} stays under ${budget / 1000} kB compressed when the map opens`, () => {
       const keys = new Set([...staticGraph(entry), ...staticGraph('src/map/maplibre-entry.ts'),
         ...MAP_RUNTIME_ENTRIES.flatMap((module) => staticGraph(module)),
-        ...(entry === 'kiosk/index.html' ? staticGraph(TOUCH_RUNTIME_ENTRY) : [])]);
+        ...(entry === 'kiosk/index.html' ? staticGraph(TOUCH_RUNTIME_ENTRY) : staticGraph(SESSION_RUNTIME_ENTRY))]);
       const files = new Set([...keys].map((key) => manifest[key]!.file).filter((file) => /\.m?js$/.test(file)));
       // Vite emits ?worker&url as an asset, not as a manifest import.
       // Omitting this file would undercount the real initial map payload.
@@ -218,12 +224,22 @@ describe('full map JavaScript budget, including the separate MapLibre v6 worker'
       const rows = [...files].map(measure);
       const total = rows.reduce((sum, row) => sum + row.gzip, 0);
       console.log(`[budget] /${entry.replace('index.html', '')} full-map JS + worker: ${total} gzip bytes`);
+      if (entry === 'd/index.html') {
+        const coldKeys = new Set([...staticGraph(entry), ...staticGraph('src/map/maplibre-entry.ts'), ...MAP_RUNTIME_ENTRIES.flatMap((module) => staticGraph(module))]);
+        const coldFiles = new Set([...coldKeys].map((key) => manifest[key]!.file).filter((file) => /\.m?js$/.test(file)));
+        for (const worker of workers) coldFiles.add(`assets/${worker}`);
+        const coldTotal = [...coldFiles].reduce((sum, file) => sum + measure(file).gzip, 0);
+        const extended = new Set([...files, ...staticGraph(SESSION_RUNTIME_ENTRY, true).map((key) => manifest[key]!.file)]);
+        const extendedTotal = [...extended].filter((file) => /\.m?js$/.test(file)).reduce((sum, file) => sum + measure(file).gzip, 0);
+        console.log(`[budget] /d/ immediate map-open JS + worker: ${coldTotal} gzip bytes; newly deferred static graph: ${total - coldTotal}`);
+        console.log(`[budget] /d/ extended session-sheet graph (pre-existing optional dynamic loads, diagnostic): ${extendedTotal} gzip bytes`);
+      }
       if (entry === 'kiosk/index.html') {
         const extended = new Set([...files, ...staticGraph(TOUCH_RUNTIME_ENTRY, true).map((key) => manifest[key]!.file)]);
         const extendedTotal = [...extended].filter((file) => /\.m?js$/.test(file)).reduce((sum, file) => sum + measure(file).gzip, 0);
         console.log(`[budget] /kiosk/ extended touch-open graph (includes pre-existing optional dynamic loads, diagnostic): ${extendedTotal} gzip bytes`);
       }
-      expect(total, 'page, map library, shared chunks, formerly static touch code and worker together').toBeLessThan(budget);
+      expect(total, 'page, map library, shared chunks, newly deferred static code and worker together').toBeLessThan(budget);
     });
   }
 });
