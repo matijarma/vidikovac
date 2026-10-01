@@ -147,7 +147,7 @@ describe('one reading of the wall', () => {
       expect(shippedFn(WALL_SAMPLE_SPEC).stripHasClock).toBe(true);
       // R4: the radar inset reads null while absent, true while on the page, false while hidden.
       expect(s.radar).toBeNull();
-      const host = document.querySelector('[data-testid=kiosk-map-host]')!;
+      const host = document.querySelector<HTMLElement>('[data-testid=kiosk-map-host]')!;
       host.insertAdjacentHTML('beforeend', '<figure data-testid="radar-inset"><img alt=""></figure>');
       const radar = document.querySelector<HTMLElement>('[data-testid=radar-inset]')!;
       expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(false); // no painted box yet

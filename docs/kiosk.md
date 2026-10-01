@@ -666,8 +666,10 @@ nisu polasci zaslon pokazao tijekom promatranja, a isto po satima ispisuje
 `node scripts/shown-facts.mjs <mapa promatranja> [--json <datoteka>]`. Promatranje nakon
 isporuke čita DEV zaslon mreže s koje se pokreće (`POST /api/dev/screen`, opisano u zaglavlju
 `worker/routes/dev.ts`), koji se nigdje ne broji; promatrač učitava samo njegov fragment, pa
-zaslon izgleda kao svaki drugi. Na DEV zaslonu redak `phone-expiry` nije ocjenjiv; dok promatrač
-ne dobije tu oznaku, njegov crveni ishod ne tumači se kao kvar.
+zaslon izgleda kao svaki drugi. Kad poslužiteljev odgovor potvrdi `screen.dev=true`,
+redak `phone-expiry` označava se kao neocjenjiv i ne čeka se istek: takva se sesija
+obnavlja dok je veza otvorena. Za običan zaslon ili nepoznatu oznaku provjera isteka
+ostaje obvezna.
 
 Snimke i automatizirani rezultati nisu dokaz da je QR fizički skeniran s nekoliko
 metara ili da je aplikacija provjerena na iPhoneu i Androidu. Takva mjerenja
