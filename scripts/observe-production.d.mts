@@ -41,6 +41,9 @@ export const SESSION_MINUTES: number;
 export const SESSION_LENGTH_MS: number;
 export const EXPIRY_MARGIN_MS: number;
 export const AFTER_EXPIRY_MS: number;
+export const DEV_EXPIRY_REASON: string;
+/** The boolean from a successful ScanOk response's screen metadata; unknown stays strict. */
+export function screenDevOf(body: unknown): boolean | null;
 export const OUTAGE_FEEDS: readonly string[];
 /** The wall's data-feed before its first poll has answered: no outage, and no vehicle to draw yet. */
 export const LOADING_FEED: string;
@@ -205,6 +208,8 @@ export interface StopBoardObservation extends StopBoardRead { taps: number; quer
 export interface ExpiryObservation { seen: boolean; stamped: boolean; boundary: 'stamp' | 'estimate'; afterRedemptionMs: number; ended: Inventory.ExpiryReading; later: Inventory.ExpiryReading; requestsAfter: string[] }
 export interface PhoneObservation {
   landingMs: number | null;
+  /** Server ScanOk.screen.dev only; no identifiers, tickets or screen details retained. */
+  screenDev?: boolean | null;
   sada: PhoneRead | null;
   share: ShareObservation | null;
   karta: (KartaRead & { pillsAfterMs: number | null; fleet: FleetState | null }) | null;
@@ -255,7 +260,7 @@ export const THRESHOLDS: readonly Threshold[];
 export function stageIndex(stage: StageChoice): number;
 export function thresholdsFor(stage: StageChoice): Threshold[];
 export function fillTarget(text: string, instruments: Pick<Instruments, 'wall' | 'inventory' | 'legibility' | 'scenes'>): string;
-export interface Measure { value: number | null; detail: string[] }
+export interface Measure { value: number | null; detail: string[]; notJudgeable?: boolean }
 export const METRICS: Readonly<Record<string, (obs: Observation, instruments: Instruments) => Measure>>;
 export function readingsOf(obs: Observation): ObservedSample[] | null;
 /** The rotation's planned readings for `minutes`, one every `stepMs`. */
@@ -271,7 +276,7 @@ export function repeatsWithin(readings: readonly Wall.WallSample[], windowMs: nu
   turns: number; refreshes: number; distinct: number; repeats: { at: string; afterMs: number; sentence: string }[];
   short: SentenceDwell[]; dwells: SentenceDwell[]; factSource: Wall.SentenceTurns['factSource'];
 };
-export type RowStatus = 'pass' | 'fail' | 'info' | 'monitored' | 'not observed';
+export type RowStatus = 'pass' | 'fail' | 'info' | 'monitored' | 'not observed' | 'not judgeable';
 export interface VerdictRow extends Omit<Threshold, 'target'> { target: string; value: number | null; holds: boolean; detail: string[]; status: RowStatus }
 export interface Verdict { stage: StageChoice; rows: VerdictRow[]; failures: VerdictRow[]; applied: number; ok: boolean }
 export function judge(observation: Observation, instruments: Instruments, stage?: StageChoice): Verdict;

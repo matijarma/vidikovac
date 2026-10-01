@@ -28,7 +28,8 @@
 // and a 1440×900 desktop each redeem one code and are read the same way (Sada, the share code, Karta cold
 // open, the stop board by search, axe); after the rotation the wall in portrait (1080×1920), a DPR 0.25 proxy
 // screenshot, and the phone once its ten minutes are over (session-ended, no content row, no further
-// /api/data request). The instruments are the TypeScript modules the accept specs use, loaded through a
+// /api/data request). A server-confirmed DEV screen is the exception (RUN decision 6): phone expiry is explicitly
+// not judgeable, not applied, and never waited for; missing DEV metadata stays strict. The instruments are the TypeScript modules the accept specs use, loaded through a
 // throwaway Vite loader (the pattern of scripts/audit-production.mjs), so a production verdict and a local one
 // read the same selectors and numbers. Every planned reading is judged: a reading that failed or never
 // happened fails its row, it never drops out of the verdict.
@@ -134,6 +135,8 @@ export const SESSION_LENGTH_MS = SESSION_MINUTES * 60_000;
 export const EXPIRY_MARGIN_MS = 90_000;
 /** Past the shell's 30 s data poll: no /api/data request may follow once the session has ended (the phone spec's AFTER_EXPIRY_MS). */
 export const AFTER_EXPIRY_MS = 31_000;
+/** RUN decision 6: DEV rooms renew while a socket holds them (worker/do/room-do.ts). */
+export const DEV_EXPIRY_REASON = 'DEV screen (screen.dev=true): phone expiry is not judgeable; the server renews the session while a socket holds it. No expiry wait or expiry checks were applied.';
 /** A data-feed that says the vehicles are not live: during it the wall need draw no pill (§16.3 outage0800). */
 export const OUTAGE_FEEDS = Object.freeze(['stale', 'down']);
 /** The wall's data-feed before its first poll has answered (app/src/kiosk/mapview.ts feedStateOf): no outage, and no vehicle to draw yet. */
@@ -823,6 +826,7 @@ export async function redeem(page, kioskPage, surface, ctx) {
   }
   const { pathOf } = ctx.instruments.recorders;
   let answeredAt = null;
+  let screenRead = Promise.resolve();
   let timedOut = false;
   page.on('response', (res) => {
     try {
@@ -835,6 +839,16 @@ export async function redeem(page, kioskPage, surface, ctx) {
       return;
     }
     if (ctx.budget.redeemed(surface, at)) answeredAt = at;
+    // ScanOk.screen is server metadata (worker/protocol.ts; BeaconDO.grant), not a URL's stripped ?DEV flag.
+    // Read the response the phone already received. Retain only a boolean, never its room, ticket or screen details.
+    if (surface === 'phone') {
+      try {
+        const url = new URL(res.url());
+        if (url.origin === ctx.origin && url.pathname === '/api/scan' && res.status() >= 200 && res.status() < 300) {
+          screenRead = Promise.resolve().then(() => res.json()).then(body => { ctx.phoneScreenDev = screenDevOf(body); }, () => {});
+        }
+      } catch { /* missing or malformed metadata stays unknown and strict */ }
+    }
   });
   ctx.budget.take(surface, ctx.now());
   const t0 = ctx.now();
@@ -857,6 +871,7 @@ export async function redeem(page, kioskPage, surface, ctx) {
       ctx.note(`${surface}: no /api/scan answer within ${SESSION_TIMEOUT_MS / 1000} s; the redemption failed${cancelError ? ', and leaving its page to cancel the scan failed' : ' and its page was left, so the scan is cancelled'}`);
     }
   }
+  await screenRead;
   return ctx.now() - t0;
 }
 
@@ -866,8 +881,21 @@ async function axeOf(page, ctx, label) {
 }
 
 /** What a phone phase fills; a failure part way keeps what was read. */
-export const newPhone = () => ({ landingMs: null, sada: null, share: null, karta: null, stopBoard: null, expiry: null, axe: { sada: null, karta: null }, viewports: [] });
+export const newPhone = () => ({ landingMs: null, screenDev: null, sada: null, share: null, karta: null, stopBoard: null, expiry: null, axe: { sada: null, karta: null }, viewports: [] });
 export const newDesktop = () => ({ landingMs: null, read: null, viewports: [] });
+
+/** Only ScanOk's real screen metadata can exempt expiry; absent or malformed metadata is unknown. */
+export function screenDevOf(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.roomId !== 'string'
+    || body.roomId.length === 0 || typeof body.ticket !== 'string' || body.ticket.length === 0 || !['kiosk', 'phone'].includes(body.beaconType)
+    || !Number.isFinite(body.expiresAt)) return null;
+  const screen = body.screen;
+  if (!screen || typeof screen !== 'object' || Array.isArray(screen) || !['temporary', 'venue'].includes(screen.kind)
+    || !(screen.expiresAt === null || Number.isFinite(screen.expiresAt))
+    || !(screen.stop === null || (screen.stop && typeof screen.stop === 'object' && !Array.isArray(screen.stop)))) return null;
+  // The protocol omits dev on ordinary screens. Never coerce a string or another truthy value.
+  return screen.dev === undefined ? false : typeof screen.dev === 'boolean' ? screen.dev : null;
+}
 
 /**
  * "Podijeli grad", once: one tap when the button is at rest in the header (Sada's reading says so; before WP4 it
@@ -1132,6 +1160,10 @@ const fleetNow = (ctx, page, at) => fleetAt(ctx.fleets?.get(page) ?? [], at);
  * expiryFailures, the phone spec's own). The request watcher has run since the redemption.
  */
 export async function observeExpiry(page, ctx, out) {
+  if (out.screenDev === true) {
+    ctx.note(`phone: ${DEV_EXPIRY_REASON}`);
+    return null;
+  }
   const { inventory } = ctx.instruments;
   const P = inventory.PHONE_PROBES;
   const redeemedAt = ctx.budget.times().find((t) => t.surface === 'phone')?.at ?? ctx.now();
@@ -1163,8 +1195,11 @@ export async function observePhone(page, kioskPage, ctx, out = newPhone()) {
   const P = inventory.PHONE_PROBES;
   // Every /api/data request from the redemption on, so none made after the session's end can slip past.
   ctx.phoneDataRequests = watchDataRequests(page, ctx);
+  ctx.phoneScreenDev = null;
   out.landingMs = await redeem(page, kioskPage, 'phone', ctx);
-  ctx.expiryWatch = await page.evaluate(EXPIRY_WATCH_IN_PAGE, { ended: P.sessionEnded, key: EXPIRY_KEY }).then(() => true, (e) => { ctx.error('phone expiry watch', e); return false; });
+  out.screenDev = ctx.phoneScreenDev ?? null;
+  ctx.expiryWatch = out.screenDev === true ? false
+    : await page.evaluate(EXPIRY_WATCH_IN_PAGE, { ended: P.sessionEnded, key: EXPIRY_KEY }).then(() => true, (e) => { ctx.error('phone expiry watch', e); return false; });
   await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.sadaPlace, P.sadaDepartures] }, { timeout: SADA_TIMEOUT_MS })
     .catch(() => ctx.note(`phone: neither ${P.sadaPlace} nor ${P.sadaDepartures} within ${SADA_TIMEOUT_MS / 1000} s`));
   await ctx.sleep(SETTLE_MS);
@@ -1695,6 +1730,9 @@ export const METRICS = Object.freeze({
     return { value: f.length, detail: f.length ? f : [`the board after ${b.taps} taps, ${b.inViewport} departures inside the viewport`] };
   },
   'phone.expiryFailures': (obs, k) => {
+    if (obs.phone?.screenDev === true && obs.phone.landingMs !== null) {
+      return { value: null, detail: [DEV_EXPIRY_REASON], notJudgeable: true };
+    }
     const x = obs.phone?.expiry;
     if (!x) return notMeasured('the end of the phone\'s session');
     const f = [...new Set([...k.inventory.expiryFailures(x.ended), ...k.inventory.expiryFailures(x.later, x.requestsAfter)])];
@@ -1793,7 +1831,8 @@ export function judge(observation, instruments, stage = observation.meta.stage) 
     const m = observed ? METRICS[t.metric](observation, instruments) : { value: null, detail: [] };
     const ok = m.value !== null && holds(t, m.value);
     // A monitored row (R4) is measured and printed like any other and never fails: not in `failures`, not in `applied`.
-    const status = !observed ? 'not observed' : stageIndex(t.stage) > applied ? 'info' : t.monitored ? 'monitored' : ok ? 'pass' : 'fail';
+    const status = !observed ? 'not observed' : m.notJudgeable ? 'not judgeable'
+      : stageIndex(t.stage) > applied ? 'info' : t.monitored ? 'monitored' : ok ? 'pass' : 'fail';
     return { id: t.id, stage: t.stage, surface: t.surface, metric: t.metric, min: t.min, max: t.max, monitored: t.monitored === true, source: t.source, target: fillTarget(t.target, instruments), value: m.value, holds: ok, detail: m.detail, status };
   });
   const failures = rows.filter((r) => r.status === 'fail');
@@ -1902,6 +1941,12 @@ export function renderReport(observation, verdict, instruments) {
   lines.push('| Row | Stage | Surface | Target | Bound | Observed | Result |', '|---|---|---|---|---|---:|---|');
   for (const r of verdict.rows) lines.push(`| ${r.id} | ${r.stage} | ${r.surface} | ${cell(r.target)} | ${bound(r)} | ${r.value === null ? '—' : r.value} | ${r.status === 'fail' ? '**fail**' : r.status} |`);
   lines.push('');
+  const unjudgeable = verdict.rows.filter(r => r.status === 'not judgeable');
+  if (unjudgeable.length) {
+    lines.push('### Not judgeable (not applied)', '');
+    for (const r of unjudgeable) lines.push(`- ${r.id}: ${r.detail.map(cell).join(' ')}`);
+    lines.push('');
+  }
   const monitoredRows = verdict.rows.filter((r) => r.status === 'monitored');
   if (monitoredRows.length) {
     lines.push('### Monitored (no threshold)', '');
@@ -2013,6 +2058,7 @@ export function renderReport(observation, verdict, instruments) {
   if (observation.phone) {
     const p = observation.phone;
     lines.push('## Phone and desktop', '');
+    lines.push(`- Server screen.dev: ${p.screenDev === true ? 'true' : p.screenDev === false ? 'false (ordinary screen)' : 'unknown (expiry remains strict)'}.`);
     if (p.sada) lines.push(`- Sada: place ${quote(p.sada.place ?? '—')}, sentence ${quote(p.sada.sentence ?? '—', 90)}, departures ${p.sada.departures.inViewport} in the viewport of ${p.sada.departures.total}; landed ${p.landingMs ?? '?'} ms after the scan URL.`);
     if (p.share) lines.push(`- Share: ${p.share.code ? `a code ${p.share.afterMs} ms after the tap` : cell(p.share.detail ?? 'no code')}.`);
     if (p.karta) lines.push(`- Karta cold open: status ${p.karta.status ?? '—'}, first pill ${p.karta.pillsAfterMs === null ? 'none' : `${p.karta.pillsAfterMs} ms`} after ready (${p.karta.fleet ? `the twin: ${p.karta.fleet.pins} vehicle(s), ${p.karta.fleet.status ?? '?'}` : 'no zet-rt snapshot read'}), unlabelled ${p.karta.unlabelled ?? '—'}, markers ${p.karta.markers ?? '—'}, disclosures ${p.karta.disclosures}.`);
