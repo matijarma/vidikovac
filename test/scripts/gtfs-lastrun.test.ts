@@ -13,6 +13,8 @@ import {
   parseGtfsTime,
   servicesByDate,
 } from '../../scripts/gtfs-lastrun.mjs';
+import { depotRunOf as depotRunOfScript } from '../../scripts/gtfs-lastrun.mjs';
+import { depotRunOf } from '../../shared/city/depot-run';
 import { lastDeparture, type LastRunSnapshot } from '../../app/src/core/lastrun';
 
 // scripts/gtfs-lastrun.mjs cuts ZET's static GTFS into one small JSON per stop
@@ -172,6 +174,28 @@ describe('servicesByDate', () => {
     const active = servicesByDate('', CALENDAR_DATES, ['2026-09-16', '2026-09-17']);
     expect([...active.get('2026-09-16')!]).toEqual(['SAT']);
     expect([...active.get('2026-09-17')!]).toEqual(['HOL']);
+  });
+});
+
+describe('pull-ins (shared/city/depot-run.ts)', () => {
+  it("are not a line's last tram: a later Spr.Dubrava trip leaves line 11's last departure where it was", async () => {
+    const trips = `${TRIPS}11,WD,t11spr,Spr.Dubrava,0\n`;
+    const stopTimes = STOP_TIMES + 't11spr,24:31:00,24:31:00,S1,1,0\nt11spr,24:40:00,24:40:00,S2,2,0\n';
+    const zip = makeZip([
+      { name: 'calendar.txt', data: CALENDAR, method: 8 },
+      { name: 'calendar_dates.txt', data: CALENDAR_DATES, method: 0 },
+      { name: 'trips.txt', data: trips, method: 8 },
+      { name: 'stop_times.txt', data: stopTimes, method: 8 },
+      { name: 'feed_info.txt', data: FEED_INFO, method: 8 },
+    ]);
+    const files = await buildLastRun(zip, { stopIds: ['S1'], today: TODAY, generatedAt: GENERATED_AT });
+    expect(files.get('S1')!.routes['11']['2026-09-14']).toBe('21:00');
+  });
+
+  it('are read by the same rule the app reads them by', () => {
+    for (const h of ['Spr. Trešnj.', 'Spr.Dubrava', 'Spremište Dubrava', 'SPREMIŠTE TREŠNJEVKA', 'Sopot', 'Dubrava', 'Trešnjevački trg', '', null]) {
+      expect(depotRunOfScript(h), String(h)).toBe(depotRunOf(h));
+    }
   });
 });
 

@@ -168,18 +168,37 @@ export function servicesByDate(calendarText, calendarDatesText, days) {
 // ---------------------------------------------------------------------------
 // trips.txt and stop_times.txt
 
-/** @returns {Map<string, { routeId: string; serviceId: string }>} */
-function parseTrips(text) {
+/** shared/city/depot-run.ts depotRunOf, line for line: "Spr. Trešnj." is ST,
+ *  "Spr.Dubrava" SD, every other headsign null. */
+export function depotRunOf(headsign) {
+  if (!headsign) return null;
+  const plain = headsign.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[.\-]/g, ' ').replace(/\s+/g, ' ').trim();
+  const match = /^spr(?:emiste)? ?(tresnj\w*|dubrav\w*)$/.exec(plain);
+  if (!match) return null;
+  return match[1].startsWith('tresnj') ? 'ST' : 'SD';
+}
+
+/**
+ * Every trip but the pull-ins. A tram on its way to the depot is not its line
+ * any more (shared/city/depot-run.ts): it leaves the line's route, and the
+ * last 11 from Grižanska is the 23:26 to Dubec, not the 00:31 to Spremište
+ * Dubrava. On weekday service 0_30 a pull-in was the latest departure of 401
+ * of 898 stop and tram line pairs; it still shows on the stop's board, as SD.
+ * @returns {Map<string, { routeId: string; serviceId: string }>}
+ */
+export function parseTrips(text) {
   const rows = parseCsv(text);
   if (rows.length === 0) throw new Error('trips.txt is empty');
   const h = rows[0];
   const tripIdx = h.indexOf('trip_id');
   const routeIdx = h.indexOf('route_id');
   const serviceIdx = h.indexOf('service_id');
+  const headsignIdx = h.indexOf('trip_headsign');
   if (tripIdx === -1 || routeIdx === -1 || serviceIdx === -1) throw new Error('trips.txt lacks trip_id, route_id or service_id');
   const trips = new Map();
   for (const row of rows.slice(1)) {
-    if (row[tripIdx]) trips.set(row[tripIdx], { routeId: row[routeIdx], serviceId: row[serviceIdx] });
+    if (!row[tripIdx] || (headsignIdx !== -1 && depotRunOf(row[headsignIdx]) !== null)) continue;
+    trips.set(row[tripIdx], { routeId: row[routeIdx], serviceId: row[serviceIdx] });
   }
   return trips;
 }

@@ -862,7 +862,9 @@ describe('the first tram', () => {
     const snapshot: LastRunSnapshot = { status: 'live', fetchedAt: file.generatedAt, sourceUpdatedAt: file.generatedAt, validUntil: file.validUntil, routes: file.routes, first: file.first };
     const day = zagrebDayKey(file.generatedAt);
     const next = zagrebDayKey(Date.parse(`${day}T12:00:00Z`) + 86_400_000);
-    expect(file.first['33']?.[next]).toMatch(/^2[4-9]:\d\d$/); // the counterexample is in the artefact: the next morning's 04:xx under the next date
+    // The counterexample was the 33's 04:15 ("28:15") pull-in to Spremište Dubrava, its only call here: since the
+    // depot runs became ST and SD (shared/city/depot-run.ts) it is no line's departure, and the 33 leaves the file.
+    expect(file.first['33']).toBeUndefined();
     const stop: ScreenPlace = { kind: 'tram', name: 'Branim. tržnica', lon: 15.99198, lat: 45.80614, stopId: '112_1' };
     const lateEvening = Date.parse(`${day}T20:40:00Z`);
     const row = one(selectNearby({ ...input(lateEvening), place: stop, boards: [], fixes: [], snapshots: {}, city: emptyCity(), lastRun: snapshot }), 'first');
