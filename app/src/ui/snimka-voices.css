@@ -1,43 +1,50 @@
-/* snimka-voices.css: the voices feed, the agenda, the subtitle band, the fact chips and the Zaslon section's source control. Owner: lane V4; class prefixes sn-feed-, sn-agenda-, sn-sub-, sn-fact-, sn-screen- (new classes only; .sn-screen-grid is the report sheet's). Colours carry the tone only as a bar or a dot, never as text, so every text keeps the token contrast in both themes. */
+/* snimka-voices.css: Objave (the feed), the agenda list (the bar's Poglavlja popover), the subtitle band, the fact chips and the Zaslon section's source control. Owner: lane V4; class prefixes sn-feed-, sn-agenda-, sn-sub-, sn-fact-, sn-screen- (new classes only; .sn-screen-grid is the report sheet's). Colours carry the tone only as a bar or a dot, never as text, so every text keeps the token contrast in both themes. */
 
-/* ---- the feed -------------------------------------------------------------------- */
-.sn-feed { display: grid; gap: var(--sp-3); min-inline-size: 0; }
-.sn-feed-head { display: grid; gap: var(--sp-1); }
-.sn-feed-title { margin: 0; font-size: var(--type-head); letter-spacing: -0.01em; }
-.sn-feed-lede { margin: 0; color: var(--tone-text-muted); font-size: var(--type-secondary); line-height: 1.45; }
-.sn-feed-filter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin: 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--tone-glass-stroke); border-radius: var(--r-md); background: var(--tone-surface-2); }
+/* ---- Objave (V3-16): the current item over a compact log -------------------------------------------------------
+   Rhythm: the slot pads 12 px (stage sheet); the heading in the deck's label look sits 8 px above the list; the current item
+   pads 10 px with a 16 px semibold title; log rows are 13 px text in 44 px rows split by hairlines, never cards. The tone is
+   a 3 px mark at the row's start, only for ZET (transit) and the court (events violet, distinct from the brand blue). */
+.sn-feed { --sn-feed-civic: var(--tone-events); display: grid; min-inline-size: 0; }
+.sn-feed-title { margin: 0 0 var(--sp-2); font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
+.sn-feed-filter { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-block-size: var(--target); margin: 0; padding-inline-start: var(--sp-2); border-block: 1px solid var(--tone-stroke); font-size: var(--type-secondary); color: var(--tone-text-secondary); }
 .sn-feed-filter[hidden] { display: none; }
-.sn-feed-filter-text { font-weight: var(--weight-semi); }
-.sn-feed-hidden { color: var(--tone-text-muted); font-size: var(--type-secondary); }
-.sn-feed-clear { min-block-size: 44px; padding: 0 var(--sp-3); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-pill); background: var(--tone-surface-1); color: var(--tone-text-primary); font: inherit; font-size: var(--type-control); cursor: pointer; }
+.sn-feed-filter-text { min-inline-size: 0; overflow-wrap: anywhere; }
+.sn-feed-clear { flex: none; min-block-size: var(--target); padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-primary); font: inherit; font-weight: var(--weight-semi); text-decoration: underline; text-underline-offset: 0.15em; cursor: pointer; }
 .sn-feed-clear:hover { background: var(--tone-surface-3); }
-.sn-feed-empty { margin: 0; color: var(--tone-text-muted); }
+.sn-feed-empty { margin: 0; padding-block: var(--sp-2); font-size: var(--type-secondary); color: var(--tone-text-muted); }
 .sn-feed-empty[hidden] { display: none; }
-.sn-feed-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
-.sn-feed-item { position: relative; display: grid; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3) var(--sp-2) calc(var(--sp-3) + 3px); border: 1px solid var(--tone-glass-stroke); border-radius: var(--r-md); background: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); cursor: pointer; min-inline-size: 0; }
-.sn-feed-item::before { content: ''; position: absolute; inset-block: var(--sp-2); inset-inline-start: 0; inline-size: 3px; border-radius: var(--r-pill); background: var(--sn-feed-tone, var(--tone-stroke-strong)); }
-.sn-feed-tone-zet { --sn-feed-tone: var(--tone-transit); }
-.sn-feed-tone-court { --sn-feed-tone: var(--tone-civic); }
-.sn-feed-tone-press { --sn-feed-tone: var(--tone-events); }
-.sn-feed-tone-event { --sn-feed-tone: var(--tone-text-subtle); }
-.sn-feed-tone-companion { --sn-feed-tone: var(--tone-action-brand); }
-.sn-feed-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-2); margin: 0; font-size: var(--type-meta); color: var(--tone-text-secondary); }
-.sn-feed-kind { font-weight: var(--weight-bold); text-transform: uppercase; letter-spacing: 0.04em; }
-.sn-feed-beat { padding: 0 var(--sp-2); border: 1px solid var(--tone-stroke); border-radius: var(--r-pill); }
-.sn-feed-seek { display: inline-flex; align-items: center; min-block-size: 44px; margin-block: -10px; margin-inline-start: auto; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.sn-feed-current { position: relative; display: grid; gap: var(--sp-1); padding: 0.625rem 0 var(--sp-3) var(--sp-3); border-block-end: 1px solid var(--tone-stroke-strong); min-inline-size: 0; }
+.sn-feed-current[hidden] { display: none; }
+.sn-feed-current[data-tone]::before, .sn-feed-row[data-tone]::before { content: ''; position: absolute; inset-block: 0.625rem; inset-inline-start: 0; inline-size: 3px; border-radius: var(--r-pill); background: var(--sn-feed-tone); }
+[data-tone='zet'] { --sn-feed-tone: var(--tone-transit); }
+[data-tone='court'] { --sn-feed-tone: var(--sn-feed-civic); }
+.sn-feed-meta { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin: 0; font-size: var(--type-meta); color: var(--tone-text-secondary); }
+.sn-feed-kind { font-weight: var(--weight-bold); letter-spacing: 0.02em; }
+.sn-feed-seek { display: inline-flex; align-items: center; min-block-size: var(--target); margin-block: -0.75rem; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
 .sn-feed-seek:hover { background: var(--tone-surface-3); color: var(--tone-text-primary); }
-.sn-feed-headline { margin: 0; font-weight: var(--weight-semi); line-height: 1.35; overflow-wrap: anywhere; }
+.sn-feed-headline { margin: 0; font-size: 1rem; font-weight: var(--weight-semi); line-height: 1.35; overflow-wrap: anywhere; }
 .sn-feed-link { color: var(--tone-text-primary); text-decoration-thickness: 1px; text-underline-offset: 0.15em; }
-.sn-feed-text, .sn-feed-source { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-secondary); line-height: 1.45; overflow-wrap: anywhere; }
-.sn-feed-source .sn-feed-link { color: inherit; }
 .sn-feed-chips, .sn-agenda-chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin: 0; }
 .sn-feed-fold { font-size: var(--type-secondary); }
 .sn-feed-fold[hidden] { display: none; }
-.sn-feed-fold-summary, .sn-feed-older-summary { display: flex; align-items: center; min-block-size: 44px; cursor: pointer; color: var(--tone-text-secondary); }
+.sn-feed-fold-summary { display: flex; align-items: center; min-block-size: var(--target); cursor: pointer; color: var(--tone-text-secondary); }
 .sn-feed-fold-list { margin: 0; padding-inline-start: var(--sp-4); display: grid; gap: var(--sp-1); }
 .sn-feed-fold-meta { color: var(--tone-text-muted); }
-.sn-feed-older[hidden] { display: none; }
-.sn-feed-older-list { margin-block-start: var(--sp-2); }
+.sn-feed-log { list-style: none; margin: 0; padding: 0; }
+.sn-feed-day { padding: var(--sp-3) 0 var(--sp-1); border-block-end: 1px solid var(--tone-stroke); font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
+.sn-feed-row { position: relative; border-block-end: 1px solid var(--tone-stroke); }
+.sn-feed-row[data-tone]::before { inset-block: 0.5rem; }
+.sn-feed-chapter { margin: 0; font: inherit; }
+.sn-feed-row-btn { display: block; inline-size: 100%; min-block-size: var(--target); padding: 0.5625rem 0 0.5625rem 0.625rem; border: 0; background: transparent; color: var(--tone-text-secondary); font: inherit; font-size: var(--type-secondary); line-height: 1.4; text-align: start; overflow-wrap: anywhere; cursor: pointer; }
+.sn-feed-row-btn:hover { background: color-mix(in oklab, var(--tone-surface-3) 60%, transparent); color: var(--tone-text-primary); }
+.sn-feed-row-time { font-variant-numeric: tabular-nums; color: var(--tone-text-muted); }
+.sn-feed-row-time::after, .sn-feed-row-kind::after { content: ' · '; color: var(--tone-text-muted); }
+.sn-feed-row-kind { font-weight: var(--weight-semi); }
+.sn-feed-row-title { color: var(--tone-text-primary); }
+.sn-feed-row-fold { color: var(--tone-text-muted); }
+.sn-feed-row-fold::before { content: ' · '; }
+.sn-feed-chapter-btn { font-weight: var(--weight-bold); background: color-mix(in oklab, var(--tone-surface-2) 70%, transparent); }
+.sn-feed-chapter-btn .sn-feed-row-kind { text-transform: uppercase; letter-spacing: 0.04em; font-size: var(--type-meta); }
 @media (prefers-reduced-motion: no-preference) {
   .sn-feed-in { animation: sn-feed-in 220ms var(--ease-enter, ease-out) both; }
 }
@@ -48,19 +55,28 @@
 .sn-fact-chip[data-missing='true'] { border-style: dashed; color: var(--tone-text-secondary); }
 .sn-fact-retro { color: var(--tone-text-secondary); font-style: italic; }
 
-/* ---- the subtitle band ----------------------------------------------------------- */
-.sn-sub { position: relative; display: grid; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-block-start: 1px solid var(--tone-glass-stroke); background: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); }
+/* ---- the subtitle band over the map's bottom edge (V3-17) -------------------------------------------------------- */
+.sn-sub { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "head more" "text text"; align-items: center; gap: 0 var(--sp-2); padding: var(--sp-1) var(--sp-3) var(--sp-2); border-radius: var(--r-lg); border: 1px solid var(--tone-glass-stroke); background: color-mix(in oklab, var(--tone-glass-bg) 88%, transparent); box-shadow: var(--tone-shadow-soft); }
 @supports (backdrop-filter: blur(8px)) { .sn-sub { backdrop-filter: blur(8px); } }
-.sn-sub-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-size: var(--type-meta); color: var(--tone-text-secondary); }
+.sn-sub-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-size: var(--type-meta); color: var(--tone-text-secondary); }
 .sn-sub-head[hidden] { display: none; }
 .sn-sub-kicker { font-weight: var(--weight-semi); }
-.sn-sub-mark { display: inline-flex; align-items: center; min-block-size: 44px; margin-block: -12px; padding: 0 var(--sp-1); border: 0; background: transparent; color: inherit; font: inherit; cursor: help; }
+.sn-sub-mark { display: inline-flex; align-items: center; min-block-size: var(--target); margin-block: -0.75rem; padding: 0 var(--sp-1); border: 0; background: transparent; color: inherit; font: inherit; cursor: help; }
 .sn-sub-mark-text { padding: 0.05em var(--sp-2); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-pill); color: var(--tone-text-primary); }
 .sn-sub[data-sn-sub-source='replayed'] .sn-sub-mark-text { border-style: dashed; }
 .sn-sub-note { display: none; position: absolute; inset-inline: var(--sp-3); inset-block-end: calc(100% + var(--sp-1)); z-index: 2; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-md); background: var(--tone-surface-raised); color: var(--tone-text-primary); font-size: var(--type-secondary); line-height: 1.45; box-shadow: var(--tone-shadow-md); }
 .sn-sub-mark:hover + .sn-sub-note, .sn-sub-mark:focus-visible + .sn-sub-note, .sn-sub[data-open='true'] .sn-sub-note { display: block; }
-.sn-sub-text { font-size: var(--type-body); font-weight: var(--weight-semi); line-height: 1.35; overflow-wrap: anywhere; }
-.sn-sub[data-sn-sub-source='none'] .sn-sub-text { color: var(--tone-text-muted); font-weight: var(--weight-normal); }
+.sn-sub-text { grid-area: text; font-size: var(--type-body); font-weight: var(--weight-semi); line-height: 1.35; overflow-wrap: anywhere; transition: color var(--dur-base) var(--ease); }
+.sn-sub-text:empty { display: none; }
+/* A minute without a sentence keeps the last one, dimmed (never a "none" line). */
+.sn-sub[data-sn-sub-dim] .sn-sub-text { color: var(--tone-text-muted); font-weight: var(--weight-normal); }
+.sn-sub-more { grid-area: more; display: inline-flex; align-items: center; min-block-size: var(--target); margin-block: -0.5rem; font-size: var(--type-meta); color: var(--tone-text-secondary); white-space: nowrap; text-underline-offset: 0.15em; }
+@media (max-width: 40rem) {
+  .sn-sub { padding: var(--sp-1) var(--sp-2); }
+  .sn-sub-text { font-size: var(--type-secondary); }
+  .sn-sub-kicker { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .sn-sub-text { transition: none; } }
 
 /* ---- the agenda ------------------------------------------------------------------ */
 .sn-agenda-face-label { display: block; font-size: var(--type-meta); color: var(--tone-text-secondary); }
@@ -72,6 +88,7 @@
 .sn-agenda-step { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--sp-2); min-block-size: 44px; padding: var(--sp-1) var(--sp-2); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-primary); font: inherit; text-align: start; cursor: pointer; }
 .sn-agenda-step:hover { background: var(--tone-surface-3); }
 .sn-agenda-step[aria-current='step'] { border-color: var(--tone-stroke-strong); background: var(--tone-surface-2); }
+.sn-agenda-num { display: inline-grid; place-items: center; min-inline-size: 1.25rem; block-size: 1.25rem; border-radius: 50%; border: 1.5px solid var(--tone-text-primary); font-size: 0.6875rem; font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
 .sn-agenda-time { font-size: var(--type-meta); color: var(--tone-text-secondary); font-variant-numeric: tabular-nums; }
 .sn-agenda-title { font-weight: var(--weight-semi); }
 .sn-agenda-text { margin: 0; padding-inline: var(--sp-2); font-size: var(--type-secondary); color: var(--tone-text-secondary); line-height: 1.45; }

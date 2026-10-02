@@ -1,27 +1,42 @@
-// The subtitle band at the map's foot (plan section 3.4, decision S-15): the
-// sentence the public screen at Trg bana J. Jelačića showed where an observed
-// run covers the minute ("Zaslon je rekao", marked "Zapis"), else the sentence
-// today's rules give for the minute ("Zaslon bi rekao", marked "Današnja
-// pravila"). A sentence holds at least 1,200 ms of wall time at any speed; the
-// latest offer wins when the hold expires; the same text is no change. At 600x
-// and faster the observed readings are sampled at the first reading of each
-// replay minute, so the band does not try to show twenty-second readings that
-// pass in a thirtieth of a second. Not aria-live: the band changes too often
-// to be announced, and the feed is the accessible account of what happened.
-import { isScreenIndex, isScreenRun, type ScreenIndex, type ScreenRun } from '../../../shared/snimka';
+// The subtitle band over the map's bottom edge (decisions S-15 and V3-17):
+// the sentence the public screen on Trg bana Jelačića showed where an
+// observed run covers the minute ("Na zaslonu je pisalo", marked "zapis"),
+// else the sentence today's rules give for the minute ("Po današnjim
+// pravilima pisalo bi", marked "izračun"; the notes are the marks' tooltips).
+// A sentence holds at least 2,500 ms of wall time at any speed; the latest
+// offer wins when the hold expires; the same text is no change. At 60x and
+// faster only the service sentences reach the band (the service, departures,
+// outages: what the screen said about the trams and buses), so the sunset
+// and the weather no longer flicker past; at 600x the observed readings are
+// sampled at the first reading of each replay minute. A minute with no
+// sentence never flashes an empty line: the last one stays, dimmed. A reading
+// that carries the screen's dot glyphs ("••••") is no sentence and is
+// skipped. The link "Što je pisalo na zaslonu →" leads to #zaslon. Not
+// aria-live: the band changes too often to be announced.
+import { isScreenIndex, isScreenRun, type ScreenIndex, type ScreenRun, type SentenceFamily } from '../../../shared/snimka';
 import { SnimkaError } from '../../../shared/snimka-codec';
 import type { SubtitleHandle, MountSubtitle } from './contracts';
 import type { SnimkaContext } from './context';
 import { nextRunAfter, readingIndexAt, runShownAt, type IndexRun } from './screen';
 import { SN } from './strings';
-import { voiceData, voiceSentence, type VoiceAt } from './voice-data';
+import { factFamily, leadFact, voiceData, voiceSentence, type VoiceAt } from './voice-data';
 
 export type SubtitleSource = 'observed' | 'replayed' | 'none';
 export interface SubtitleLine { source: SubtitleSource; text: string | null }
 
-export const SUBTITLE_HOLD_MS = 1200;
+export const SUBTITLE_HOLD_MS = 2500;
 /** From this speed on, observed readings are sampled at the first reading of each replay minute. */
 export const SAMPLE_FROM_SPEED = 600;
+/** From this speed on, only the service sentences reach the band. */
+export const SERVICE_ONLY_FROM_SPEED = 60;
+
+/** The sentence families the band keeps at 60x and faster: what the screen said about the trams and buses. */
+export function isServiceFamily(family: string | null | undefined): boolean {
+  return family === 'service' || family === 'outage' || (family?.startsWith('departure-') ?? false);
+}
+
+/** A reading carrying the screen's dot glyphs is a picture of the board, not a sentence. */
+export const isSentence = (text: string | null | undefined): text is string => Boolean(text && text.trim() && !text.includes('•'));
 
 export interface SubtitleSelector {
   /** Offers the line for the current instant; true when the shown line changed. */
@@ -84,17 +99,27 @@ export interface SubtitleInputs {
   speed: number;
 }
 
-/** The line for an instant, or null while what decides it is still loading (the band keeps what it shows). */
+/** The line for an instant, or null while what decides it is still loading or when the minute has nothing the band
+ *  shows at this speed (the band keeps what it shows, dimmed when the minute itself has nothing). */
 export function subtitleLineAt(i: SubtitleInputs): SubtitleLine | null {
   if (i.run === 'loading') return null;
+  const serviceOnly = i.speed >= SERVICE_ONLY_FROM_SPEED;
   if (i.run) {
     const k = Math.max(0, observedIndexAt(i.run, i.tSec, i.speed));
     const reading = i.run.readings[k];
-    if (reading) return { source: 'observed', text: reading.sentence };
+    if (reading) {
+      if (!isSentence(reading.sentence) || (serviceOnly && !isServiceFamily(reading.family as SentenceFamily))) return null;
+      return { source: 'observed', text: reading.sentence };
+    }
   }
   if (i.voice === 'loading') return null;
   const text = i.voice ? voiceSentence(i.voice.file, i.voice.minute) : null;
-  return text ? { source: 'replayed', text } : { source: 'none', text: null };
+  if (!isSentence(text)) return { source: 'none', text: null };
+  if (serviceOnly) {
+    const fact = leadFact(i.voice!.file, i.voice!.minute);
+    if (!fact || !isServiceFamily(factFamily(fact))) return null;
+  }
+  return { source: 'replayed', text };
 }
 
 /** Which source the subtitle uses at an instant, from the index alone (the Zaslon section's default). */
@@ -187,7 +212,12 @@ export const mountSubtitle: MountSubtitle = (ctx, root): SubtitleHandle => {
   const head = doc.createElement('span');
   head.className = 'sn-sub-head';
   head.append(kicker, mark, note);
-  band.append(head, text);
+  const more = doc.createElement('a');
+  more.className = 'sn-sub-more';
+  more.href = '#zaslon';
+  more.textContent = S.more;
+  more.dataset.sn = 'sub-more';
+  band.append(head, text, more);
   root.replaceChildren(band);
 
   // A tap shows the note on a touch screen; hover and focus show it through the sheet.
@@ -200,13 +230,17 @@ export const mountSubtitle: MountSubtitle = (ctx, root): SubtitleHandle => {
   mark.addEventListener('keydown', (e) => { if (e.key === 'Escape' && band.dataset.open === 'true') { setOpen(false); e.stopPropagation(); } });
   mark.addEventListener('blur', () => setOpen(false));
 
+  // "none" never shows: the last sentence stays, dimmed, until the next one (before the first, the band is empty).
+  let last: SubtitleLine | null = null;
   const render = (line: SubtitleLine): void => {
-    band.dataset.snSubSource = line.source;
     if (line.source === 'none') {
-      head.hidden = true;
-      text.textContent = S.none;
+      band.dataset.snSubDim = 'true';
+      if (!last) { band.dataset.snSubSource = 'none'; head.hidden = true; text.textContent = ''; }
       return;
     }
+    last = line;
+    delete band.dataset.snSubDim;
+    band.dataset.snSubSource = line.source;
     head.hidden = false;
     const observed = line.source === 'observed';
     kicker.textContent = observed ? S.observed : S.replayed;

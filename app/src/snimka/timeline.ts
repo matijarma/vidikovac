@@ -1,21 +1,28 @@
-// The timeline bar (plan section 3.1): play and pause, the previous and the
-// next chapter, the speed (a segmented control, a native select on a phone),
-// the native range scrubber with aria-valuetext, and under it one compressed
-// lane of the fleet with the timetable's silhouette, the state band and
-// three tick lanes (chapters, ZET's notices and the court, the press: 1 px
-// ticks with a title, aria-hidden; the feed and the Poglavlja panel are
-// their accessible form), the day labels and the presentation button.
-// Scrubbing pauses and seeks. The keyboard map of v1 (Space, J and L, comma
-// and full stop, 1 to 4) is bindKeys, bound by the stage on its root.
+// The timeline bar (plan section 3.1; v3 decision V3-18): play and pause,
+// the previous and the next chapter (the target chapter in the tooltip), the
+// speed (a segmented control of equal widths, a native select on a phone),
+// the "Poglavlja" popover with the agenda, the fullscreen icon. Under them
+// the fleet lane IS the track: the native range lies over the compressed
+// fleet (the timetable's silhouette tinted by the service state, the seen
+// line on top, a dashed edge where the state was computed afterwards), so a
+// drag on the silhouette scrubs. Under the lane a 6 px rug where ZET sent no
+// vehicles or its data stood still, then one marker row: the chapters as
+// numbered pins (buttons that seek) and what ZET and the court said as dots
+// (the feed is their accessible form), then the day labels; on a desktop the
+// line "Sljedeće: {time} · {title}" under the bar. A phone keeps play, the
+// scrubber over the fleet and the speed select in 64 px. Scrubbing pauses and
+// seeks. The keyboard map of v1 (Space, J and L, comma and full stop, 1 to 4)
+// is bindKeys, bound by the stage on its root.
 import { SPEEDS, type SeriesFile, type Speed } from '../../../shared/snimka';
+import { mountAgendaList, chaptersOf, type AgendaList } from './agenda';
 import type { TickReason } from './clock';
 import type { SnimkaContext } from './context';
 import type { SeriesLike, TimelineMarker } from './contracts';
-import { formatZagrebLocal, zagrebClock, zagrebDay, zagrebMidnight } from './format';
+import { formatZagrebLocal, zagrebClock, zagrebDateTime, zagrebDay, zagrebMidnight } from './format';
 import { el } from './panels';
 import { SN, fill } from './strings';
 import { areaPath, linePath, PLOT_H, runsOf, stateClass, type Run, type StateClass } from './strip';
-import * as voices from './voices';
+import { buildVoices, feedMarkers, foldPress, stateBand } from './voices';
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
@@ -23,48 +30,41 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 /** The fleet lane is drawn from every fifth minute: 1,344 points carry the shape of 6,720 at a lane 2 rem tall. */
 export const LANE_STEP_MIN = 5;
 
-export const LANES = ['chapter', 'notice', 'press'] as const;
-export type Lane = (typeof LANES)[number];
-const LANE_LABEL: Record<Lane, string> = { chapter: SN.timeline.chapters, notice: SN.timeline.notices, press: SN.timeline.press };
-
-/** The marks of the three lanes from the dataset: chapters, ZET's notices with the court's events, the press; in time order. */
-export function timelineMarkers(ctx: Pick<SnimkaContext, 'events' | 'notices' | 'news'>): TimelineMarker[] {
-  const out: TimelineMarker[] = [];
-  for (const e of ctx.events) {
-    if (e.chapter) out.push({ atSec: e.atSec, lane: 'chapter', id: e.id, title: e.title });
-    else if (e.kind === 'court') out.push({ atSec: e.atSec, lane: 'notice', id: e.id, title: e.title });
-  }
-  for (const n of ctx.notices.items) out.push({ atSec: n.pubSec, lane: 'notice', id: `zet-${n.id}`, title: n.title });
-  for (const a of ctx.news.items) out.push({ atSec: a.pubSec, lane: 'press', id: a.id, title: a.title });
-  return out.sort((a, b) => a.atSec - b.atSec || a.id.localeCompare(b.id));
+/** The marker row from the feed's own list (voices.ts feedMarkers): chapter pins and ZET/court dots, in time order.
+ *  v2 called feedMarkers with the context, which threw and fell back to raw ticks (R3); this is the fixed call. */
+export function markersFor(ctx: Pick<SnimkaContext, 'events' | 'notices' | 'news'>): TimelineMarker[] {
+  return feedMarkers(foldPress(buildVoices(ctx)));
 }
 
-/** V4's markers (voices.ts feedMarkers) when they land and answer, else the shell's own. */
-export function markersFor(ctx: SnimkaContext): TimelineMarker[] {
-  const own = (voices as Record<string, unknown>).feedMarkers;
-  if (typeof own === 'function') {
-    try {
-      const got: unknown = (own as (c: SnimkaContext) => unknown)(ctx);
-      if (Array.isArray(got) && got.every((m) => m && typeof m === 'object' && typeof (m as TimelineMarker).atSec === 'number' && LANES.includes((m as TimelineMarker).lane))) return got as TimelineMarker[];
-    } catch { /* V4's function wants other arguments: the shell's markers stand */ }
-  }
-  return timelineMarkers(ctx);
-}
-
-/** The state band's runs in series minutes: V4's stateBand when it answers in runs (its from and to are epoch seconds,
- *  so they are turned back into minute indices here), else runsOf/stateClass over the series. */
+/** The state runs in series minutes (voices.ts stateBand answers epoch seconds; turned back into minute indices). */
 export function bandRuns(series: SeriesLike): Run<StateClass>[] {
-  const own = (voices as Record<string, unknown>).stateBand;
-  if (typeof own === 'function') {
-    try {
-      const got: unknown = (own as (s: SeriesLike) => unknown)(series);
-      if (Array.isArray(got) && got.every((r) => r && typeof r === 'object' && typeof (r as Run<string>).from === 'number' && typeof (r as Run<string>).to === 'number' && typeof (r as Run<string>).cls === 'string')) {
-        const minute = (sec: number): number => Math.round((sec - series.t0) / series.step);
-        return (got as Run<StateClass>[]).map((r) => ({ from: minute(r.from), to: minute(r.to), cls: r.cls }));
-      }
-    } catch { /* fall back */ }
+  try {
+    const minute = (sec: number): number => Math.round((sec - series.t0) / series.step);
+    return stateBand(series).map((r) => ({ from: minute(r.from), to: minute(r.to), cls: r.cls }));
+  } catch {
+    return runsOf<StateClass>(series.n, (m) => stateClass(series as SeriesFile, m));
   }
-  return runsOf<StateClass>(series.n, (m) => stateClass(series as SeriesFile, m));
+}
+
+/** The rug's runs in series minutes: ZET sent no vehicles (entities 0) or its data stood still (frozen). */
+export function rugRuns(series: Pick<SeriesFile, 'n' | 'feed'>): Run<'rug'>[] {
+  return runsOf<'rug'>(series.n, (m) => (series.feed.frozen[m] === 1 || series.feed.entities[m] === 0 ? 'rug' : null));
+}
+
+/** The chapter a press on ← reaches (the clock's prevChapter rule: one just reached is skipped), and on →. */
+export function chapterTargets(chapters: readonly { at: number; title: string }[], t: number, backMs = 2000): { prev: string | null; next: string | null } {
+  let prev: string | null = null;
+  for (const ch of chapters) if (ch.at < t - backMs) prev = ch.title;
+  const next = chapters.find((ch) => ch.at > t)?.title ?? null;
+  return { prev, next };
+}
+
+/** "Sljedeće: 18:42 · Vozila se vraćaju" (the day joins the time when the next chapter is on another day), or null. */
+export function nextLine(chapters: readonly { atSec: number; title: string }[], atSec: number): string | null {
+  const next = chapters.find((c) => c.atSec > atSec);
+  if (!next) return null;
+  const sameDay = zagrebDay(next.atSec * 1000) === zagrebDay(atSec * 1000);
+  return fill(SN.timeline.next, { time: sameDay ? zagrebClock(next.atSec * 1000) : zagrebDateTime(next.atSec * 1000), title: next.title });
 }
 
 /** Every fifth minute of a column, keeping a null where the five minutes hold none (a gap stays a gap). */
@@ -128,16 +128,30 @@ export interface TimelineHandle {
   destroy(): void;
 }
 
-/** Builds the bar into `root`; the frame loop moves its cursor and its scrubber through update(t). */
-export function mountTimeline(ctx: SnimkaContext, root: HTMLElement, markers: readonly TimelineMarker[] = markersFor(ctx)): TimelineHandle {
+export interface TimelineOptions {
+  /** Opens a chapter (a pin, the Poglavlja list): the shell pauses, seeks and sets the subject. Default: pause and seek. */
+  openChapter?: (chapterId: string) => void;
+}
+
+/** Builds the bar into `root`; the frame loop moves its scrubber through update(t). */
+export function mountTimeline(ctx: SnimkaContext, root: HTMLElement, markers: readonly TimelineMarker[] = markersFor(ctx), o: TimelineOptions = {}): TimelineHandle {
   const { clock, doc, series } = ctx;
   const start = clock.start;
   const end = clock.end;
   const minutes = Math.round((end - start) / MINUTE_MS);
+  const chapters = chaptersOf(ctx.events);
+  const openChapter = o.openChapter ?? ((id: string): void => {
+    const c = chapters.find((x) => x.id === id);
+    if (!c) return;
+    clock.pause();
+    clock.seek(c.atSec * 1000);
+  });
   let scrubbing = false;
+  const teardowns: (() => void)[] = [];
 
   // ---- the controls ----
-  const play = el(doc, 'button', { type: 'button', class: 'btn sn-tl-play', 'data-sn': 'play' });
+  const playWord = el(doc, 'span', { class: 'sn-tl-play-word' });
+  const play = el(doc, 'button', { type: 'button', class: 'btn sn-tl-play', 'data-sn': 'play' }, playWord);
   play.addEventListener('click', () => {
     if (!clock.playing() && clock.now() >= end) clock.seek(start);
     clock.toggle();
@@ -148,6 +162,8 @@ export function mountTimeline(ctx: SnimkaContext, root: HTMLElement, markers: re
     b.addEventListener('click', () => { if (dir === 'prev') clock.prevChapter(); else clock.nextChapter(); });
     return b;
   };
+  const prev = chapterButton('prev', '←');
+  const next = chapterButton('next', '→');
   const speedButtons = new Map<Speed, HTMLButtonElement>();
   const speedGroup = el(doc, 'div', { class: 'sn-tl-speed', role: 'group', 'aria-label': SN.controls.speed });
   for (const speed of SPEEDS) {
@@ -160,17 +176,48 @@ export function mountTimeline(ctx: SnimkaContext, root: HTMLElement, markers: re
   const select = el(doc, 'select', { class: 'sn-tl-select', 'aria-label': SN.controls.speed, 'data-sn': 'speed-select' });
   for (const speed of SPEEDS) select.append(el(doc, 'option', { value: String(speed), text: SN.speed[speed] }));
   select.addEventListener('change', () => {
-    const next = SPEEDS.find((s) => String(s) === select.value);
-    if (next) clock.setSpeed(next);
+    const nextSpeed = SPEEDS.find((s) => String(s) === select.value);
+    if (nextSpeed) clock.setSpeed(nextSpeed);
   });
-  // The glyph stands alone on a phone; the words stay the button's name (presentation.ts swaps them).
-  const present = el(doc, 'button', { type: 'button', class: 'btn-ghost sn-tl-present', 'data-sn': 'present', 'aria-pressed': 'false' },
-    el(doc, 'span', { class: 'sn-tl-present-glyph', 'aria-hidden': 'true', text: '⛶' }), el(doc, 'span', { class: 'sn-tl-present-text', 'data-sn-present-text': '', text: SN.present.enter }));
-  const controls = el(doc, 'div', { class: 'sn-tl-controls' },
-    play, el(doc, 'div', { class: 'sn-tl-chapters', role: 'group', 'aria-label': SN.controls.chapters }, chapterButton('prev', '«'), chapterButton('next', '»')),
-    speedGroup, el(doc, 'div', { class: 'sn-tl-pick' }, select));
+  // Fullscreen is an icon; its name is the aria-label (presentation.ts swaps it).
+  const present = el(doc, 'button', { type: 'button', class: 'btn-ghost sn-tl-present', 'data-sn': 'present', 'aria-pressed': 'false', 'aria-label': SN.present.enter, title: SN.present.enter },
+    el(doc, 'span', { class: 'sn-tl-present-glyph', 'aria-hidden': 'true', text: '⛶' }));
 
-  // ---- the scrubber and the lanes ----
+  // ---- the Poglavlja popover ----
+  const popId = `sn-tl-pop-${Math.floor(start / 1000)}`;
+  const agendaButton = el(doc, 'button', { type: 'button', class: 'btn-ghost sn-tl-agenda', 'data-sn': 'agenda', 'aria-expanded': 'false', 'aria-controls': popId, text: SN.timeline.chapters });
+  const keysId = `${popId}-keys`;
+  const pop = el(doc, 'div', { class: 'sn-tl-pop', id: popId, role: 'dialog', 'aria-label': SN.agenda.title, 'data-sn': 'agenda-pop', hidden: true },
+    el(doc, 'p', { class: 'sn-tl-pop-lede', text: SN.agenda.lede }), el(doc, 'p', { class: 'sn-tl-pop-keys', id: keysId, text: SN.agenda.keys }));
+  let agenda: AgendaList | null = null;
+  const closePop = (focusButton: boolean): void => {
+    if (pop.hidden) return;
+    pop.hidden = true;
+    agendaButton.setAttribute('aria-expanded', 'false');
+    agenda?.destroy();
+    agenda = null;
+    if (focusButton) agendaButton.focus();
+  };
+  const openPop = (): void => {
+    pop.hidden = false;
+    agendaButton.setAttribute('aria-expanded', 'true');
+    agenda = mountAgendaList(ctx, pop, (id) => { closePop(true); openChapter(id); }, { describedBy: keysId });
+    agenda.focusCurrent();
+  };
+  agendaButton.addEventListener('click', () => { if (pop.hidden) openPop(); else closePop(false); });
+  pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePop(true); } });
+  const onDocPointer = (e: Event): void => {
+    const target = e.target as Node | null;
+    if (!pop.hidden && target && !pop.contains(target) && !agendaButton.contains(target)) closePop(false);
+  };
+  doc.addEventListener('pointerdown', onDocPointer);
+  teardowns.push(() => { doc.removeEventListener('pointerdown', onDocPointer); agenda?.destroy(); });
+
+  const controls = el(doc, 'div', { class: 'sn-tl-controls' },
+    play, el(doc, 'div', { class: 'sn-tl-chapters', role: 'group', 'aria-label': SN.controls.chapters }, prev, next),
+    speedGroup, el(doc, 'div', { class: 'sn-tl-pick' }, select), el(doc, 'div', { class: 'sn-tl-tools' }, agendaButton, present));
+
+  // ---- the track: the fleet lane with the range over it ----
   const range = el(doc, 'input', { type: 'range', class: 'sn-tl-range', min: '0', max: String(minutes), step: '1', 'aria-label': SN.stage.scrubber, 'data-sn': 'scrubber' });
   range.addEventListener('input', () => {
     scrubbing = true;
@@ -180,39 +227,35 @@ export function mountTimeline(ctx: SnimkaContext, root: HTMLElement, markers: re
   range.addEventListener('change', () => { scrubbing = false; });
   range.addEventListener('blur', () => { scrubbing = false; });
 
-  const pct = (sec: number): string => (((sec * 1000 - start) / (end - start)) * 100).toFixed(3);
-  // The compressed fleet: the timetable's silhouette and the fleet's line on one scale.
+  const frac = (sec: number): number => (sec * 1000 - start) / (end - start);
+  const pct = (sec: number): string => (frac(sec) * 100).toFixed(3);
   const seen = thin(series.seen.all);
   const expected = thin(series.expected.all);
   let max = 0;
   for (const v of [...seen, ...expected]) if (v !== null && v > max) max = v;
+  const lanes = seen.length;
+  const x = (minute: number): number => minute / LANE_STEP_MIN - 0.5;
+  const clipId = `sn-tl-clip-${Math.floor(start / 1000)}`;
+  const tint = bandRuns(series)
+    .filter((r) => r.cls !== 'none')
+    .map((r) => `<rect class="sn-tl-tint sn-tl-tint-${r.cls}" x="${x(r.from).toFixed(2)}" y="0" width="${((r.to - r.from) / LANE_STEP_MIN).toFixed(2)}" height="${PLOT_H}"/>`).join('');
+  const area = areaPath(expected, max);
+  // Before the app published its own state (Tue 23:18), the state was computed afterwards: the silhouette's edge is dashed.
+  const liveMin = Math.max(0, Math.min(series.n, Math.round((ctx.manifest.serviceLiveFromSec - series.t0) / 60)));
+  const liveX = x(liveMin);
   const svg = doc.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('class', 'sn-tl-svg');
-  svg.setAttribute('viewBox', `-0.5 0 ${seen.length} ${PLOT_H}`);
+  svg.setAttribute('viewBox', `-0.5 0 ${lanes} ${PLOT_H}`);
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('focusable', 'false');
-  svg.innerHTML = `<path class="sn-tl-expected" d="${areaPath(expected, max)}"/><path class="sn-tl-seen" d="${linePath(seen, max)}"/>`;
-  const fleet = el(doc, 'div', { class: 'sn-tl-fleet' });
-  fleet.append(svg);
-  const band = el(doc, 'div', { class: 'sn-tl-band' });
-  for (const r of bandRuns(series)) {
-    const seg = el(doc, 'span', { class: `sn-tl-seg-state sn-tl-state-${r.cls}` });
-    seg.style.setProperty('--x', (r.from / series.n).toFixed(5));
-    seg.style.setProperty('--w', ((r.to - r.from) / series.n).toFixed(5));
-    band.append(seg);
-  }
-  const tickLanes = LANES.map((lane) => {
-    const box = el(doc, 'div', { class: 'sn-tl-ticks', 'data-lane': lane, title: LANE_LABEL[lane] });
-    for (const m of markers) {
-      if (m.lane !== lane || m.atSec * 1000 < start || m.atSec * 1000 > end) continue;
-      const tick = el(doc, 'span', { class: 'sn-tl-tick', title: `${zagrebDay(m.atSec * 1000)} ${zagrebClock(m.atSec * 1000)} · ${m.title}` });
-      tick.style.setProperty('--x', `${pct(m.atSec)}%`);
-      box.append(tick);
-    }
-    return box;
-  });
-  const dayLines = el(doc, 'div', { class: 'sn-tl-daylines' });
+  svg.dataset.sn = 'fleet-lane';
+  svg.innerHTML = `<defs><clipPath id="${clipId}"><path d="${area}"/></clipPath><clipPath id="${clipId}-retro"><rect x="-0.5" y="0" width="${(liveX + 0.5).toFixed(2)}" height="${PLOT_H}"/></clipPath></defs>`
+    + `<path class="sn-tl-expected" d="${area}"/><g clip-path="url(#${clipId})">${tint}</g>`
+    + `<path class="sn-tl-retro-edge" clip-path="url(#${clipId}-retro)" d="${linePath(expected, max)}"/>`
+    + `<line class="sn-tl-live-edge" x1="${liveX.toFixed(2)}" x2="${liveX.toFixed(2)}" y1="0" y2="${PLOT_H}"/>`
+    + `<path class="sn-tl-seen" d="${linePath(seen, max)}"/>`;
+  const dayLines = el(doc, 'div', { class: 'sn-tl-daylines', 'aria-hidden': 'true' });
   const days = el(doc, 'div', { class: 'sn-tl-days' });
   for (const d of dayMarks(start, end)) {
     if (d.x > 0) {
@@ -224,18 +267,61 @@ export function mountTimeline(ctx: SnimkaContext, root: HTMLElement, markers: re
     label.style.setProperty('--x', `${(d.x * 100).toFixed(3)}%`);
     days.append(label);
   }
-  const cursor = el(doc, 'span', { class: 'sn-tl-cursor' });
-  const lanes = el(doc, 'div', { class: 'sn-tl-lanes', 'aria-hidden': 'true' }, fleet, band, ...tickLanes, dayLines, cursor);
-  const scrub = el(doc, 'div', { class: 'sn-tl-scrub' }, range, lanes, el(doc, 'div', { class: 'sn-tl-dayrow', 'aria-hidden': 'true' }, days));
+  const retro = el(doc, 'span', { class: 'sn-tl-retro', 'aria-hidden': 'true', text: SN.timeline.retro, title: SN.timeline.retro });
+  retro.style.setProperty('--w', `${((liveMin / series.n) * 100).toFixed(3)}%`);
+  const lane = el(doc, 'div', { class: 'sn-tl-lane' }, svg, dayLines, retro);
+  const track = el(doc, 'div', { class: 'sn-tl-track', 'data-sn': 'track' }, lane, range);
 
+  // The rug: where ZET sent nothing or its data stood still.
+  const rug = el(doc, 'div', { class: 'sn-tl-rug', 'aria-hidden': 'true', title: SN.timeline.rug, 'data-sn': 'rug' });
+  for (const r of rugRuns(series)) {
+    const seg = el(doc, 'span', { class: 'sn-tl-rug-run' });
+    seg.style.setProperty('--x', ((r.from / series.n) * 100).toFixed(3) + '%');
+    seg.style.setProperty('--w', (((r.to - r.from) / series.n) * 100).toFixed(3) + '%');
+    rug.append(seg);
+  }
+
+  // One marker row: numbered chapter pins (buttons) and ZET/court dots (pointer shortcuts; the feed is their keyboard form).
+  const marks = el(doc, 'div', { class: 'sn-tl-marks', role: 'group', 'aria-label': SN.timeline.chapters, 'data-sn': 'marks' });
+  const chapterIds = new Map(chapters.map((c, i) => [`event:${c.id}`, i]));
+  const seekSec = (sec: number): void => { clock.pause(); clock.seek(sec * 1000); };
+  for (const m of markers) {
+    if (m.atSec * 1000 < start || m.atSec * 1000 > end) continue;
+    const when = `${zagrebDay(m.atSec * 1000)} ${zagrebClock(m.atSec * 1000)}`;
+    if (m.lane === 'chapter') {
+      const k = chapterIds.get(m.id);
+      const pin = el(doc, 'button', { type: 'button', class: 'sn-tl-pin', 'data-sn': 'pin', 'data-id': m.id, 'aria-label': fill(SN.timeline.goTo, { title: m.title }), title: `${when} · ${m.title}`, text: String((k ?? 0) + 1) });
+      pin.style.setProperty('--x', `${pct(m.atSec)}%`);
+      pin.addEventListener('click', () => { const c = chapters[k ?? -1]; if (c) openChapter(c.id); else seekSec(m.atSec); });
+      marks.append(pin);
+    } else if (m.lane === 'notice') {
+      const dot = el(doc, 'span', { class: 'sn-tl-dot', 'aria-hidden': 'true', 'data-id': m.id, 'data-tone': m.id.startsWith('event:') && ctx.events.find((e) => `event:${e.id}` === m.id)?.kind === 'court' ? 'court' : 'zet', title: `${when} · ${m.title}` });
+      dot.style.setProperty('--x', `${pct(m.atSec)}%`);
+      dot.addEventListener('click', () => seekSec(m.atSec));
+      marks.append(dot);
+    }
+  }
+  const scrub = el(doc, 'div', { class: 'sn-tl-scrub' }, track, rug, marks, el(doc, 'div', { class: 'sn-tl-dayrow', 'aria-hidden': 'true' }, days));
+
+  const nextText = el(doc, 'p', { class: 'sn-tl-next', 'data-sn': 'next' });
   const status = el(doc, 'p', { class: 'sn-tl-status', role: 'status', 'aria-live': 'polite', 'data-sn': 'status' });
-  const tail = el(doc, 'div', { class: 'sn-tl-tail' }, present);
-  const bar = el(doc, 'div', { class: 'sn-tl', role: 'group', 'aria-label': SN.timeline.label, 'data-sn-timeline': '' }, controls, scrub, tail, status);
+  const bar = el(doc, 'div', { class: 'sn-tl', role: 'group', 'aria-label': SN.timeline.label, 'data-sn-timeline': '' }, controls, scrub, nextText, status, pop);
   if (ctx.reducedMotion) bar.append(el(doc, 'p', { class: 'st-note sn-tl-reduced', text: SN.stage.reducedNote }));
   root.replaceChildren(bar);
 
   // ---- rendering ----
   let shownMinute = -1;
+  let shownNext: string | null = '\u0000';
+  let shownTargets = '';
+  const clockChapters = (): readonly { at: number; title: string }[] => clock.chapters();
+  const renderTargets = (t: number): void => {
+    const { prev: p, next: n } = chapterTargets(clockChapters(), t);
+    const key = `${p}\u0000${n}`;
+    if (key === shownTargets) return;
+    shownTargets = key;
+    prev.title = p ? fill(SN.timeline.goTo, { title: p }) : SN.controls.prev;
+    next.title = n ? fill(SN.timeline.goTo, { title: n }) : SN.controls.next;
+  };
   const update = (t: number): void => {
     const minute = Math.max(0, Math.min(minutes, Math.floor((t - start) / MINUTE_MS)));
     if (minute === shownMinute) return;
@@ -243,12 +329,15 @@ export function mountTimeline(ctx: SnimkaContext, root: HTMLElement, markers: re
     const atMs = start + minute * MINUTE_MS;
     if (!scrubbing) range.value = String(minute);
     range.setAttribute('aria-valuetext', fill(SN.stage.valueText, { day: zagrebDay(atMs), time: zagrebClock(atMs) }));
-    cursor.style.transform = `translateX(${((minute / minutes) * 100).toFixed(3)}%)`;
+    track.style.setProperty('--sn-tl-at', (minute / minutes).toFixed(5));
+    const line = nextLine(chapters, Math.floor(atMs / 1000));
+    if (line !== shownNext) { shownNext = line; nextText.textContent = line ?? ''; nextText.hidden = line === null; }
+    renderTargets(atMs);
   };
   const renderControls = (): void => {
     const playing = clock.playing();
     const word = playing ? SN.controls.pause : SN.controls.play;
-    if (play.textContent !== word) play.textContent = word;
+    if (playWord.textContent !== word) playWord.textContent = word;
     play.dataset.playing = playing ? '1' : '0';
     const speed = clock.speed();
     for (const [s, b] of speedButtons) b.setAttribute('aria-pressed', s === speed ? 'true' : 'false');
@@ -278,6 +367,7 @@ export function mountTimeline(ctx: SnimkaContext, root: HTMLElement, markers: re
     update,
     destroy() {
       offTick();
+      for (const off of teardowns) off();
       bar.remove();
     },
   };
