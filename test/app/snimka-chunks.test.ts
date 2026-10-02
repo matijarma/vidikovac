@@ -4,23 +4,23 @@
 // once more and then missing; destroy cancels (app/src/snimka/chunks.ts).
 import { describe, expect, it, vi } from 'vitest';
 import { MOTION_CHUNK_S, SPEEDS, type HashedRef, type MotionChunk, type MotionIndex, type Speed } from '../../shared/snimka';
-import { CHUNK_POLICY, createChunkStore, SCRUB_DEBOUNCE_MS } from '../../app/src/snimka/chunks';
+import { CHUNK_POLICY, createChunkStore, SCRUB_DEBOUNCE_MS, type ChunkRef } from '../../app/src/snimka/chunks';
 
 const T0 = 1790568000; // Mon 28 Sep 07:40 Zagreb, a chunk start
 const sha = (i: number): string => i.toString(16).padStart(64, '0');
 
 function index(t0s: number[], net: '396' | '395' = '396'): MotionIndex {
-  return { v: 1, step: 10, chunkSec: 600, chunks: t0s.map((t0, i) => ({ path: `motion/${net}/${t0}.${sha(i).slice(0, 16)}.json`, sha256: sha(i), bytes: 100, net, t0, vehicles: 1 })) };
+  return { v: 2, step: 10, chunkSec: 600, chunks: t0s.map((t0, i) => ({ path: `motion/${net}/${t0}.${sha(i).slice(0, 16)}.json`, bytes: 100, net, t0, vehicles: 1 })) };
 }
-const chunkFor = (ref: HashedRef): MotionChunk => ({ v: 1, net: '396', t0: Number(ref.path.split('/')[2]!.split('.')[0]), step: 10, n: 60, vehicles: [] });
+const chunkFor = (ref: ChunkRef): MotionChunk => ({ v: 1, net: '396', t0: Number(ref.path.split('/')[2]!.split('.')[0]), step: 10, n: 60, vehicles: [] });
 
 /** Injected timers and idle queue the test drives by hand. */
-function harness(idx: MotionIndex, loadImpl?: (ref: HashedRef) => Promise<MotionChunk>) {
+function harness(idx: MotionIndex, loadImpl?: (ref: ChunkRef) => Promise<MotionChunk>) {
   let clock = 1000;
   const timers = new Map<number, { fn: () => void; at: number }>();
   let timerId = 0;
   const idle: (() => void)[] = [];
-  const load = vi.fn(loadImpl ?? (async (ref: HashedRef) => chunkFor(ref)));
+  const load = vi.fn(loadImpl ?? (async (ref: ChunkRef) => chunkFor(ref)));
   const store = createChunkStore({
     index: idx,
     load,

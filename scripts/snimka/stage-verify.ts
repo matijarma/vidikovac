@@ -79,7 +79,7 @@ export async function stageVerify(paths: Paths, log: (line: string) => void): Pr
   const manifestText = readFileSync(join(paths.objects, 'manifest.json'), 'utf8');
   const manifest = decodeManifest(JSON.parse(manifestText));
   const read = <T>(path: string): T => JSON.parse(readFileSync(join(paths.objects, path), 'utf8')) as T;
-  const rows = verifySeries(read<SeriesFile>(manifest.files.series.path), read<SeriesFile>(manifest.files.comparisonSeries.path));
+  const rows = verifySeries(read<SeriesFile>(manifest.files.series.path), read<SeriesFile>(manifest.comparisons[0]!.files.series.path));
 
   const index = read<MotionIndex>(manifest.files.motionIndex.path);
   let largest = { gzip: 0, path: '' };

@@ -86,12 +86,13 @@ export function readNotices(dir: string): NoticesFile {
     for (const item of parseRss(readFileSync(join(dir, name), 'utf8'))) {
       const id = Number(/[?&]id=(\d+)/.exec(item.link)?.[1]);
       if (!(NOTICE_IDS as readonly number[]).includes(id) || byId.has(id) || item.pubSec === null) continue;
-      byId.set(id, { id, title: item.title, text: null, link: item.link, pubSec: item.pubSec });
+      // V1 fills focus, facts and mentions from notices-focus.json (plan Appendix C); the v1 stage writes the neutral pointers.
+      byId.set(id, { id, title: item.title, text: null, link: item.link, pubSec: item.pubSec, focus: { kind: 'none' }, facts: [], mentions: {} });
     }
   }
   const missing = NOTICE_IDS.filter((id) => !byId.has(id));
   if (missing.length > 0) throw new Error(`events: ZET notices ${missing.join(', ')} are not in the recorded RSS`);
-  return { v: 1, items: [...byId.values()].sort((a, b) => a.pubSec - b.pubSec) };
+  return { v: 2, items: [...byId.values()].sort((a, b) => a.pubSec - b.pubSec) };
 }
 
 export async function stageEvents(paths: Paths, log: (line: string) => void): Promise<boolean> {
@@ -117,7 +118,8 @@ export async function stageEvents(paths: Paths, log: (line: string) => void): Pr
     if (e.kind !== 'recording' && e.rule === undefined && e.sources.length === 0) throw new Error(`events: ${e.id} is human-sourced and has no source`);
     const atSec = e.rule ? resolveRule(series, e.rule) : isoSec(e.at!);
     if (atSec === null) throw new Error(`events: the rule of ${e.id} (${JSON.stringify(e.rule)}) finds nothing in the window series`);
-    events.push({ id: e.id, atSec, kind: e.kind, title: e.title, text: e.text, sources: e.sources, derived: e.rule !== undefined, chapter: e.chapter });
+    // V1 carries focus, facts, mentions, dwellS and spot from events.json (plan Appendix C); the v1 stage writes the neutral pointers.
+    events.push({ id: e.id, atSec, kind: e.kind, title: e.title, text: e.text, sources: e.sources, derived: e.rule !== undefined, chapter: e.chapter, focus: { kind: 'none' }, facts: [], mentions: {} });
   }
   events.sort((a, b) => a.atSec - b.atSec || a.id.localeCompare(b.id));
   const eventsRef = writeJsonObject(paths, 'events/window', { v: 1, events } satisfies EventsFile);

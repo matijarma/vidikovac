@@ -70,7 +70,7 @@ export async function stageManifest(paths: Paths, inputs: Record<string, string>
   const captures = readWork<{ runs: Record<string, CaptureWork> }>(paths, 'captures.json').runs;
 
   const chunks = motion.flatMap((m) => m.chunks).sort((a, b) => a.t0 - b.t0 || a.net.localeCompare(b.net));
-  const motionIndex: MotionIndex = { v: 1, step: MOTION_STEP_S, chunkSec: MOTION_CHUNK_S, chunks: chunks.map(({ path, sha256, bytes, net, t0, vehicles }) => ({ path, sha256, bytes, net, t0, vehicles })) };
+  const motionIndex: MotionIndex = { v: 2, step: MOTION_STEP_S, chunkSec: MOTION_CHUNK_S, chunks: chunks.map(({ path, bytes, net, t0, vehicles }) => ({ path, bytes, net, t0, vehicles })) };
   const motionIndexRef = writeJsonObject(paths, 'motion/index', motionIndex);
   const screenIndex: ScreenIndex = {
     v: 1,
@@ -79,7 +79,9 @@ export async function stageManifest(paths: Paths, inputs: Record<string, string>
   const screenIndexRef = writeJsonObject(paths, 'screen/index', screenIndex);
   const networks = { '395': networkRef(paths, segmentOf(paths, 'day').network, '395'), '396': networkRef(paths, segmentOf(paths, 'window').network, '396') };
 
-  const manifest: SnimkaManifest = {
+  // V1 rewrites this stage for v2 (comparisons, routes, places, boards, voice, exports, opis); until then the v1 shape is
+  // cast so the script compiles, and decodeManifest below refuses it at run time.
+  const manifest = {
     version: 1,
     builtAt: new Date().toISOString(),
     title: 'Tri dana bez tramvaja',
@@ -95,7 +97,7 @@ export async function stageManifest(paths: Paths, inputs: Record<string, string>
     },
     attribution: ATTRIBUTION,
     notes: NOTES,
-  };
+  } as unknown as SnimkaManifest;
   const text = `${JSON.stringify(manifest)}\n`;
   decodeManifest(JSON.parse(text));
   writeFileSync(join(paths.objects, 'manifest.json'), text);

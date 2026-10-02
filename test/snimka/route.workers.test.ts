@@ -255,7 +255,8 @@ describe('/api/snimka/v1/', () => {
   });
 
   it('declines every path that is not under /api/snimka/v1/', async () => {
-    for (const path of ['/api/snimka/v2/manifest.json', '/api/snimka/manifest.json', '/api/snimka/v1', '/api/snimka', '/snimka/', '/api/statistika']) {
+    // SNIMKA_API is /api/snimka/v2/ since the v2 contract; V6 reworks the route to serve both versions.
+    for (const path of ['/api/snimka/v3/manifest.json', '/api/snimka/manifest.json', '/api/snimka/v1', '/api/snimka', '/snimka/', '/api/statistika']) {
       const { response } = await call('sn-decline.test', path);
       expect(response, path).toBeNull();
     }

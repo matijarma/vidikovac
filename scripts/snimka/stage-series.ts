@@ -68,6 +68,12 @@ export function dhmzHourly(dir: string, t0: number, hours: number): { tempC: Col
   return { tempC, weather };
 }
 
+
+/** The v2 feed columns the v1 frames stage does not compute yet (frozen from headerAgeS, alerts and cancelledTrips from the feed): null, never 0, until V1's stage writes them. */
+function feedV2(feed: { headerAgeS: Col<number>; entities: Col<number>; rejectedFuture: Col<number>; hiddenDepot: Col<number>; hiddenParked: Col<number> }, n: number): SeriesFile['feed'] {
+  return { ...feed, frozen: new Array<null>(n).fill(null), alerts: new Array<null>(n).fill(null), cancelledTrips: new Array<null>(n).fill(null) };
+}
+
 async function buildSeries(paths: Paths, key: SegmentKey): Promise<SeriesFile> {
   const minutes = readWork<MinutesWork>(paths, `minutes-${key}.json`);
   const expect = await loadSegmentExpect(paths, key);
@@ -83,8 +89,8 @@ async function buildSeries(paths: Paths, key: SegmentKey): Promise<SeriesFile> {
   const hours = n / 60;
   if (key === 'day') {
     return {
-      v: 1, t0, step: 60, n,
-      seen: minutes.seen, expected, service: minutes.service, feed: minutes.feed,
+      v: 2, t0, step: 60, n,
+      seen: minutes.seen, expected, service: minutes.service as SeriesFile['service'], feed: feedV2(minutes.feed, n),
       published: null, bikes: null, closures: null,
       hourly: { t0, n: hours, tempC: new Array(hours).fill(null), weather: new Array(hours).fill(null), newsPulse: null },
     };
@@ -94,8 +100,8 @@ async function buildSeries(paths: Paths, key: SegmentKey): Promise<SeriesFile> {
   const pulse = readWork<{ t0: number; n: number; pulse: number[] }>(paths, 'news-pulse.json');
   if (bikes.t0 !== t0 || bikes.n !== n || closures.t0 !== t0 || closures.n !== n || pulse.t0 !== t0 || pulse.n !== hours) throw new Error('series: the window of an upstream stage differs; rerun bajs, closures and news');
   return {
-    v: 1, t0, step: 60, n,
-    seen: minutes.seen, expected, service: minutes.service, feed: minutes.feed,
+    v: 2, t0, step: 60, n,
+    seen: minutes.seen, expected, service: minutes.service as SeriesFile['service'], feed: feedV2(minutes.feed, n),
     published: publishedSeries(join(paths.inputs, 'strike', 'teaser.jsonl'), t0, n),
     bikes: { total: bikes.total, empty: bikes.empty, reporting: bikes.reporting },
     closures: { active: closures.active, version: closures.version },

@@ -143,7 +143,7 @@ export function summaryOf(run: ScreenRun): ScreenIndex['runs'][number]['summary'
 interface BoardRaw { stopName?: string; status?: string; departures?: { routeId?: string; headsign?: string; at?: string }[] }
 
 export function boardSeries(dir: string, fromSec: number, toSec: number): BoardSeries {
-  const out: BoardSeries = { v: 1, stop: '106_1', name: 'Trg bana J. Jelačića', samples: [] };
+  const out: BoardSeries = { v: 2, stop: '106_1', name: 'Trg bana J. Jelačića', place: 'jelacic', samples: [] };
   for (const stamp of readdirSync(dir).sort()) {
     const at = stampSec(stamp);
     const file = join(dir, stamp, '106_1.json');

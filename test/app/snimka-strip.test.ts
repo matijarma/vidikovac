@@ -74,10 +74,10 @@ describe('the cursor and the seek', () => {
     expect(t % 60_000).toBe(0);
     expect(Math.abs(t - (START + 0.123456 * (END - START)))).toBeLessThanOrEqual(30_000);
   });
-  it('the day lines are the four Zagreb midnights inside the window', () => {
+  it('the day lines are the five Zagreb midnights inside the window', () => {
     const lines = dayLines(START, END);
-    expect(lines.map((l) => new Date(l.at + 7_200_000).toISOString().slice(0, 16))).toEqual(['2026-09-28T00:00', '2026-09-29T00:00', '2026-09-30T00:00', '2026-10-01T00:00']);
-    expect(lines[0]!.x).toBeCloseTo(4 / 84, 6);
+    expect(lines.map((l) => new Date(l.at + 7_200_000).toISOString().slice(0, 16))).toEqual(['2026-09-28T00:00', '2026-09-29T00:00', '2026-09-30T00:00', '2026-10-01T00:00', '2026-10-02T00:00']);
+    expect(lines[0]!.x).toBeCloseTo(4 / 112, 6);
   });
 });
 
@@ -125,7 +125,7 @@ describe('the readout', () => {
     expect(on).toContain('stanje usluge: uobičajeno');
   });
   it('at the window end reads the last minute', () => {
-    expect(readoutText(input, END).startsWith('čet 1. 10. u 08:00: ')).toBe(true);
+    expect(readoutText(input, END).startsWith('pet 2. 10. u 12:00: ')).toBe(true);
     expect(readoutValues(input, END)[0]).toBe(`u pokretu ${series.seen.all[series.n - 1]}`);
   });
 });
@@ -148,7 +148,8 @@ function context(at: number, playing = false) {
   const ctx = {
     manifest: { serviceLiveFromSec: MARKS.serviceLive, window: { ...SNIMKA_WINDOW } },
     series, comparison, events: [], clock, frames, data: { get: vi.fn(), url: (r: { path: string } | string) => String(typeof r === 'string' ? r : r.path) },
-    layers: createLayerStore(), lagano: false, reducedMotion: false, theme: { resolved: () => 'light', onChange: () => () => {} }, doc: document,
+    comparisons: [{ id: 'cet-0924', day: '2026-09-24', weekday: 4, fromSec: comparison.t0, series: comparison, routes: null }],
+    layers: createLayerStore({ compare: false }), lagano: false, reducedMotion: false, theme: { resolved: () => 'light', onChange: () => () => {} }, doc: document,
   } as unknown as SnimkaContext;
   return { ctx, clock, frames };
 }
@@ -181,11 +182,11 @@ describe('mountStrip', () => {
     expect(root.hasAttribute('aria-busy')).toBe(false);
     for (const p of root.querySelectorAll('.sn-panel')) {
       expect(p.querySelector('.st-table summary')?.textContent).toBe('Brojevi po satu');
-      expect(p.querySelectorAll('.st-table tbody tr').length).toBe(84);
+      expect(p.querySelectorAll('.st-table tbody tr').length).toBe(112);
     }
     expect(root.querySelector('[data-panel="fleet"] .st-legend')?.textContent).toContain('po voznom redu');
     expect(root.querySelector('[data-panel="state"] .st-legend')?.textContent).toContain('izračunano naknadno');
-    // The comparison day is a layer: off by default.
+    // The comparison day is a layer, on by default in v2 (S-17); this page opened with it off.
     expect(root.querySelector('[data-panel="fleet"] li[data-series="compare"]')?.hasAttribute('hidden')).toBe(true);
     off();
   });
@@ -242,7 +243,7 @@ describe('mountStrip', () => {
     expect((d.match(/Z/g) ?? []).length).toBe(1);
     expect(d.startsWith(`M${minuteOf(Date.UTC(2026, 8, 28, 15, 0) / 1000) - 0.5} 100V0h1`)).toBe(true);
     const rows = [...panel.querySelectorAll('.st-table tbody tr')];
-    expect(rows.length).toBe(84);
+    expect(rows.length).toBe(112);
     const at17 = rows.find((r) => r.querySelector('th')!.textContent === 'pon 28. 9. u 17:00')!;
     expect([...at17.querySelectorAll('td')].map((c) => c.textContent)).toEqual(['5', '60 min']);
     const at07 = rows.find((r) => r.querySelector('th')!.textContent === 'pon 28. 9. u 07:00')!;

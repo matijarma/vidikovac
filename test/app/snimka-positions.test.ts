@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { toLonLat } from '../../shared/motion/geo';
 import { decodeNetwork } from '../../shared/motion/network';
 import { at, tangent } from '../../shared/motion/polyline';
-import { MOTION_CHUNK_S, MOTION_TICKS, SNIMKA_COMPARISON, type MotionChunk } from '../../shared/snimka';
+import { MOTION_CHUNK_S, MOTION_TICKS, SNIMKA_COMPARISONS, type MotionChunk } from '../../shared/snimka';
 import { encodeMotionChunk, type MotionSample } from '../../shared/snimka-codec';
 import { compareInstant, createReplayModel, drawnAt, ghostsAt, HELD_M, NO_VEHICLES_SPEED, placedAt, SNAP_M, tickOf } from '../../app/src/snimka/positions';
 import { parseZagrebLocal } from '../../app/src/snimka/format';
@@ -168,7 +168,7 @@ describe('ghosts', () => {
   it('aligns the comparison day by Zagreb time of day', () => {
     expect(compareInstant(parseZagrebLocal('2026-09-28T07:45')!)).toBe(parseZagrebLocal('2026-09-24T07:45')!);
     expect(compareInstant(parseZagrebLocal('2026-09-30T23:59')!)).toBe(parseZagrebLocal('2026-09-24T23:59')!);
-    expect(compareInstant(SNIMKA_COMPARISON.fromSec * 1000 + 4 * 86_400_000)).toBe(SNIMKA_COMPARISON.fromSec * 1000);
+    expect(compareInstant(SNIMKA_COMPARISONS[0].fromSec * 1000 + 4 * 86_400_000)).toBe(SNIMKA_COMPARISONS[0].fromSec * 1000);
   });
 
   it('answers [lon, lat] for the comparison chunk at the aligned instant', () => {

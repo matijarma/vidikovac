@@ -5,20 +5,21 @@ import type { NewsFile, NoticesFile, SnimkaEvent } from '../../shared/snimka';
 import { ARTICLE_WINDOW_S, currentArticle, currentMarker, currentNotice, MARKER_WINDOW_S } from '../../app/src/snimka/voices';
 
 const H = 3600;
+const P = { focus: { kind: 'none' } as const, facts: [] as never[], mentions: {} };
 const news: NewsFile = {
-  v: 1,
+  v: 2,
   outlets: { jutarnji: { name: 'Jutarnji list', home: 'https://www.jutarnji.hr/' }, vecernji: { name: 'Večernji list', home: 'https://www.vecernji.hr/' }, n1: { name: 'N1', home: 'https://n1info.hr/' } },
   items: [
-    { id: 'b', outlet: 'vecernji', title: 'Drugi', link: 'https://www.vecernji.hr/2', pubSec: 20 * H, beat: null },
-    { id: 'a', outlet: 'jutarnji', title: 'Prvi', link: 'https://www.jutarnji.hr/1', pubSec: 10 * H, beat: 'početak' },
-    { id: 'c', outlet: 'n1', title: 'Treći', link: 'https://n1info.hr/3', pubSec: 30 * H, beat: 'sud' },
+    { id: 'b', outlet: 'vecernji', title: 'Drugi', link: 'https://www.vecernji.hr/2', pubSec: 20 * H, beat: null, ...P },
+    { id: 'a', outlet: 'jutarnji', title: 'Prvi', link: 'https://www.jutarnji.hr/1', pubSec: 10 * H, beat: 'pocetak', ...P },
+    { id: 'c', outlet: 'n1', title: 'Treći', link: 'https://n1info.hr/3', pubSec: 30 * H, beat: 'presuda', ...P },
   ],
 };
-const notices: NoticesFile = { v: 1, items: [
-  { id: 2, title: 'Druga', text: null, link: 'https://www.zet.hr/2', pubSec: 50 * H },
-  { id: 1, title: 'Prva', text: 'tekst', link: 'https://www.zet.hr/1', pubSec: 5 * H },
+const notices: NoticesFile = { v: 2, items: [
+  { id: 2, title: 'Druga', text: null, link: 'https://www.zet.hr/2', pubSec: 50 * H, ...P },
+  { id: 1, title: 'Prva', text: 'tekst', link: 'https://www.zet.hr/1', pubSec: 5 * H, ...P },
 ] };
-const ev = (id: string, atSec: number, chapter = true): SnimkaEvent => ({ id, atSec, kind: 'recording', title: id, text: null, sources: [], derived: false, chapter });
+const ev = (id: string, atSec: number, chapter = true): SnimkaEvent => ({ id, atSec, kind: 'recording', title: id, text: null, sources: [], derived: false, chapter, ...P });
 const events = [ev('late', 40 * H), ev('early', 2 * H), ev('plain', 41 * H, false)];
 
 describe('currentArticle', () => {

@@ -117,14 +117,14 @@ export async function stageNews(paths: Paths, log: (line: string) => void): Prom
   const missing = curated.items.filter((c) => !byLink.has(c.link));
   if (missing.length > 0) throw new Error(`news: ${missing.length} curated link(s) not in the recordings: ${missing.map((m) => m.link).join(', ')}`);
   const seenLinks = new Set<string>();
-  const out: NewsFile = { v: 1, outlets: OUTLETS, items: [] };
+  const out: NewsFile = { v: 2, outlets: OUTLETS, items: [] };
   for (const entry of curated.items) {
     if (seenLinks.has(entry.link)) throw new Error(`news: curated link listed twice: ${entry.link}`);
     seenLinks.add(entry.link);
     const item = byLink.get(entry.link)!;
     if (entry.title !== undefined && entry.title !== item.title) throw new Error(`news: curated title differs from the recorded one for ${entry.link}: ${JSON.stringify(entry.title)} against ${JSON.stringify(item.title)}`);
     if (entry.outlet !== undefined && entry.outlet !== item.outlet) throw new Error(`news: curated outlet ${entry.outlet} is not ${item.outlet} for ${entry.link}`);
-    out.items.push({ id: `${item.outlet}-${createHash('sha256').update(item.link).digest('hex').slice(0, 10)}`, outlet: item.outlet, title: item.title, link: item.link, pubSec: item.pubSec, beat: entry.beat ?? null });
+    out.items.push({ id: `${item.outlet}-${createHash('sha256').update(item.link).digest('hex').slice(0, 10)}`, outlet: item.outlet, title: item.title, link: item.link, pubSec: item.pubSec, beat: entry.beat ?? null, focus: { kind: 'none' }, facts: [], mentions: {} }); // V1: focus-defaults.ts per beat
   }
   out.items.sort((a, b) => a.pubSec - b.pubSec);
   const ref = writeJsonObject(paths, 'news/window', out);

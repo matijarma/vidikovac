@@ -104,7 +104,7 @@ describe('the quartet', () => {
 
 describe('the board between runs', () => {
   const board: BoardSeries = {
-    v: 1, stop: '106_1', name: 'Trg bana J. Jelačića',
+    v: 2, stop: '106_1', name: 'Trg bana J. Jelačića', place: 'jelacic',
     samples: [
       { at: zg(9, 28, 12, 0), status: 'timetable', next: [['6', 'Sopot', zg(9, 28, 12, 1)], ['13', 'Kvat. trg', zg(9, 28, 12, 3)], ['228', 'Rebro', zg(9, 28, 12, 6)]] },
       { at: zg(9, 28, 12, 5), status: 'timetable', next: [] },
@@ -172,14 +172,14 @@ function page(runs: Map<string, ScreenRun>) {
   const frames: FrameLoop = { subscribe(fn) { subs.add(fn); return () => { subs.delete(fn); }; }, kick() {}, destroy() {} };
   let now = MON.fromSec * 1000;
   const requested: string[] = [];
-  const objects = new Map<string, unknown>([['screen/index.json', INDEX], ['board.json', { v: 1, stop: '106_1', name: 'Trg bana J. Jelačića', samples: [] }]]);
+  const objects = new Map<string, unknown>([['screen/index.json', INDEX], ['board.json', { v: 2, stop: '106_1', name: 'Trg bana J. Jelačića', place: 'jelacic', samples: [] }]]);
   for (const [id, run] of runs) objects.set(INDEX.runs.find((r) => r.id === id)!.file.path, run);
   const ctx = {
-    manifest: { window: { ...SNIMKA_WINDOW }, files: { screenIndex: 'screen/index.json', board106: 'board.json' } },
+    manifest: { window: { ...SNIMKA_WINDOW }, files: { screenIndex: 'screen/index.json', boards: [{ stop: '106_1', name: 'Trg bana J. Jelačića', samples: 0, path: 'board.json', bytes: 0, sha256: '' }] } },
     clock: { now: () => now },
     frames,
     data: {
-      url: (r: HashedRef | string) => `/api/snimka/v1/${typeof r === 'string' ? r : r.path}`,
+      url: (r: HashedRef | string) => `/api/snimka/v2/${typeof r === 'string' ? r : r.path}`,
       get: async <T,>(r: HashedRef | string, decode?: (raw: unknown) => T): Promise<T> => {
         const path = typeof r === 'string' ? r : r.path;
         requested.push(path);
@@ -254,7 +254,7 @@ describe('mountScreen', () => {
     const off = mountScreen(ctx, root, () => {});
     await settle();
     const srcs = [...root.querySelectorAll('.sn-quartet-item img')].map((img) => img.getAttribute('src'));
-    expect(srcs).toEqual([MON, TUE, WED, THU].map((r) => `/api/snimka/v1/${r.captures.kiosk!.path}`));
+    expect(srcs).toEqual([MON, TUE, WED, THU].map((r) => `/api/snimka/v2/${r.captures.kiosk!.path}`));
     off();
   });
   it('a run on its way shows the loading state; one that cannot load reads as between runs and is not asked for again', async () => {

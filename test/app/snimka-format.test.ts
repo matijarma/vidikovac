@@ -2,7 +2,7 @@
 // Europe/Zagreb proves the offset holds over the window and the comparison
 // day, so the labels agree with the real zone everywhere they are used.
 import { describe, expect, it } from 'vitest';
-import { SNIMKA_COMPARISON, SNIMKA_WINDOW } from '../../shared/snimka';
+import { SNIMKA_COMPARISONS, SNIMKA_WINDOW } from '../../shared/snimka';
 import { WEEKDAYS, duration, formatZagrebLocal, parseZagrebLocal, zagrebClock, zagrebDateTime, zagrebDay, zagrebMidnight, zagrebTimeOfDay } from '../../app/src/snimka/format';
 import { SN } from '../../app/src/snimka/strings';
 
@@ -17,7 +17,7 @@ describe('Zagreb is UTC+2 for the whole window and the comparison day', () => {
       expect(offsetOf(sec * 1000), new Date(sec * 1000).toISOString()).toBe('GMT+02:00');
       expect(zagrebClock(sec * 1000)).toBe(ZAGREB.format(new Date(sec * 1000)));
     }
-    for (let sec = SNIMKA_COMPARISON.fromSec; sec < SNIMKA_COMPARISON.fromSec + 86_400; sec += 3600) {
+    for (let sec = SNIMKA_COMPARISONS[0].fromSec; sec < SNIMKA_COMPARISONS[0].fromSec + 86_400; sec += 3600) {
       expect(offsetOf(sec * 1000)).toBe('GMT+02:00');
       expect(zagrebClock(sec * 1000 + 59_000)).toBe(ZAGREB.format(new Date(sec * 1000 + 59_000)));
     }
@@ -30,8 +30,8 @@ describe('labels', () => {
     expect(zagrebDay(MONDAY_0745)).toBe('pon 28. 9.');
     expect(zagrebDateTime(MONDAY_0745)).toBe('pon 28. 9. u 07:45');
     expect(zagrebDateTime(SNIMKA_WINDOW.fromSec * 1000)).toBe('ned 27. 9. u 20:00');
-    expect(zagrebDateTime(SNIMKA_WINDOW.toSec * 1000)).toBe('čet 1. 10. u 08:00');
-    expect(zagrebDateTime(SNIMKA_COMPARISON.fromSec * 1000)).toBe('čet 24. 9. u 00:00');
+    expect(zagrebDateTime(SNIMKA_WINDOW.toSec * 1000)).toBe('pet 2. 10. u 12:00');
+    expect(zagrebDateTime(SNIMKA_COMPARISONS[0].fromSec * 1000)).toBe('čet 24. 9. u 00:00');
     expect(zagrebDateTime(Date.UTC(2026, 8, 29, 21, 17))).toBe('uto 29. 9. u 23:17');
     expect(zagrebDateTime(Date.UTC(2026, 8, 30, 18, 20))).toBe('sri 30. 9. u 20:20');
     expect(zagrebClock(Date.UTC(2026, 8, 30, 22, 5))).toBe('00:05');
@@ -56,11 +56,11 @@ describe('labels', () => {
     expect(parseZagrebLocal(' 2026-09-28T07:45 ')).toBe(MONDAY_0745);
     expect(formatZagrebLocal(MONDAY_0745)).toBe('2026-09-28T07:45');
     expect(formatZagrebLocal(MONDAY_0745 + 30_000)).toBe('2026-09-28T07:45');
-    expect(formatZagrebLocal(SNIMKA_WINDOW.toSec * 1000)).toBe('2026-10-01T08:00');
+    expect(formatZagrebLocal(SNIMKA_WINDOW.toSec * 1000)).toBe('2026-10-02T12:00');
     for (const bad of ['', '2026-09-28', '2026-09-28T7:45', '2026-09-28 07:45', '2026-13-01T00:00', '2026-02-31T00:00', '2026-09-28T24:00', '2026-09-28T07:60', 'ponedjeljak', '2026-09-28T07:45Z', '2026-09-28T07:45+02:00']) {
       expect(parseZagrebLocal(bad), bad).toBeNull();
     }
-    for (const ms of [SNIMKA_WINDOW.fromSec * 1000, MONDAY_0745, SNIMKA_WINDOW.toSec * 1000, SNIMKA_COMPARISON.fromSec * 1000]) {
+    for (const ms of [SNIMKA_WINDOW.fromSec * 1000, MONDAY_0745, SNIMKA_WINDOW.toSec * 1000, SNIMKA_COMPARISONS[0].fromSec * 1000]) {
       expect(parseZagrebLocal(formatZagrebLocal(ms))).toBe(ms);
     }
   });
@@ -69,7 +69,7 @@ describe('labels', () => {
     expect(zagrebMidnight(MONDAY_0745)).toBe(Date.UTC(2026, 8, 27, 22, 0));
     expect(zagrebTimeOfDay(MONDAY_0745)).toBe((7 * 60 + 45) * 60_000);
     expect(zagrebMidnight(SNIMKA_WINDOW.fromSec * 1000)).toBe(Date.UTC(2026, 8, 26, 22, 0));
-    expect(zagrebTimeOfDay(SNIMKA_COMPARISON.fromSec * 1000)).toBe(0);
+    expect(zagrebTimeOfDay(SNIMKA_COMPARISONS[0].fromSec * 1000)).toBe(0);
     expect(zagrebMidnight(Date.UTC(2026, 8, 30, 22, 30))).toBe(Date.UTC(2026, 8, 30, 22, 0));
   });
 });

@@ -26,8 +26,8 @@ function marked(): Map<string, string[]> {
 
 describe('every string of /snimka/', () => {
   it('has a key, is trimmed, and is a whole sentence or label', () => {
-    // The brief's 138 strings and the few the shell added for the read-through.
-    expect(LEAVES.length).toBeGreaterThanOrEqual(140);
+    // The brief's 138 strings, the v2 plan's Appendix B and the few the shell added for the read-through.
+    expect(LEAVES.length).toBeGreaterThanOrEqual(380);
     for (const [key, text] of LEAVES) {
       expect(text, key).toBe(text.trim());
       expect(text, key).not.toBe('');
@@ -76,7 +76,11 @@ describe('fill', () => {
 describe('the static HTML carries the same strings', () => {
   const texts = marked();
   it('the hero, the narration, every section head and every source read exactly as SN', () => {
-    const required = ['page.name', 'hero.eyebrow', 'hero.title', 'narration.lede1', 'narration.lede2', 'noscript', 'stage.title', 'stage.lede', 'screen.title', 'screen.lede', 'strip.title', 'strip.lede', 'reckoning.title', 'reckoning.lede', ...LEAVES.filter(([k]) => k.startsWith('nav.') || k.startsWith('sources.')).map(([k]) => k)];
+    const required = [
+      'page.name', 'hero.eyebrow', 'hero.title', 'narration.lede1', 'narration.lede2', 'narration.forWhom', 'narration.q1', 'narration.q2', 'narration.q3', 'narration.q4', 'noscript',
+      'stage.title', 'numbers.title', 'numbers.lede', 'screen.title', 'screen.lede', 'strip.title', 'strip.lede', 'alternatives.title', 'alternatives.lede', 'reckoning.title', 'reckoning.lede', 'open.title', 'open.lede',
+      ...LEAVES.filter(([k]) => k.startsWith('nav.') || k.startsWith('sources.')).map(([k]) => k),
+    ];
     for (const key of required) expect(texts.has(key), `${key} is marked in the HTML`).toBe(true);
     for (const [key, found] of texts) {
       const want = byKey.get(key);
@@ -84,9 +88,10 @@ describe('the static HTML carries the same strings', () => {
       for (const text of found) expect(text, key).toBe(want);
     }
   });
-  it('the title and the description are the page strings', () => {
+  it('the title, the description and the question chips\' label are the page strings', () => {
     expect(html).toContain(`<title>${SN.page.title}</title>`);
     expect(html).toContain(`<meta name="description" content="${SN.page.description}">`);
+    expect(html).toContain(`aria-label="${SN.questions.label}"`);
   });
   it('the HTML itself keeps the copy rules', () => {
     expect(html).not.toContain('—');

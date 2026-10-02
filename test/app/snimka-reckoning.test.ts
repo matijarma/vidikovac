@@ -5,7 +5,7 @@
 // strike outline end to end through the hero tiles.
 import { Window } from 'happy-dom';
 import { describe, expect, it } from 'vitest';
-import { SNIMKA_COMPARISON, SNIMKA_WINDOW, type Col, type ScreenIndex, type SeriesFile, type SnimkaState } from '../../shared/snimka';
+import { SNIMKA_COMPARISONS, SNIMKA_WINDOW, type Col, type ScreenIndex, type SeriesFile, type SnimkaState } from '../../shared/snimka';
 import {
   FROZEN_AFTER_S, GHOST_SETTLED_MIN, bikeDrain, ghostExcess, ghostSeries, feedHealth, ghostInflation, heroTiles, longestSilent, midnightOf, minutesText, peakAt0745, renderReckoning, returnDuration, sentenceFamilies, silentMinutes,
 } from '../../app/src/snimka/reckoning';
@@ -24,11 +24,11 @@ function nulls<T>(n: number = N): Col<T> {
 /** A window series with every column missing; tests fill what they need. */
 function blank(n: number = N, t0: number = T0): SeriesFile {
   return {
-    v: 1, t0, step: 60, n,
+    v: 2, t0, step: 60, n,
     seen: { all: nulls(n), tram: nulls(n), bus: nulls(n) },
     expected: { all: nulls(n), tram: nulls(n), bus: nulls(n) },
     service: { state: nulls<SnimkaState>(n), since: nulls(n), ratio: nulls(n), hold: nulls(n) },
-    feed: { headerAgeS: nulls(n), entities: nulls(n), rejectedFuture: nulls(n), hiddenDepot: nulls(n), hiddenParked: nulls(n) },
+    feed: { headerAgeS: nulls(n), entities: nulls(n), rejectedFuture: nulls(n), hiddenDepot: nulls(n), hiddenParked: nulls(n), frozen: nulls(n), alerts: nulls(n), cancelledTrips: nulls(n) },
     published: { vehicles: nulls(n), itemCount: nulls(n), status: nulls(n), service: nulls(n) },
     bikes: { total: nulls(n), empty: nulls(n), reporting: nulls(n) },
     closures: { active: nulls(n), version: nulls(n) },
@@ -65,7 +65,7 @@ describe('silentMinutes', () => {
     s.service.state[1000] = 'unknown';
     const r = silentMinutes(s);
     expect(r.total).toBe(100);
-    expect(r.byDay.map((d) => d.minutes)).toEqual([40, 60, 0, 0, 0]);
+    expect(r.byDay.map((d) => d.minutes)).toEqual([40, 60, 0, 0, 0, 0]);
     expect(r.byDay[1]!.day).toBe(midnightOf(at(240)));
     expect(r.fromSec).toBe(at(200));
     expect(r.toSec).toBe(at(300));
@@ -86,22 +86,22 @@ describe('peakAt0745', () => {
     s.seen.all[zm(9, 30, 7, 45)] = 3;
     s.seen.all[zm(10, 1, 7, 45)] = 231;
     s.seen.all[zm(9, 29, 7, 46)] = 99; // the minute after does not count
-    const c = blank(SNIMKA_COMPARISON.minutes, SNIMKA_COMPARISON.fromSec);
+    const c = blank(SNIMKA_COMPARISONS[0].minutes, SNIMKA_COMPARISONS[0].fromSec);
     c.seen.all[7 * 60 + 45] = 234;
     const r = peakAt0745(s, c);
-    expect(r.days.map((d) => d.atSec)).toEqual([at(zm(9, 28, 7, 45)), at(zm(9, 29, 7, 45)), at(zm(9, 30, 7, 45)), at(zm(10, 1, 7, 45))]);
-    expect(r.days.map((d) => d.seen)).toEqual([5, null, 3, 231]);
+    expect(r.days.map((d) => d.atSec)).toEqual([at(zm(9, 28, 7, 45)), at(zm(9, 29, 7, 45)), at(zm(9, 30, 7, 45)), at(zm(10, 1, 7, 45)), at(zm(10, 2, 7, 45))]);
+    expect(r.days.map((d) => d.seen)).toEqual([5, null, 3, 231, null]);
     expect(r.days[0]!.expected).toBe(230);
     expect(r.normal).toBe(234);
     expect(peakAt0745(s, null).normal).toBeNull();
-    expect(r.days.map((d) => d.frozen)).toEqual([false, false, false, false]);
+    expect(r.days.map((d) => d.frozen)).toEqual([false, false, false, false, false]);
   });
   it('a morning without a count while ZET\'s data stood still is marked frozen, a true gap is not', () => {
     const s = blank();
     s.feed.headerAgeS[zm(9, 29, 7, 45)] = 4714; // Tuesday: the header over an hour old, no count
     s.feed.headerAgeS[zm(9, 30, 7, 45)] = 12; // Wednesday: fresh data and still no count is a gap
     const r = peakAt0745(s, null);
-    expect(r.days.map((d) => d.frozen)).toEqual([false, true, false, false]);
+    expect(r.days.map((d) => d.frozen)).toEqual([false, true, false, false, false]);
     // The card says which.
     const card = renderCards(s);
     const tuesday = card.querySelector('#vidjelo-jutra [data-key="' + midnightOf(at(zm(9, 29, 7, 45))) + '"] .st-bar-value')!;
@@ -320,7 +320,10 @@ describe('the hero tiles over the fixture strike', () => {
     // The drain reaches 534 at Wednesday noon (a rounding may get there a minute early).
     expect(r.minAt).toBeGreaterThanOrEqual(Date.UTC(2026, 8, 30, 9, 58) / 1000);
     expect(r.minAt).toBeLessThanOrEqual(Date.UTC(2026, 8, 30, 10, 0) / 1000);
-    expect(tiles.bikes!.sub).toMatch(/^s \d\.?\d{3} na 534; praznih stanica do 110 od 200$/);
+    // The v2 tile (Appendix B kpi.bikes): the most empty stations, when, and the drain.
+    expect(tiles.bikes!.value).toBe('110');
+    expect(tiles.bikes!.label).toBe('praznih stanica BAJS-a od 200');
+    expect(tiles.bikes!.sub).toMatch(/^najviše sri 30\. 9\. u 1[12]:\d\d; bicikala sa \d\.?\d{3} na 534$/);
   });
   it('minutes text never reads a counted zero as "under a minute"', () => {
     expect(minutesText(0)).toBe('0 min');

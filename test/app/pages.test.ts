@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import config from '../../vite.config';
 
@@ -133,7 +133,7 @@ describe('static pages', () => {
     // Counting what is shown here would be a counter the privacy page does not list: the page makes no beacon call.
     expect(read('app/src/entries/statistika.ts')).not.toMatch(/sendBeacon|\/api\/(?!statistika)/);
   });
-  it('/snimka follows /statistika: skip link, wordmark, one h1, the six-link footer, the six sections, prose and sources that stand without JS', () => {
+  it('/snimka follows /statistika: skip link, wordmark, one h1, the six-link footer, the nine sections, prose and sources that stand without JS', () => {
     const html = read('app/snimka/index.html');
     expect(html).toContain('<html lang="hr">');
     expect(html).not.toContain('<style>');
@@ -142,25 +142,44 @@ describe('static pages', () => {
     expect(html).toContain('<a class="skip-link" href="#sadrzaj">');
     expect(html).toContain('id="sadrzaj"');
     expect(html).toContain('Kaj ima<span class="mark">?</span>');
-    for (const href of ['/src/ui/tokens.css', '/src/ui/base.css', '/src/ui/statistika.css', '/src/ui/snimka.css', '/src/ui/snimka-stage.css', '/src/ui/snimka-report.css']) {
+    for (const href of ['/src/ui/tokens.css', '/src/ui/base.css', '/src/ui/statistika.css', '/src/ui/snimka.css', '/src/ui/snimka-stage.css', '/src/ui/snimka-panels.css', '/src/ui/snimka-voices.css', '/src/ui/snimka-report.css']) {
       expect(html, href).toContain(`<link rel="stylesheet" href="${href}">`);
     }
     expect(html).toContain('src="/src/entries/theme-init.ts"');
     expect(html).toContain('src="/src/entries/snimka.ts"');
     for (const href of ['/hitno', '/s/', '/izvori/', '/open/', '/privatnost/', '/pristupacnost/', '/statistika/', '/prijava/']) expect(html, href).toContain(`href="${href}"`);
     expect(html).toContain('<noscript>');
-    for (const id of ['ukratko', 'snimka', 'zaslon', 'tijek', 'vidjelo', 'izvori']) {
+    // The nine sections of the plan (section 4), each in the bar, in order.
+    const sections = ['ukratko', 'snimka', 'brojke', 'zaslon', 'tijek', 'zamjene', 'vidjelo', 'otvoreno', 'izvori'];
+    for (const id of sections) {
       expect(html, id).toContain(`id="${id}"`);
       expect(html, id).toContain(`href="#${id}"`);
     }
+    const nav = html.slice(html.indexOf('data-st="sections"'), html.indexOf('</nav>'));
+    expect([...nav.matchAll(/href="#([a-z]+)"/g)].map((m) => m[1])).toEqual(sections);
+    expect(sections.map((id) => html.indexOf(`id="${id}"`))).toEqual([...sections.map((id) => html.indexOf(`id="${id}"`))].sort((a, b) => a - b));
+    // The four question chips: a nav of static links to the answering sections, upgraded by the script.
+    expect(html).toMatch(/<nav class="chips sn-q-nav" aria-label="[^"]+" data-sn="questions">/);
+    expect((html.match(/data-sn-q="\d"/g) ?? []).length).toBe(4);
+    // The stage: a visually hidden heading and one mount; the instrument composes itself inside it.
+    expect(html).toMatch(/<h2 id="snimka-h" class="visually-hidden" data-sn-text="stage.title">/);
     // The slots the scripts fill, each busy until its lane draws into it.
-    for (const mount of ['stage', 'screen', 'strip', 'reckoning']) expect(html, mount).toContain(`data-sn-mount="${mount}" aria-busy="true"`);
-    for (const kpi of ['kpi-silent', 'kpi-peak', 'kpi-bikes', 'kpi-return']) expect(html, kpi).toContain(`data-sn="${kpi}"`);
+    for (const mount of ['stage', 'brojke', 'screen', 'strip', 'alternatives', 'reckoning', 'open', 'live']) expect(html, mount).toContain(`data-sn-mount="${mount}" aria-busy="true"`);
+    for (const kpi of ['kpi-silent', 'kpi-peak', 'kpi-bikes', 'kpi-return', 'kpi-alerts']) expect(html, kpi).toContain(`data-sn="${kpi}"`);
     expect(html).toContain('data-sn="attribution" aria-busy="true"');
-    // The page never calls a live API and never references the map library statically.
+    // The page calls no live API except the one read of /api/teaser in live.ts (decision S-10), and never references the map library statically.
     const entry = read('app/src/entries/snimka.ts');
     expect(entry).not.toMatch(/sendBeacon|\/api\/(?!snimka)/);
     expect(entry).not.toMatch(/maplibre|city-map|zet-network\.json/);
+    const dir = new URL('../../app/src/snimka/', import.meta.url);
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.ts')).sort()) {
+      const source = read(`app/src/snimka/${file}`);
+      if (file === 'live.ts') {
+        expect(source, file).not.toMatch(/sendBeacon|\/api\/(?!snimka|teaser)/);
+      } else {
+        expect(source, file).not.toMatch(/sendBeacon|\/api\/(?!snimka)/);
+      }
+    }
   });
   it('/privatnost lists the ten privacy points and no inline script', () => {
     const html = read('app/privatnost/index.html');
