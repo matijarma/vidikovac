@@ -95,7 +95,8 @@ export function bindPresentation(stageRoot: HTMLElement, button: HTMLButtonEleme
     else delete stageRoot.dataset.snPresenting;
     if (button) {
       button.setAttribute('aria-pressed', presenting ? 'true' : 'false');
-      button.textContent = presenting ? SN.present.exit : SN.present.enter;
+      const words = button.querySelector<HTMLElement>('[data-sn-present-text]') ?? button;
+      words.textContent = presenting ? SN.present.exit : SN.present.enter;
     }
     idle.arm(presenting && !opts.reducedMotion);
     opts.onChange?.(presenting);

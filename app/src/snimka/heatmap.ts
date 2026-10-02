@@ -19,9 +19,9 @@ import { el } from './panels';
 import { SN, fill } from './strings';
 
 const SLOTS_PER_HOUR = 3600 / ROUTES_STEP_S;
-/** The strike days for the row choice: a bus line with a vehicle in any sample from Mon 28 Sep 03:30 to Wed 30 Sep 20:00 Zagreb gets its own row. */
+/** The strike days for the row choice: a bus line with a vehicle in any sample from Mon 28 Sep 03:30 to Wed 30 Sep 18:00 Zagreb (the relight began at 18:10) gets its own row. */
 export const STRIKE_FROM_SEC = Date.UTC(2026, 8, 28, 3, 30) / 1000 - ZAGREB_OFFSET_S;
-export const STRIKE_TO_SEC = Date.UTC(2026, 8, 30, 20, 0) / 1000 - ZAGREB_OFFSET_S;
+export const STRIKE_TO_SEC = Date.UTC(2026, 8, 30, 18, 0) / 1000 - ZAGREB_OFFSET_S;
 /** The viewBox size of one cell: an hour is 6 units wide, a row 24 units tall (the label buttons' height in px). */
 export const CELL_W = 6;
 export const ROW_H = 24;
@@ -224,15 +224,19 @@ function grid(doc: Document, model: HeatModel, rows: readonly HeatRow[], onRoute
   const cursor = el(doc, 'span', { class: 'sn-hm-cursor', 'aria-hidden': 'true' });
   const plot = el(doc, 'div', { class: 'sn-hm-plot', 'data-rows': String(rows.length) }, svg, days, cursor);
   plot.style.setProperty('--rows', String(rows.length));
-  const root = el(doc, 'div', { class: 'sn-hm-scroll', tabindex: '0', role: 'group', 'aria-label': label }, el(doc, 'div', { class: 'sn-hm-grid' }, labels, plot));
+  // The day axis rides in the same scrolling grid as the plot, so its labels stay over their columns.
+  const root = el(doc, 'div', { class: 'sn-hm-scroll', tabindex: '0', role: 'group', 'aria-label': label },
+    el(doc, 'div', { class: 'sn-hm-grid' }, el(doc, 'span', { class: 'sn-hm-corner', 'aria-hidden': 'true' }), axis(doc, model), labels, plot));
   return { root, plot, cursor };
 }
 
+/** The weekday over each Zagreb midnight, and over the first column when the first day has at least six hours. */
 function axis(doc: Document, model: HeatModel): HTMLElement {
   const box = el(doc, 'div', { class: 'sn-hm-axis', 'aria-hidden': 'true' });
+  const firstHour = new Date((model.t0 + ZAGREB_OFFSET_S) * 1000).getUTCHours();
   for (let h = 0; h < model.hours; h++) {
     const sec = model.t0 + h * 3600;
-    if (h !== 0 && new Date((sec + ZAGREB_OFFSET_S) * 1000).getUTCHours() !== 0) continue;
+    if (h === 0 ? 24 - firstHour < 6 : new Date((sec + ZAGREB_OFFSET_S) * 1000).getUTCHours() !== 0) continue;
     const label = el(doc, 'span', { class: 'sn-hm-day', text: zagrebDay(sec * 1000).split(' ')[0]! });
     label.style.setProperty('--x', (h / model.hours).toFixed(5));
     box.append(label);
@@ -266,7 +270,7 @@ export function mountHeatmap(ctx: SnimkaContext, root: HTMLElement, opts: Heatma
   const main = grid(doc, model, mainRows, onRoute, SN.strip.lines);
   const parts: HTMLElement[] = [];
   if (opts.head !== false) parts.push(el(doc, 'p', { class: 'sn-hm-lede', text: SN.strip.linesLede }), legend(doc));
-  parts.push(axis(doc, model), main.root);
+  parts.push(main.root);
   const grids = [{ ...main, rows: mainRows }];
   if (model.others.length) {
     const more = grid(doc, model, model.others, onRoute, SN.strip.linesAll);

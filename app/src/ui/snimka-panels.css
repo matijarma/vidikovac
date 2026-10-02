@@ -114,7 +114,8 @@
 .sn-hm-key-c4 { background: var(--sn-hm-c4); }
 .sn-hm-key-off { background: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1px, var(--tone-surface-2) 1px 4px); }
 .sn-hm-key-none { box-shadow: inset 0 0 0 1px var(--tone-stroke-strong); }
-.sn-hm-axis { position: relative; block-size: 1.1rem; margin-inline-start: var(--sn-hm-label-w); font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-hm-axis { position: relative; block-size: 1.1rem; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-hm-corner { position: sticky; inset-inline-start: 0; z-index: 2; background: var(--tone-surface-1); border-inline-end: 1px solid var(--tone-stroke); }
 .sn-hm-day { position: absolute; inset-inline-start: calc(var(--x) * 100%); white-space: nowrap; }
 .sn-hm-scroll { overflow-x: auto; overscroll-behavior-x: contain; border-radius: var(--r-sm); }
 .sn-hm-scroll:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 2px; }
@@ -144,7 +145,7 @@
 .sn-hm-more > summary { min-block-size: var(--target); display: flex; align-items: center; font-size: var(--type-control); font-weight: var(--weight-bold); cursor: pointer; }
 
 /* ---- the timeline bar ---------------------------------------------------------------------------------------- */
-.sn-tl { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "controls scrub tail" "status status status"; align-items: center; gap: var(--sp-1) var(--sp-4); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); border: 1px solid var(--tone-glass-stroke); font-variant-numeric: tabular-nums; }
+.sn-tl { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "controls scrub tail"; align-items: center; gap: var(--sp-1) var(--sp-4); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); border: 1px solid var(--tone-glass-stroke); font-variant-numeric: tabular-nums; }
 @supports (backdrop-filter: blur(8px)) { .sn-tl { backdrop-filter: blur(8px); } }
 .sn-tl-controls { grid-area: controls; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
 .sn-tl-play { min-inline-size: 7rem; }
@@ -185,12 +186,14 @@
 .sn-tl-day { position: absolute; inset-inline-start: var(--x); font-size: var(--type-meta); color: var(--tone-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sn-tl-tail { grid-area: tail; display: flex; align-items: center; gap: var(--sp-2); }
 .sn-tl-present { font-size: var(--type-control); }
-.sn-tl-status { grid-area: status; min-block-size: 1.2em; margin: 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-tl-present-glyph { font-size: 1.1em; line-height: 1; }
+/* The status line is the bar's spoken word (role status); the plate already shows the instant, so it is not drawn twice. */
+.sn-tl-status { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
 .sn-tl-reduced { grid-column: 1 / -1; margin: 0; font-size: var(--type-meta); }
 
 /* Narrower: the controls over the scrubber. */
 @media (max-width: 75rem) {
-  .sn-tl { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "controls tail" "scrub scrub" "status status"; }
+  .sn-tl { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "controls tail" "scrub scrub"; }
 }
 /* A phone: the deck's panels join the swipe row (stage.css), the speed is a native select, the day labels shorten. */
 @media (max-width: 40rem) {
@@ -200,7 +203,13 @@
   .sn-tl { border-radius: var(--r-lg) var(--r-lg) 0 0; padding: var(--sp-2); gap: var(--sp-1) var(--sp-2); }
   .sn-tl-speed { display: none; }
   .sn-tl-pick { display: block; }
-  .sn-tl-play { min-inline-size: 0; flex: 1 1 6rem; }
+  .sn-tl-controls { flex-wrap: nowrap; gap: var(--sp-1); }
+  .sn-tl-play { min-inline-size: 0; flex: 1 1 5rem; padding-inline: var(--sp-2); }
+  .sn-tl-select { padding-inline: var(--sp-2); max-inline-size: 7rem; }
+  .sn-tl-present { inline-size: var(--target); padding: 0; }
+  .sn-tl-present-text { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .sn-tl-fleet { block-size: 1rem; }
+  .sn-tl-ticks { block-size: 0.25rem; }
   .sn-tl-day { font-size: 0; }
   .sn-tl-day::after { content: attr(data-short); font-size: 0.65rem; }
   .sn-hm-grid { grid-template-columns: var(--sn-hm-label-w) 42rem; }

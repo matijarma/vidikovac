@@ -21,13 +21,16 @@
   grid-template-areas: "deck map voices" "deck subtitle voices" "timeline timeline timeline";
   gap: var(--sp-3);
   padding: var(--sp-3);
-  block-size: calc(100svh - var(--sn-chrome-h, 0px));
-  min-block-size: 40rem;
+  block-size: calc(100svh - var(--sn-chrome-h, 0px) - 2 * var(--sp-2));
+  min-block-size: 38rem;
   box-sizing: border-box;
   border-radius: var(--sn-r-stage);
   font-variant-numeric: tabular-nums;
   transition: grid-template-columns var(--dur-slow) var(--ease);
 }
+/* The stage's section sits right under the sticky bar, so the whole instrument is one viewport when the reader lands on #snimka. */
+#snimka { padding-block: var(--sp-2); scroll-margin-block-start: var(--sn-chrome-h, var(--st-bar-h, 3.75rem)); }
+
 /* An open panel widens the deck; the map's canvas follows its box (stage.ts resizes it). */
 .sn-stage-root:not([data-sn-expanded='none']) { --sn-deck-w: minmax(20rem, 30rem); }
 .sn-stage-root [hidden] { display: none !important; }
@@ -59,18 +62,19 @@
 .sn-lagano-note { position: absolute; inset: 0; display: grid; place-content: center; padding: var(--sp-6); margin: 0; text-align: center; }
 
 /* The layer chips in two labelled groups, the legend words and the notes, under the map. */
-.sn-chips-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); }
+.sn-chips-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-4); }
 .sn-chip-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); }
 .sn-chip-label { font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
-.sn-chip { font-size: var(--type-control); padding-inline: var(--sp-3); }
-.sn-legend-words { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-chip { font-size: var(--type-secondary); padding-inline: 0.625rem; }
+.sn-legend-words { position: absolute; z-index: 2; inset-block-end: var(--sp-2); inset-inline-start: var(--sp-2); max-inline-size: calc(100% - 4rem); margin: 0; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-md); background: var(--sn-glass); border: 1px solid var(--sn-glass-stroke); list-style: none; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-size: var(--type-meta); color: var(--tone-text-muted); }
 .sn-legend-words li { display: inline-flex; align-items: center; gap: var(--sp-1); }
 .sn-legend-mark { display: inline-block; inline-size: 1rem; block-size: 0.25rem; border-radius: 2px; background: var(--tone-stroke-strong); }
 .sn-legend-alive { background: var(--tone-action-brand); block-size: 0.3rem; }
 .sn-legend-dead { background: var(--tone-text-subtle); }
 .sn-legend-quiet { background: var(--tone-stroke); block-size: 1px; }
 .sn-legend-ghost { inline-size: 0.6rem; block-size: 0.6rem; border-radius: 50%; background: transparent; border: 1.5px solid var(--tone-text-muted); box-sizing: border-box; }
-.sn-layer-note { flex-basis: 100%; margin: 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-layer-note { margin: 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-legend-words .sn-layer-note { flex-basis: 100%; }
 
 /* Presenting: the stage fills the screen; a browser without element fullscreen gets it pinned over the page. */
 #snimka:fullscreen { background: var(--tone-surface-canvas); overflow: auto; }

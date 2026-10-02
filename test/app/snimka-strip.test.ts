@@ -11,7 +11,7 @@ import { createReplayClock } from '../../app/src/snimka/clock';
 import { createLayerStore, createViewStore, type SnimkaContext } from '../../app/src/snimka/context';
 import type { FrameLoop } from '../../app/src/snimka/frames';
 import {
-  areaPath, comparisonMinute, cursorFraction, dayLines, linePath, mountStrip, readoutText, readoutValues, renderStrip, runsOf, seekTime, stateClass, subpaths, columnsPath,
+  areaPath, comparisonColumn, comparisonMinute, cursorFraction, frozenMinute, dayLines, linePath, mountStrip, readoutText, readoutValues, renderStrip, runsOf, seekTime, stateClass, subpaths, columnsPath,
 } from '../../app/src/snimka/strip';
 import { MARKS, buildComparisonRoutes, buildComparisonSeries, buildRoutes, buildWindowSeries } from '../../e2e/snimka-fixtures';
 
@@ -288,5 +288,53 @@ describe('mountStrip', () => {
     handle.setReadout(MARKS.monday0745 * 1000);
     expect(root.querySelector('.sn-strip-readout')!.textContent).not.toContain('bicikli');
     handle.destroy();
+  });
+});
+
+describe('the v2 additions', () => {
+  it('comparisonColumn sets Monday against Monday 21 September and every other day against Thursday 24 (S-12)', () => {
+    const mon = buildComparisonSeries(SNIMKA_COMPARISONS[1]);
+    const ctx = { comparisons: [
+      { id: 'cet-0924', day: '2026-09-24', weekday: 4 as const, fromSec: SNIMKA_COMPARISONS[0].fromSec, series: comparison, routes },
+      { id: 'pon-0921', day: '2026-09-21', weekday: 1 as const, fromSec: SNIMKA_COMPARISONS[1].fromSec, series: mon, routes },
+    ] };
+    const col = comparisonColumn(ctx, series, (c) => c.seen.all);
+    expect(col).toHaveLength(series.n);
+    expect(col[minuteOf(MARKS.monday0745)]).toBe(mon.seen.all[7 * 60 + 45]);
+    expect(col[minuteOf(MARKS.thursday0745)]).toBe(comparison.seen.all[7 * 60 + 45]);
+    expect(comparisonColumn({ comparisons: [] }, series, (c) => c.seen.all).every((v) => v === null)).toBe(true);
+  });
+  it('the frozen lane reads feed.frozen, the header age only where an old series lacks the column', () => {
+    expect(frozenMinute(series, minuteOf(MARKS.feedFrozenFrom))).toBe(true);
+    expect(frozenMinute(series, minuteOf(MARKS.monday0745))).toBe(false);
+    const old = { ...series, feed: { ...series.feed, frozen: undefined as unknown as typeof series.feed.frozen } };
+    expect(frozenMinute(old, minuteOf(MARKS.feedFrozenFrom) + 10)).toBe(true);
+    expect(frozenMinute(old, minuteOf(MARKS.monday0745))).toBe(false);
+  });
+  it('the fleet panel carries trams and buses, ZET\'s panel the depot lane and the future ticks, the weather its words; panel 7 is the heatmap', () => {
+    const { ctx } = context(MARKS.monday0745 * 1000);
+    const root = document.createElement('div');
+    document.body.append(root);
+    const off = mountStrip(ctx, root);
+    const fleet = root.querySelector<HTMLElement>('[data-panel="fleet"]')!;
+    expect([...fleet.querySelectorAll('.sn-subplot-title')].map((t) => t.textContent)).toEqual(['Tramvaji', 'Autobusi']);
+    expect(fleet.querySelector('[data-plot="fleet-tram"] path.sn-line-seen')!.getAttribute('d')).toBe(linePath(series.seen.tram, Math.max(...[...series.seen.tram, ...series.expected.tram].map((v) => v ?? 0))));
+    const feed = root.querySelector<HTMLElement>('[data-panel="feed"]')!;
+    expect(feed.querySelector('.st-legend')!.textContent).toContain('u spremištu');
+    expect(feed.querySelector('.st-legend')!.textContent).toContain('vrijeme unaprijed');
+    expect(feed.querySelectorAll('[data-lane="depot"] .sn-panel-depot-on').length).toBeGreaterThan(0);
+    const future = series.feed.rejectedFuture.filter((v) => (v ?? 0) > 0).length;
+    expect(feed.querySelectorAll('[data-lane="future"] .sn-panel-tick')).toHaveLength(future);
+    const frozen = feed.querySelectorAll('[data-lane="frozen"] .sn-feed-frozen-on');
+    expect(frozen.length).toBe(1);
+    const weather = root.querySelector<HTMLElement>('[data-panel="weather"]')!;
+    expect(weather.querySelector('h3')!.textContent).toBe('Temperatura i vrijeme');
+    expect(weather.querySelectorAll('.sn-panel-word').length).toBeGreaterThan(0);
+    expect(weather.querySelectorAll('.st-table tbody tr')).toHaveLength(series.hourly.n);
+    const lines = root.querySelector<HTMLElement>('[data-panel="lines"]')!;
+    expect(lines.querySelector('h3')!.textContent).toBe('Sve linije, svaki sat');
+    expect(lines.querySelector('[data-sn-heatmap]')).not.toBeNull();
+    off();
+    expect(root.querySelector('[data-sn-heatmap]')).toBeNull();
   });
 });

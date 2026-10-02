@@ -47,6 +47,9 @@ export function chromeHeight(doc: Document): number {
 }
 
 type ChipKey = keyof Layers;
+/** V2's director announces its hold on the document (director.ts DIRECTOR_STATE_EVENT, detail { held }) and listens for a resume. */
+export const DIRECTOR_STATE_EVENT = 'sn-director-state';
+export const DIRECTOR_RESUME_EVENT = 'sn-director-resume';
 const SOURCE_CHIPS: [ChipKey, string][] = [['vehicles', SN.layers.vehicles], ['bikes', SN.layers.bikes], ['closures', SN.layers.closures], ['compare', SN.layers.compare]];
 const DERIVED_CHIPS: [ChipKey, string][] = [['live', SN.layers.live], ['follow', SN.layers.follow]];
 
@@ -82,15 +85,27 @@ export const mountStage: Mount = (ctx, root) => {
   else mapBox.append(mapHost, plate);
 
   const chips = new Map<ChipKey, HTMLButtonElement>();
+  let directorHeld = false;
+  const onDirectorState = (event: Event): void => {
+    directorHeld = Boolean((event as CustomEvent<{ held?: boolean }>).detail?.held);
+    renderChips();
+  };
+  doc.addEventListener(DIRECTOR_STATE_EVENT, onDirectorState);
+  teardowns.push(() => doc.removeEventListener(DIRECTOR_STATE_EVENT, onDirectorState));
   const chipGroup = (label: string, list: [ChipKey, string][], id: string): HTMLElement => {
     const group = el(doc, 'div', { class: 'sn-chip-group', role: 'group', 'aria-labelledby': id }, el(doc, 'span', { class: 'sn-chip-label', id, text: label }));
     for (const [key, text] of list) {
       const chip = el(doc, 'button', { type: 'button', class: 'chip sn-chip', 'data-layer': key, 'aria-pressed': 'false', text });
       chip.addEventListener('click', () => {
         if (key === 'follow') {
-          const next = !(layers.get().follow && view.get().following);
-          layers.set({ follow: next });
-          view.set({ following: next }, 'user');
+          // A held director (the reader moved the map) resumes at once; otherwise the chip switches the following.
+          if (layers.get().follow && directorHeld) doc.dispatchEvent(new CustomEvent(DIRECTOR_RESUME_EVENT));
+          else {
+            // A deliberate switch goes into the address (prati=0); a hold never does.
+            const next = !layers.get().follow;
+            layers.set({ follow: next });
+            view.set({ following: next }, 'user');
+          }
         } else layers.set({ [key]: !layers.get()[key] });
       });
       chips.set(key, chip);
@@ -109,9 +124,12 @@ export const mountStage: Mount = (ctx, root) => {
   const ghostItem = legendItem('sn-legend-ghost', SN.legend.ghost, 'compare');
   const legend = el(doc, 'ul', { class: 'sn-legend-words', 'data-sn': 'legend' },
     legendItem('sn-legend-alive', SN.legend.alive, 'live'), legendItem('sn-legend-dead', SN.legend.dead, 'live'), legendItem('sn-legend-quiet', SN.legend.quiet, 'live'), ghostItem);
-  const compareNote = el(doc, 'p', { class: 'sn-layer-note', 'data-sn': 'compare-note', hidden: true });
-  const speedNote = el(doc, 'p', { class: 'sn-layer-note', 'data-sn': 'speed-note', text: SN.layers.noVehiclesAtSpeed, hidden: true });
-  const chipsRow = el(doc, 'div', { class: 'sn-chips-row', 'data-sn': 'layers' }, sources, derived, legend, compareNote, speedNote, liveNote, followNote);
+  const compareNote = el(doc, 'li', { class: 'sn-layer-note', 'data-sn': 'compare-note', hidden: true });
+  const speedNote = el(doc, 'li', { class: 'sn-layer-note', 'data-sn': 'speed-note', text: SN.layers.noVehiclesAtSpeed, hidden: true });
+  // The legend words and the two notes ride the map's foot; the chips stand under the map.
+  legend.append(compareNote, speedNote);
+  if (!ctx.lagano) mapBox.append(legend);
+  const chipsRow = el(doc, 'div', { class: 'sn-chips-row', 'data-sn': 'layers' }, sources, derived, liveNote, followNote);
   slots.map.append(mapBox, chipsRow);
 
   // ---- the lane mounts, by their contract names --------------------------------------------------------
@@ -205,7 +223,7 @@ export const mountStage: Mount = (ctx, root) => {
   function renderChips(): void {
     const l = layers.get();
     for (const [key, chip] of chips) {
-      const on = key === 'follow' ? l.follow && view.get().following : l[key];
+      const on = key === 'follow' ? l.follow && !directorHeld : l[key];
       chip.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
     compareNote.hidden = !l.compare || !ctx.comparisons.length;
@@ -241,6 +259,7 @@ export const mountStage: Mount = (ctx, root) => {
       map = m;
       const subject = view.get().subject;
       if (subject) m.select(subject, { fit: true });
+      // The map lane binds a director of its own; this bind replaces it with the deck's spot (V2's report).
       const offDirector = bindDirector(ctx, m, { spot });
       teardowns.push(offDirector);
     }).catch(() => {

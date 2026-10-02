@@ -74,10 +74,11 @@ export function thin(col: readonly (number | null)[], step = LANE_STEP_MIN): (nu
   return out;
 }
 
-/** The day labels under the lanes: the window's first day at 0 and every Zagreb midnight inside, as fractions. */
+/** The day labels under the lanes: every Zagreb midnight inside, as fractions, and the window's first day at 0 when it has six hours or more (Sunday's four would collide with Monday). */
 export function dayMarks(startMs: number, endMs: number): { x: number; label: string }[] {
   const span = endMs - startMs;
-  const out = [{ x: 0, label: zagrebDay(startMs) }];
+  const firstMidnight = zagrebMidnight(startMs) + DAY_MS;
+  const out = firstMidnight - startMs >= 6 * 3_600_000 ? [{ x: 0, label: zagrebDay(startMs) }] : [];
   for (let d = zagrebMidnight(startMs) + DAY_MS; d < endMs; d += DAY_MS) out.push({ x: (d - startMs) / span, label: zagrebDay(d) });
   return out;
 }
@@ -158,7 +159,9 @@ export function mountTimeline(ctx: SnimkaContext, root: HTMLElement, markers: re
     const next = SPEEDS.find((s) => String(s) === select.value);
     if (next) clock.setSpeed(next);
   });
-  const present = el(doc, 'button', { type: 'button', class: 'btn-ghost sn-tl-present', 'data-sn': 'present', 'aria-pressed': 'false', text: SN.present.enter });
+  // The glyph stands alone on a phone; the words stay the button's name (presentation.ts swaps them).
+  const present = el(doc, 'button', { type: 'button', class: 'btn-ghost sn-tl-present', 'data-sn': 'present', 'aria-pressed': 'false' },
+    el(doc, 'span', { class: 'sn-tl-present-glyph', 'aria-hidden': 'true', text: '⛶' }), el(doc, 'span', { class: 'sn-tl-present-text', 'data-sn-present-text': '', text: SN.present.enter }));
   const controls = el(doc, 'div', { class: 'sn-tl-controls' },
     play, el(doc, 'div', { class: 'sn-tl-chapters', role: 'group', 'aria-label': SN.controls.chapters }, chapterButton('prev', '«'), chapterButton('next', '»')),
     speedGroup, el(doc, 'div', { class: 'sn-tl-pick' }, select));
