@@ -7,15 +7,17 @@
 // Missing is never zero: a minute whose column is null counts for nothing,
 // and a function that finds nothing returns null (the page then says
 // "bez podatka" or "U snimci nema takvih minuta"), never a 0 it did not see.
-import { ZAGREB_OFFSET_S, type ScreenIndex, type SentenceFamily, type SeriesFile } from '../../../shared/snimka';
+import { FROZEN_AFTER_S, ZAGREB_OFFSET_S, type ScreenIndex, type SentenceFamily, type SeriesFile } from '../../../shared/snimka';
+import { ROUTES_MISSING, decodeRoutes } from '../../../shared/snimka-codec';
 import { bars, card, empty } from '../statistika/charts';
+import type { RoutesLike } from './contracts';
 import { escapeHtml } from '../ui/dom/escape';
 import { count, duration, num, plural, zagrebClock, zagrebDateTime, zagrebDay, type Forms } from './format';
 import { SN, fill } from './strings';
 
-/** ZET's data is "not changing" once the newest header is older than this (the same rule as the events stage's
- *  header-age-over chapters, scripts/snimka/events.json). */
-export const FROZEN_AFTER_S = 300;
+/** ZET's data is "not changing" once the newest header is older than this: the one constant of decision S-19
+ *  (shared/snimka.ts), re-exported for the callers that read it here. */
+export { FROZEN_AFTER_S };
 /** The return starts at the first minute with at least this many vehicles in motion... */
 export const RETURN_MIN_SEEN = 10;
 /** ...held for this many minutes with data (the events stage's seen-rising-past rule). */
@@ -55,8 +57,11 @@ export function ghostSeries(s: SeriesFile): (number | null)[] {
   return out;
 }
 
-/** ZET's data did not change at this minute (the newest header older than five minutes). */
+/** ZET's data did not change at this minute: the series' own `feed.frozen` column where it has a value (decision
+ *  S-19), else the newest header older than FROZEN_AFTER_S. */
 export function frozenAt(s: SeriesFile, m: number): boolean {
+  const flag = s.feed.frozen?.[m];
+  if (flag === 0 || flag === 1) return flag === 1;
   const age = s.feed.headerAgeS[m];
   return age !== null && age !== undefined && age > FROZEN_AFTER_S;
 }
@@ -289,7 +294,7 @@ export interface FeedResult {
 }
 
 /** Minutes in which ZET's data carried no vehicle at all and the longest such stretch, minutes in which it did not
- *  change (the newest header older than five minutes) and the longest such stretch from the moment the data
+ *  change (frozenAt: the frozen column, else the newest header older than three minutes) and the longest such stretch from the moment the data
  *  stopped, and minutes with no frame. */
 export function feedHealth(s: SeriesFile): FeedResult {
   let emptyMinutes = 0;
@@ -309,8 +314,9 @@ export function feedHealth(s: SeriesFile): FeedResult {
   const closeRun = (end: number): void => {
     if (runStart < 0) return;
     const minutes = end - runStart;
-    const age = s.feed.headerAgeS[runStart]!;
-    const fromSec = atOf(s, runStart) + 60 - age;
+    const age = s.feed.headerAgeS[runStart];
+    // The moment the data stopped: the header's own age at the run's first minute, or that minute without one.
+    const fromSec = age === null || age === undefined ? atOf(s, runStart) : atOf(s, runStart) + 60 - age;
     if (!longest || minutes > longest.minutes) longest = { minutes, fromSec };
     runStart = -1;
   };
@@ -324,8 +330,7 @@ export function feedHealth(s: SeriesFile): FeedResult {
       emptyLast = m;
       if (emptyStart < 0) emptyStart = m;
     } else closeEmpty(m);
-    const frozen = age !== null && age !== undefined && age > FROZEN_AFTER_S;
-    if (frozen) {
+    if (frozenAt(s, m)) {
       frozenMinutes++;
       if (runStart < 0) runStart = m;
     } else closeRun(m);
@@ -356,6 +361,38 @@ export function sentenceFamilies(index: ScreenIndex): FamiliesResult {
   return { families, total: families.reduce((sum, f) => sum + f.count, 0), departureRows, liveRows, runs: index.runs.length };
 }
 
+export interface LinesDay { day: number; count: number; total: number; shortNames: string[] }
+
+/** Per Zagreb day, the routes with a vehicle in motion in any five-minute slot of that day (`count`, with their short
+ *  names, trams first) against the routes scheduled or seen that day (`total`). A missing slot (255) counts for
+ *  nothing; a day without one known slot is left out. */
+export function linesByDay(routes: RoutesLike): LinesDay[] {
+  const { seen, expected } = decodeRoutes(routes as Parameters<typeof decodeRoutes>[0]);
+  const step = routes.step;
+  const out = new Map<number, { count: Set<number>; total: Set<number>; known: boolean }>();
+  for (let j = 0; j < routes.n; j++) {
+    const day = midnightOf(routes.t0 + j * step);
+    let row = out.get(day);
+    if (!row) { row = { count: new Set(), total: new Set(), known: false }; out.set(day, row); }
+    for (let i = 0; i < routes.routes.length; i++) {
+      const sv = seen[i]![j]!;
+      const ev = expected[i]![j]!;
+      if (sv !== ROUTES_MISSING || ev !== ROUTES_MISSING) row.known = true;
+      if (sv !== ROUTES_MISSING && sv > 0) { row.count.add(i); row.total.add(i); }
+      if (ev !== ROUTES_MISSING && ev > 0) row.total.add(i);
+    }
+  }
+  const order = (a: number, b: number): number => {
+    const ra = routes.routes[a]!;
+    const rb = routes.routes[b]!;
+    return ra.type - rb.type || (Number(ra.shortName) || 9999) - (Number(rb.shortName) || 9999) || ra.shortName.localeCompare(rb.shortName);
+  };
+  return [...out]
+    .filter(([, r]) => r.known)
+    .sort(([a], [b]) => a - b)
+    .map(([day, r]) => ({ day, count: r.count.size, total: r.total.size, shortNames: [...r.count].sort(order).map((i) => routes.routes[i]!.shortName) }));
+}
+
 // ---- the hero numbers ----------------------------------------------------------
 
 export interface HeroTile { key: 'silent' | 'peak' | 'bikes' | 'return' | 'alerts'; value: string; label: string; sub: string | null }
@@ -374,11 +411,32 @@ export function feedAlerts(s: SeriesFile): { alerts: number; cancelled: number; 
   return any ? { alerts, cancelled, hours: Math.round(s.n / 60) } : null;
 }
 
-/** The four tiles of Ukratko: values and the lines under them, from the series alone. */
-export function heroTiles(s: SeriesFile, comparison: SeriesFile | null): HeroTile[] {
+/** Strings this lane needs that Appendix B lacks (new for the read-through; the orchestrator may move them into
+ *  strings.ts under the same keys). */
+export const RECKONING_TEXT = {
+  /** kpi.peakDaySub: the Monday tile's line against the weekday-matched normal day (decision S-12). */
+  peakDaySub: '{day}, običan dan u isto doba: {normal}',
+  /** reckoning.peakFive: the peak card now holds five mornings and two normal days. */
+  peakFive: 'Jutra u 07:45',
+  peakFiveMethod: 'Vozila u pokretu u 07:45 svakog jutra snimke i dvaju običnih dana u isto doba: ponedjeljka 21. i četvrtka 24. rujna.',
+  /** The normal day's row in the peak card: "pon 21. 9., običan dan". */
+  normalDay: '{day}, običan dan',
+  linesMonday: 'U ponedjeljak 28. rujna',
+  /** The bikes card's figure: v1 labelled it with kpi.bikes, which v2 turned into the empty-stations tile. */
+  bikesDrained: 'bicikala manje na stanicama, od najvećeg zbroja do najmanjeg',
+  linesNone: 'nijedna',
+} as const;
+
+/** The normal day to set against a morning: its series and its first instant (for the day's name). */
+export interface PeakComparison { series: SeriesFile; fromSec: number }
+
+/** The five tiles of Brojke: values and the lines under them, from the series alone. The Monday tile reads
+ *  `peakComparison` (Mon 21 Sep, weekday-matched) when given, else `comparison`; the alerts tile is left out when the
+ *  series carries neither alerts nor cancellations. */
+export function heroTiles(s: SeriesFile, comparison: SeriesFile | null, peakComparison: PeakComparison | null = null): HeroTile[] {
   const none = SN.strip.noValue;
   const silent = silentMinutes(s);
-  const peak = peakAt0745(s, comparison);
+  const peak = peakAt0745(s, peakComparison?.series ?? comparison);
   const monday = peak.days.find((d) => new Date((d.day + ZAGREB_OFFSET_S) * 1000).getUTCDay() === 1) ?? null;
   const bikes = bikeDrain(s);
   const back = returnDuration(s);
@@ -394,7 +452,9 @@ export function heroTiles(s: SeriesFile, comparison: SeriesFile | null): HeroTil
       key: 'peak',
       value: monday?.seen !== null && monday?.seen !== undefined ? num(monday.seen) : none,
       label: SN.kpi.peak,
-      sub: fill(SN.kpi.peakSub, { normal: peak.normal === null ? none : num(peak.normal) }),
+      sub: peakComparison
+        ? fill(RECKONING_TEXT.peakDaySub, { day: zagrebDay(peakComparison.fromSec * 1000), normal: peak.normal === null ? none : num(peak.normal) })
+        : fill(SN.kpi.peakSub, { normal: peak.normal === null ? none : num(peak.normal) }),
     },
     {
       key: 'bikes',
@@ -417,16 +477,17 @@ export function heroTiles(s: SeriesFile, comparison: SeriesFile | null): HeroTil
   ];
 }
 
-/** Fills the tiles the HTML holds (data-sn="kpi-*") and clears the row's busy mark; the alerts tile is hidden when the series has no such column. */
-export function renderHero(doc: Document, s: SeriesFile, comparison: SeriesFile | null): void {
-  const tiles = heroTiles(s, comparison);
+/** Fills the tiles the HTML holds (data-sn="kpi-*") and clears the row's busy mark; the alerts tile is removed when
+ *  the series has no such column (omitted, never a zero by assumption). */
+export function renderHero(doc: Document, s: SeriesFile, comparison: SeriesFile | null, peakComparison: PeakComparison | null = null): void {
+  const tiles = heroTiles(s, comparison, peakComparison);
   for (const tile of tiles) {
     const el = doc.querySelector<HTMLElement>(`[data-sn="kpi-${tile.key}"]`);
     if (!el) continue;
     el.innerHTML = `<p class="st-kpi-value">${escapeHtml(tile.value)}</p><p class="st-kpi-label">${escapeHtml(tile.label)}</p>${tile.sub ? `<p class="st-kpi-sub">${escapeHtml(tile.sub)}</p>` : ''}`;
   }
   const alertsTile = doc.querySelector<HTMLElement>('[data-sn="kpi-alerts"]');
-  if (alertsTile && !tiles.some((t) => t.key === 'alerts')) alertsTile.hidden = true;
+  if (alertsTile && !tiles.some((t) => t.key === 'alerts')) alertsTile.remove();
   doc.querySelector('[data-sn="kpis"]')?.removeAttribute('aria-busy');
 }
 
@@ -483,20 +544,51 @@ function silentCard(s: SeriesFile): HTMLElement {
   return card({ id: 'vidjelo-tisina', title: R.silent, body, method: R.silentMethod });
 }
 
-function peakCard(s: SeriesFile, comparison: SeriesFile | null): HTMLElement {
+function peakCard(s: SeriesFile, comparison: SeriesFile | null, normals: readonly ReckoningComparison[]): HTMLElement {
   const r = peakAt0745(s, comparison);
   const text = (v: number | null, frozen = false): string => (v === null ? (frozen ? R.feedFrozen : SN.strip.noValue) : count(v, VOZILO));
-  const items = [
-    ...r.days.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.seen, text: text(d.seen, d.frozen) })),
-    { key: 'normal', label: R.peakCompare, value: r.normal, text: text(r.normal) },
-  ];
-  return card({ id: 'vidjelo-jutra', title: R.peak, body: [nullableBars(items, R.peak)], method: R.peakMethod });
+  // Every loaded normal day at the same minute (Mon 21 and Thu 24 Sep); the v1 single row without them.
+  const normalRows = normals.length > 0
+    ? normals.map((c) => {
+      const v = peakAt0745(s, c.series).normal;
+      return { key: `normal-${c.id}`, label: fill(RECKONING_TEXT.normalDay, { day: zagrebDay(c.fromSec * 1000) }), value: v, text: text(v) };
+    })
+    : [{ key: 'normal', label: R.peakCompare, value: r.normal, text: text(r.normal) }];
+  const items = [...r.days.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.seen, text: text(d.seen, d.frozen) })), ...normalRows];
+  const title = normals.length > 0 ? RECKONING_TEXT.peakFive : R.peak;
+  return card({ id: 'vidjelo-jutra', title, body: [nullableBars(items, title)], method: normals.length > 0 ? RECKONING_TEXT.peakFiveMethod : R.peakMethod });
+}
+
+const LINIJA: Forms = ['linija', 'linije', 'linija'];
+
+function linesCard(routes: RoutesLike): HTMLElement {
+  const days = linesByDay(routes);
+  const monday = days.find((d) => new Date((d.day + ZAGREB_OFFSET_S) * 1000).getUTCDay() === 1) ?? null;
+  const body: HTMLElement[] = [];
+  if (days.length === 0) body.push(empty(SN.strip.noValue));
+  else {
+    body.push(nullableBars(days.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.count, text: fill(R.linesValue, { count: num(d.count), total: num(d.total) }) })), R.lines));
+    if (monday) body.push(facts([[RECKONING_TEXT.linesMonday, monday.shortNames.length > 0 ? `${count(monday.shortNames.length, LINIJA)}: ${monday.shortNames.join(', ')}` : RECKONING_TEXT.linesNone]]));
+  }
+  const el = card({ id: 'vidjelo-linije', title: R.lines, body, method: R.linesMethod });
+  el.dataset.card = 'lines';
+  return el;
+}
+
+function alertsCard(s: SeriesFile): HTMLElement {
+  const r = feedAlerts(s);
+  const body = r
+    ? [figure(num(r.alerts), SN.kpi.alerts), facts([[R.alerts, fill(R.alertsValue, { alerts: num(r.alerts), cancelled: num(r.cancelled) })]])]
+    : [empty(SN.strip.noValue)];
+  const el = card({ id: 'vidjelo-upozorenja', title: R.alerts, body, method: R.alertsMethod });
+  el.dataset.card = 'alerts';
+  return el;
 }
 
 function bikesCard(s: SeriesFile): HTMLElement {
   const r = bikeDrain(s);
   const body = r
-    ? [figure(num(r.maxTotal - r.minTotal), SN.kpi.bikes),
+    ? [figure(num(r.maxTotal - r.minTotal), RECKONING_TEXT.bikesDrained),
       smallTable(R.bikes, [R.day, R.bikesMin, R.bikesEmptyMax], r.byDay.map((d) => [zagrebDay(d.day * 1000), d.minTotal === null ? SN.strip.noValue : num(d.minTotal), d.maxEmpty === null ? SN.strip.noValue : num(d.maxEmpty)]))]
     : [empty(SN.strip.noValue)];
   return card({ id: 'vidjelo-bicikli', title: R.bikes, body, method: R.bikesMethod });
@@ -561,12 +653,25 @@ function sentencesCard(index: ScreenIndex | null, failed: boolean): HTMLElement 
 
 export interface ReckoningHandle { setIndex(index: ScreenIndex | null, failed?: boolean): void }
 
-/** Fills Što se vidjelo: one card per insight; the screen card waits for the index. */
-export function renderReckoning(root: HTMLElement, s: SeriesFile, comparison: SeriesFile | null): ReckoningHandle {
+/** One loaded normal day as the peak card names it. */
+export interface ReckoningComparison { id: string; fromSec: number; series: SeriesFile }
+
+export interface ReckoningExtras {
+  /** The window's per-line counts: adds the card "Linije s vozilom u pokretu". */
+  routes?: RoutesLike | null;
+  /** The normal days for the peak card's rows (Mon 21 and Thu 24 Sep). */
+  comparisons?: readonly ReckoningComparison[];
+}
+
+/** Fills Što se vidjelo: one card per insight (the seven of v1, then the lines and ZET's own alerts); the screen card
+ *  waits for the index. */
+export function renderReckoning(root: HTMLElement, s: SeriesFile, comparison: SeriesFile | null, extras: ReckoningExtras = {}): ReckoningHandle {
   const grid = document.createElement('div');
   grid.className = 'st-grid sn-reckoning-grid';
   let sentences = sentencesCard(null, false);
-  grid.append(silentCard(s), peakCard(s, comparison), ghostsCard(s), returnCard(s), bikesCard(s), feedCard(s), sentences);
+  grid.append(silentCard(s), peakCard(s, comparison, extras.comparisons ?? []), ghostsCard(s), returnCard(s), bikesCard(s), feedCard(s), sentences);
+  if (extras.routes) grid.append(linesCard(extras.routes));
+  grid.append(alertsCard(s));
   root.replaceChildren(grid);
   root.removeAttribute('aria-busy');
   return {

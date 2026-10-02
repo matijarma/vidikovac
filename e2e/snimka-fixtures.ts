@@ -839,7 +839,8 @@ export async function routeSnimka(page: Page, fixture: SnimkaFixture): Promise<v
 
 /** A minimal /api/teaser answer: the zet-rt module with its service verdict, as shared/city/service-state.ts reads it. */
 function teaserBody(service: { state: 'normal' | 'reduced' | 'silent' | 'unknown'; seen: number; expected: number } | null, status: 'live' | 'down'): unknown {
-  const now = '2026-10-02T12:00:00.000Z';
+  // The answer of now: a summary whose source is hours old reads "unconfirmed" (shared/city/service-state.ts), not a state.
+  const now = new Date().toISOString();
   const module = {
     module: 'zet-rt', tier: 'live', status, fetchedAt: now, sourceUpdatedAt: now,
     attribution: { text: 'Public dataset by ZET provided under Open license', url: 'http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669' },

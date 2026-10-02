@@ -1,182 +1,171 @@
-// /snimka/'s report in a browser (lane S3): Zaslon shows the recorded
-// reading of the minute with its line badges, the nearest capture and the
-// quartet of four mornings; a press or a drag on Tijek seeks the replay, which
-// the readout and the address follow; Što se vidjelo carries every card with
-// its method line; the page never scrolls sideways and axe finds nothing
-// serious in either theme. Everything is answered from the synthetic fixture
-// (e2e/snimka-fixtures.ts), widened here to four 07:45 slot runs so the
-// quartet is whole. With SNIMKA_SHOTS_DIR set, the last test saves the report
-// at 1366 and 390 px in both themes there.
+// /snimka/'s dossier in a browser (lane V5 of the v2 pass): the four question
+// chips act on the instrument (q2 pauses, seeks to the third morning and sets
+// line 17 as the subject, which the address carries); Brojke has five tiles,
+// four when the series has no alerts column; Zamjene lists the stations that
+// emptied first and "Pokaži na karti" seeks and sets the station; the
+// downloads list the manifest's nine files with sizes; the live card reads
+// the stubbed /api/teaser once in view (numbers on a normal summary, "nije
+// dostupno" on a down one); Što se vidjelo carries nine cards with their
+// method lines; no sideways scroll at 360 px; axe finds nothing serious in
+// the dossier in either theme at 390 and 1366 px. Everything is answered from
+// the synthetic v2 fixture (e2e/snimka-fixtures.ts). Zaslon and Tijek are
+// their owners' specs now (V4: snimka-voices.spec.ts, V3: snimka-stage.spec.ts).
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { createHash } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import type { HashedRef, ScreenIndex, ScreenRun } from '../shared/snimka';
-import { contentPath } from '../shared/snimka-codec';
-import { buildSnimkaFixture, routeSnimka, TINY_WEBP, zg, type SnimkaFixture } from './snimka-fixtures';
+import type { SeriesFile } from '../shared/snimka';
+import { emptiedFirst, MONDAY_FIVE_S } from '../app/src/snimka/alternatives';
+import { buildBajs, buildSnimkaFixture, buildStations, buildWindowSeries, routeSnimka, stubTeaserDown, stubTeaserNormal, type SnimkaFixture } from './snimka-fixtures';
 
-const sha = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
-
-/** The fixture with a Tuesday and a Thursday slot run at 07:45 beside its Monday and Wednesday ones, each with a capture. */
-function withQuartet(): SnimkaFixture {
-  const fixture = buildSnimkaFixture();
-  const index = fixture.objects.get(fixture.manifest.files.screenIndex.path) as ScreenIndex;
-  const monday = index.runs[0]!;
-  const mondayRun = fixture.objects.get(monday.file.path) as ScreenRun;
-  const extra = (id: string, fromSec: number, sentence: string): ScreenIndex['runs'][number] => {
-    const run: ScreenRun = {
-      ...mondayRun, id, fromSec, toSec: fromSec + (mondayRun.toSec - mondayRun.fromSec),
-      readings: mondayRun.readings.map((r, i) => ({ ...r, at: fromSec + i * 20, sentence })),
-    };
-    const text = JSON.stringify(run);
-    const runHash = sha(text);
-    const file: HashedRef = { path: contentPath(`screen/run-${id}`, runHash, 'json'), bytes: Buffer.byteLength(text), sha256: runHash };
-    fixture.objects.set(file.path, run);
-    const picHash = sha(TINY_WEBP);
-    const kiosk: HashedRef = { path: contentPath(`captures/${id}-kiosk`, picHash, 'webp'), bytes: TINY_WEBP.length, sha256: picHash };
-    fixture.objects.set(kiosk.path, TINY_WEBP);
-    return { ...monday, id, fromSec, toSec: run.toSec, file, captures: { kiosk, phone: null } };
-  };
-  const runs = [...index.runs, extra('tue-0745', zg(9, 29, 7, 45), 'Tramvaj 6 prema Črnomercu polazi u 07:52 po voznom redu.'), extra('thu-0745', zg(10, 1, 7, 45), 'Tramvaj 11 prema Dupcu polazi za 3 min.')]
-    .sort((a, b) => a.fromSec - b.fromSec);
-  const next: ScreenIndex = { v: 1, runs };
-  const text = JSON.stringify(next);
-  const hash = sha(text);
-  const ref: HashedRef = { path: contentPath('screen/index', hash, 'json'), bytes: Buffer.byteLength(text), sha256: hash };
-  fixture.objects.set(ref.path, next);
-  fixture.manifest.files.screenIndex = ref;
-  return fixture;
+/** The fixture as served; `noAlerts` empties ZET's alerts and cancellations columns (the tile must then be left out). */
+function fixture(o: { noAlerts?: boolean } = {}): SnimkaFixture {
+  const f = buildSnimkaFixture();
+  if (o.noAlerts) {
+    const series = f.objects.get(f.manifest.files.series.path) as SeriesFile;
+    series.feed.alerts = series.feed.alerts.map(() => null);
+    series.feed.cancelledTrips = series.feed.cancelledTrips.map(() => null);
+  }
+  return f;
 }
 
-async function open(page: Page, at = '2026-09-28T07:45'): Promise<void> {
-  await routeSnimka(page, withQuartet());
-  await page.goto(`/snimka/?t=${at}&brzina=600`);
-  await expect(page.locator('[data-sn-mount="strip"] .sn-panel')).toHaveCount(6);
+async function open(page: Page, query = '?t=2026-09-28T07:45&brzina=600', o: { noAlerts?: boolean; teaser?: 'normal' | 'down' } = {}): Promise<void> {
+  await routeSnimka(page, fixture(o));
+  await (o.teaser === 'down' ? stubTeaserDown(page) : stubTeaserNormal(page));
+  await page.goto(`/snimka/${query}`);
+  await expect(page.locator('[data-sn-mount="open"]')).toHaveAttribute('data-sn-open', 'ready');
+}
+
+/** Brings the lazy parts into view: the BAJS table and the live card. */
+async function settle(page: Page): Promise<void> {
+  await page.locator('#zamjene').scrollIntoViewIfNeeded();
+  await expect(page.locator('#zamjene-bajs [aria-busy]')).toHaveCount(0);
+  await page.locator('[data-sn-mount="live"]').scrollIntoViewIfNeeded();
+  await expect(page.locator('[data-sn-mount="live"]')).not.toHaveAttribute('data-sn-live', 'pending');
 }
 
 async function horizontalOverflow(page: Page): Promise<number> {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
-test.describe('/snimka/ report', () => {
-  test('Zaslon shows the recorded reading with its line badges, the nearest capture and the four mornings', async ({ page }) => {
+const tParam = (page: Page): string | null => new URL(page.url()).searchParams.get('t');
+
+test.describe('/snimka/ dossier', () => {
+  test('the four questions: q2 pauses, seeks to the third morning and sets line 17, with a link to the answer', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
-    await open(page);
-    const mini = page.locator('.sn-mini');
-    await expect(mini).toHaveAttribute('data-view', 'reading');
-    await expect(mini.locator('.sn-mini-text')).toHaveText('Tramvaj 6 prema Črnomercu polazi u 07:52 po voznom redu.');
-    await expect(mini.locator('.sn-mini-sentence')).toHaveAttribute('data-kicker', 'promet');
-    await expect(mini.locator('.sn-mini-clock')).toHaveText('07:45');
-    await expect(mini.locator('.line').first()).toBeVisible();
-    await expect(mini.locator('.line').first()).toHaveText('6');
-    await expect(mini.locator('.line').first()).toHaveAttribute('data-kind', 'tram');
-    await expect(page.locator('.sn-screen-grid .sn-capture img')).toHaveAttribute('alt', 'Snimka zaslona, pon 28. 9. u 07:45');
-    const quartet = page.locator('.sn-quartet-item img');
-    await expect(quartet).toHaveCount(4);
-    for (const alt of await quartet.evaluateAll((imgs) => imgs.map((i) => i.getAttribute('alt') ?? ''))) expect(alt.length).toBeGreaterThan(0);
-    await expect(page.locator('.sn-quartet-item[data-day="thu"] figcaption')).toContainText('Uobičajeno jutro.');
+    // No time in the address: the replay plays from the first morning (S-4).
+    await open(page, '?brzina=600');
+    const chips = page.locator('[data-sn="questions"] button.sn-q-chip');
+    await expect(chips).toHaveCount(4);
+    await expect(page.locator('[data-sn="questions"] a.sn-q-to')).toHaveCount(4);
+    await expect(page.locator('[data-sn="questions"] a.sn-q-to').nth(1)).toHaveAttribute('href', '#tijek');
+    await chips.nth(1).click();
+    await expect.poll(() => tParam(page)).toBe('2026-09-30T07:45');
+    await expect(page).toHaveURL(/[?&]linija=17(&|$)/);
+    // Paused: the address keeps its minute while the playing clock would have moved it within two seconds.
+    await page.waitForTimeout(2500);
+    expect(tParam(page)).toBe('2026-09-30T07:45');
+    // The instrument is in view.
+    const top = await page.locator('[data-sn-stage]').evaluate((el) => el.getBoundingClientRect().top);
+    expect(Math.abs(top)).toBeLessThan(200);
   });
 
-  test('a minute before a slot run the screen already shows its first reading, and the quartet\'s pictures load in view', async ({ page }) => {
-    await page.setViewportSize({ width: 1366, height: 900 });
-    await open(page, '2026-09-29T07:44');
-    const mini = page.locator('.sn-mini');
-    await expect(mini).toHaveAttribute('data-view', 'reading');
-    await expect(mini.locator('.sn-mini-clock')).toHaveText('07:45');
-    await page.locator('.sn-quartet').scrollIntoViewIfNeeded();
-    await expect.poll(() => page.locator('.sn-quartet-item img').evaluateAll((imgs) => imgs.filter((i) => (i as HTMLImageElement).complete && (i as HTMLImageElement).naturalWidth > 0).length)).toBe(4);
-  });
-
-  test('between recorded runs the screen gives the timetable board with its note', async ({ page }) => {
-    await page.setViewportSize({ width: 1366, height: 900 });
-    await open(page, '2026-09-28T14:00');
-    const mini = page.locator('.sn-mini');
-    await expect(mini).toHaveAttribute('data-view', 'board');
-    await expect(mini).toContainText('Između zapisa zaslona');
-    await expect(mini.locator('.line')).toHaveCount(3);
-    await expect(page.locator('.sn-screen-grid .sn-capture')).toContainText('Za ovo doba nema snimke zaslona.');
-  });
-
-  test('a press and a drag on Tijek seek the replay: the readout and the address follow', async ({ page }) => {
-    await page.setViewportSize({ width: 1366, height: 900 });
-    await open(page);
-    const readout = page.locator('.sn-strip-readout');
-    await expect(readout).toContainText('pon 28. 9. u 07:45: u pokretu');
-    const plot = page.locator('[data-plot="fleet"]');
-    await plot.scrollIntoViewIfNeeded();
-    const box = (await plot.boundingBox())!;
-    // Three quarters of 84 hours after Sunday 20:00 is Wednesday 11:00.
-    await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
-    await expect(readout).toContainText(/^sri 30\. 9\. u 1[01]:\d\d: /);
-    await expect(page).toHaveURL(/[?&]t=2026-09-30T1[01]:\d\d/);
-    const cursor = await plot.locator('.sn-cursor').evaluate((el) => (el as HTMLElement).style.transform);
-    expect(cursor).toMatch(/^translateX\(7[45](\.\d+)?%\)$/);
-    // A drag from a quarter to the middle ends on Tuesday 14:00.
-    await page.mouse.move(box.x + box.width * 0.25, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.4, box.y + box.height / 2, { steps: 4 });
-    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2, { steps: 4 });
-    await page.mouse.up();
-    await expect(readout).toContainText(/^uto 29\. 9\. u 1[34]:\d\d: /);
-    await expect(page).toHaveURL(/[?&]t=2026-09-29T1[34]:\d\d/);
-    // The keyboard on the strip steps ten minutes.
-    const before = new URL(page.url()).searchParams.get('t')!;
-    await page.locator('.sn-strip-frame').focus();
-    await page.keyboard.press('ArrowRight');
-    await expect.poll(() => new URL(page.url()).searchParams.get('t')).not.toBe(before);
-  });
-
-  test('the hero numbers and every card of Što se vidjelo, each with its method line', async ({ page }) => {
+  test('Brojke has five tiles, and four when the series has no alerts column', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await open(page);
     await expect(page.locator('[data-sn="kpis"]')).not.toHaveAttribute('aria-busy', /.*/);
-    const values = page.locator('[data-sn="kpis"] .st-kpi-value');
-    await expect(values).toHaveCount(4);
+    await expect(page.locator('[data-sn="kpis"] .st-kpi')).toHaveCount(5);
     await expect(page.locator('[data-sn="kpi-silent"] .st-kpi-value')).toHaveText('65');
-    await expect(page.locator('[data-sn="kpi-return"] .st-kpi-sub')).toHaveText('srijeda, od 18:21 do 20:20');
+    await expect(page.locator('[data-sn="kpi-peak"] .st-kpi-sub')).toHaveText(/^pon 21\. 9\., običan dan u isto doba: \d+$/);
+    await expect(page.locator('[data-sn="kpi-alerts"] .st-kpi-label')).toHaveText('upozorenja u ZET-ovim podacima');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await open(page, '?t=2026-09-28T07:45&brzina=600', { noAlerts: true });
+    await expect(page.locator('[data-sn="kpis"] .st-kpi')).toHaveCount(4);
+    await expect(page.locator('[data-sn="kpi-alerts"]')).toHaveCount(0);
+  });
+
+  test('Zamjene: the stations that emptied first, and "Pokaži na karti" seeks and sets the station', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await open(page);
+    const expected = emptiedFirst(buildBajs(buildWindowSeries()), buildStations(), MONDAY_FIVE_S);
+    await page.locator('#zamjene').scrollIntoViewIfNeeded();
+    const rows = page.locator('#zamjene-bajs tbody tr');
+    await expect(rows).toHaveCount(Math.min(10, expected.length));
+    await rows.first().locator('button').click();
+    const first = expected[0]!;
+    const minute = new Date((first.emptySec + 7200) * 1000).toISOString().slice(0, 16);
+    await expect.poll(() => tParam(page)).toBe(minute);
+    await expect(page).toHaveURL(new RegExp(`[?&]stanica=${first.id}(&|$)`));
+    await expect(page.locator('#zamjene-228 .st-col')).toHaveCount(48);
+    for (const a of await page.locator('#zamjene-mediji a').all()) await expect(a).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  test('the downloads list the nine files of the manifest with their sizes and stable links', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await open(page);
+    const items = page.locator('[data-sn="downloads"] li');
+    await expect(items).toHaveCount(9);
+    for (const text of await items.locator('a.sn-open-file').allTextContents()) expect(text).toMatch(/\((CSV|JSON|GEOJSON), \d+ KB\)$/);
+    await expect(items.first().locator('a.sn-open-file')).toHaveAttribute('href', /^\/api\/snimka\/v2\/exports\/series\.[0-9a-f]{16}\.csv$/);
+    await expect(items.first().locator('a.sn-open-latest')).toHaveAttribute('href', '/api/snimka/v2/exports/latest/series.csv');
+    await expect(page.locator('[data-sn="repro"]')).toContainText('na predaji fixture');
+  });
+
+  test('the live card reads the summary once in view: numbers on a normal one', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    const reads: string[] = [];
+    page.on('request', (r) => { if (new URL(r.url()).pathname === '/api/teaser') reads.push(r.url()); });
+    await open(page);
+    const card = page.locator('[data-sn-mount="live"]');
+    await expect(card.locator('.sn-live-kicker')).toHaveText('Uživo, nije snimka');
+    await card.scrollIntoViewIfNeeded();
+    await expect(card).toHaveAttribute('data-sn-live', 'numbers');
+    await expect(card.locator('.sn-live-line')).toHaveText('Sada: u pokretu 380, po voznom redu oko 400, stanje uobičajeno.');
+    await expect(card.locator('a')).toHaveCount(2);
+    await page.locator('#ukratko').scrollIntoViewIfNeeded();
+    await card.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    expect(reads).toHaveLength(1);
+  });
+
+  test('the live card says the state is not available on a down summary', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await open(page, undefined, { teaser: 'down' });
+    const card = page.locator('[data-sn-mount="live"]');
+    await card.scrollIntoViewIfNeeded();
+    await expect(card).toHaveAttribute('data-sn-live', 'unavailable');
+    await expect(card.locator('[data-sn="live-now"]')).toHaveText('Trenutačno stanje nije dostupno.');
+  });
+
+  test('Što se vidjelo carries nine cards, each with its method line', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await open(page);
     const cards = page.locator('[data-sn-mount="reckoning"] .st-card');
-    await expect(cards).toHaveCount(7);
+    await expect(cards).toHaveCount(9);
     await expect(page.locator('[data-card="sentences"]')).not.toHaveAttribute('aria-busy', /.*/);
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 9; i++) {
       await expect(cards.nth(i).locator('h3')).not.toHaveText('');
       await expect(cards.nth(i).locator('.st-method')).not.toHaveText('');
     }
-    // The ghosts panel: columns on their own scale, five more than seen on Monday evening in the fixture.
-    await expect(page.locator('[data-panel="ghosts"] h3')).toHaveText('Vozila koja je zaslon brojio, a nisu imala položaj');
-    await expect(page.locator('[data-panel="ghosts"] .sn-scale')).toHaveText('5');
-    await expect(page.locator('#vidjelo-broj .st-method')).toContainText('manje od 20 vozila u pokretu');
-    await expect(page.locator('#vidjelo-broj .st-card-lede')).toHaveText('U ponedjeljak je zaslon cijeli dan brojio više vozila nego što ih je imalo položaj: dva tramvaja kojima je ZET u ponoć upisao vrijeme dan unaprijed i vozila bez položaja.');
-    // A table twin opens with a row per hour.
-    const table = page.locator('[data-panel="fleet"] .st-table');
-    await table.locator('summary').click();
-    await expect(table.locator('tbody tr')).toHaveCount(84);
+    await expect(page.locator('[data-card="lines"] h3')).toHaveText('Linije s vozilom u pokretu');
+    await expect(page.locator('[data-card="alerts"] h3')).toHaveText('Što je ZET rekao u podacima');
   });
 
-  for (const width of [360, 1366]) {
-    test(`reflows at ${width} px, and at 200 % text, without a sideways scroll`, async ({ page }) => {
-      await page.setViewportSize({ width, height: 900 });
-      await open(page);
-      await expect(page.locator('[data-sn-mount="reckoning"] .st-card')).toHaveCount(7);
-      expect(await horizontalOverflow(page)).toBe(0);
-      await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
-      await page.setViewportSize({ width: Math.max(width, 640), height: 900 });
-      expect(await horizontalOverflow(page)).toBe(0);
-    });
-  }
+  test('no sideways scroll at 360 px', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await open(page);
+    await settle(page);
+    expect(await horizontalOverflow(page)).toBe(0);
+  });
 
   for (const scheme of ['light', 'dark'] as const) {
     for (const width of [390, 1366]) {
-      test(`axe: no serious or critical violation in the report, ${scheme}, ${width} px`, async ({ page }) => {
+      test(`axe: no serious or critical violation in the dossier, ${scheme}, ${width} px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
         await page.emulateMedia({ colorScheme: scheme });
         await open(page);
-        await expect(page.locator('.sn-quartet-item img')).toHaveCount(4);
-        await expect(page.locator('[data-card="sentences"] .st-bars')).toBeVisible();
-        // Open one table so its markup is checked too.
-        await page.locator('[data-panel="state"] .st-table summary').click();
+        await settle(page);
+        await expect(page.locator('[data-card="sentences"]')).not.toHaveAttribute('aria-busy', /.*/);
         const results = await new AxeBuilder({ page })
-          .include('#ukratko').include('#zaslon').include('#tijek').include('#vidjelo')
+          .include('#ukratko').include('#brojke').include('#zamjene').include('#vidjelo').include('#otvoreno')
           .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
           .analyze();
         const blocking = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
@@ -184,24 +173,4 @@ test.describe('/snimka/ report', () => {
       });
     }
   }
-
-  test('screenshots of the report at 1366 and 390 px in both themes', async ({ page }) => {
-    const dir = process.env.SNIMKA_SHOTS_DIR;
-    test.skip(!dir, 'SNIMKA_SHOTS_DIR names where the screenshots go');
-    mkdirSync(dir!, { recursive: true });
-    for (const scheme of ['light', 'dark'] as const) {
-      for (const width of [1366, 390]) {
-        await page.setViewportSize({ width, height: 900 });
-        await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
-        // The screen on the first morning (a recorded reading), the rest on Wednesday evening (the return).
-        for (const [at, sections] of [['2026-09-28T07:45', ['zaslon']], ['2026-09-30T18:40', ['ukratko', 'tijek', 'vidjelo']]] as const) {
-          await open(page, at);
-          await expect(page.locator('.sn-mini')).not.toHaveAttribute('data-view', 'loading');
-          // The sticky section bar would sit over an element screenshot.
-          await page.addStyleTag({ content: '.st-nav { position: static !important; }' });
-          for (const name of sections) await page.locator(`#${name}`).screenshot({ path: join(dir!, `${name}-${width}-${scheme}.png`) });
-        }
-      }
-    }
-  });
 });
