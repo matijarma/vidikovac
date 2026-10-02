@@ -238,11 +238,6 @@ export function captureHtml(url: string, run: IndexRun): string {
     `<span class="visually-hidden"> ${escapeHtml(SN.news.newTab)}</span></a>`;
 }
 
-/** A link to a morning's photograph inside the table (text only: a 300 px picture of a 1280 px screen reads nothing). */
-function captureLink(url: string, run: IndexRun): string {
-  return ` <a class="sn-screen-photo" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="${escapeHtml(captureAlt(run))}">${escapeHtml(SN.screen.captureOpen)}<span class="visually-hidden">, ${escapeHtml(captureAlt(run))} ${escapeHtml(SN.news.newTab)}</span></a>`;
-}
-
 // ---- the mount ---------------------------------------------------------------------------
 
 const decodeIndex = (raw: unknown): ScreenIndex => {
@@ -393,8 +388,8 @@ export function mountScreen(ctx: SnimkaContext, root: HTMLElement, onIndex: (ind
     const loaded = runs.get(run.id);
     if (!loaded) return SKELETON_LINE;
     const sentence = morningSentence(loaded, slot.atSec);
-    const photo = run.captures.kiosk ? captureLink(ctx.data.url(run.captures.kiosk), run) : '';
-    return (sentence ? `<span class="sn-screen-said">${escapeHtml(sentence)}</span>` : `<span class="sn-screen-none">${escapeHtml(S.notRecorded)}</span>`) + photo;
+    // No photograph per morning (plan §9 cuts the thumbnails first): at table size it reads nothing.
+    return sentence ? `<span class="sn-screen-said">${escapeHtml(sentence)}</span>` : `<span class="sn-screen-none">${escapeHtml(S.notRecorded)}</span>`;
   };
   const wouldCell = (slot: MorningSlot): string => {
     if (voice.index() === null && !voiceFailed) return SKELETON_LINE;

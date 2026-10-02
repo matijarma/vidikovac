@@ -111,7 +111,7 @@ describe('the sources', () => {
     expect(zet.querySelector('q[lang="en"]')!.textContent).toBe(manifest.attribution[0]!.text);
     expect(zet.querySelector('.sn-attr-verbatim')!.textContent).toBe('atribucija doslovno:');
     expect(zet.querySelector('.sn-attr-adaptation')!.textContent).toBe(manifest.attribution[0]!.adaptation);
-    expect(zet.querySelector('.sn-attr-tag')!.textContent).toBe('Open license');
+    expect(zet.querySelector('.sn-attr-licence')!.textContent).toBe('Open license');
     const link = zet.querySelector('a.sn-attr-link')!;
     expect(link.getAttribute('href')).toBe(manifest.attribution[0]!.url);
     expect(link.textContent).toBe('izvor: ZET · GTFS-RT ↗');

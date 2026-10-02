@@ -91,13 +91,13 @@
 .sn-screen-day { display: block; font-weight: var(--weight-bold); }
 .sn-screen-caption { display: block; font-size: var(--type-meta); color: var(--tone-text-muted); }
 .sn-screen-moving { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.sn-screen-photo { display: inline-flex; align-items: center; min-block-size: var(--target); font-size: var(--type-meta); }
 /* Phones: each morning a stacked row, each cell under its column's name. */
 @media (max-width: 40rem) {
   .sn-screen-table thead { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
   .sn-screen-table, .sn-screen-table tbody, .sn-screen-table tr, .sn-screen-table th, .sn-screen-table td { display: block; }
+  .sn-screen-table { font-size: var(--type-secondary); line-height: 1.4; }
   .sn-screen-table tr { padding-block: var(--sp-2); border-block-end: 1px solid var(--tone-stroke); }
-  .sn-screen-table th, .sn-screen-table td { padding: 0.15rem 0; border: 0; inline-size: auto; }
+  .sn-screen-table th, .sn-screen-table td, .sn-screen-table tbody th { padding: 0.1rem 0; border: 0; inline-size: auto; }
   .sn-screen-table td::before { content: attr(data-label) ': '; color: var(--tone-text-muted); font-size: var(--type-meta); }
   .sn-screen-moving { white-space: normal; }
   .sn-screen-day, .sn-screen-caption { display: inline; }
@@ -258,14 +258,16 @@
   .sn-sources-block > .sn-notes-slot { grid-column: 2; }
 }
 .sn-attr { margin: 0; display: grid; }
-.sn-attr-item { display: grid; gap: 0.15rem; padding-block: var(--sp-2); border-block-end: 1px solid var(--tone-stroke); min-inline-size: 0; }
-.sn-attr-name { font-weight: var(--weight-bold); }
+/* Each source: the name with its link on one row (the 44 px target), then what was taken, then the licence. */
+.sn-attr-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'name src' 'what what' 'licence licence'; column-gap: var(--sp-3); padding-block: var(--sp-1) var(--sp-2); border-block-end: 1px solid var(--tone-stroke); min-inline-size: 0; }
+.sn-attr-name { grid-area: name; align-self: center; min-block-size: var(--target); display: flex; align-items: center; font-weight: var(--weight-bold); }
+.sn-attr-what { grid-area: what; }
+.sn-attr-licence { grid-area: licence; color: var(--tone-text-muted); }
+.sn-attr-src { grid-area: src; margin: 0; align-self: center; }
 .sn-attr-what, .sn-attr-licence { margin: 0; font-size: var(--type-secondary); line-height: 1.5; overflow-wrap: anywhere; }
 .sn-attr-adaptation { display: block; color: var(--tone-text-muted); }
 .sn-attr-verbatim { font-size: var(--type-meta); color: var(--tone-text-muted); }
 .sn-attr-quote { overflow-wrap: anywhere; word-break: break-word; }
-.sn-attr-licence { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-3); }
-.sn-attr-tag { color: var(--tone-text-muted); }
 .sn-attr-link { display: inline-flex; align-items: center; min-block-size: var(--target); min-inline-size: var(--target); }
 .sn-attr-notes { font-size: var(--type-secondary); line-height: 1.55; }
 .sn-attr-summary { display: flex; align-items: center; min-block-size: var(--target); font-size: var(--type-head); font-weight: var(--weight-bold); cursor: pointer; }

@@ -150,11 +150,11 @@ export function attributionHtml(attribution: readonly SourceEntry[]): string {
       : ENGLISH.has(a.id) ? `<span lang="en">${escapeHtml(a.text)}</span>` : escapeHtml(a.text);
     const adaptation = a.adaptation ? `<span class="sn-attr-adaptation">${escapeHtml(a.adaptation)}</span>` : '';
     const link = a.url
-      ? ` <a class="sn-attr-link" href="${escapeHtml(a.url)}" rel="noopener noreferrer">${escapeHtml(SN.attribution.source)}<span class="visually-hidden">: ${escapeHtml(name)}</span> <span aria-hidden="true">↗</span></a>`
+      ? `<a class="sn-attr-link" href="${escapeHtml(a.url)}" rel="noopener noreferrer">${escapeHtml(SN.attribution.source)}<span class="visually-hidden">: ${escapeHtml(name)}</span> <span aria-hidden="true">↗</span></a>`
       : '';
     return `<div class="sn-attr-item" data-source="${escapeHtml(a.id)}"><dt class="sn-attr-name">${escapeHtml(name)}</dt>` +
       `<dd class="sn-attr-what">${text}${adaptation}</dd>` +
-      `<dd class="sn-attr-licence"><span class="sn-attr-tag">${escapeHtml(a.licence)}</span>${link}</dd></div>`;
+      `<dd class="sn-attr-licence">${escapeHtml(a.licence)}</dd>${link ? `<dd class="sn-attr-src">${link}</dd>` : ''}</div>`;
   });
   return `<dl class="sn-attr">${items.join('')}</dl>`;
 }

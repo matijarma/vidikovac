@@ -387,7 +387,7 @@ describe('Pet jutara u 07:45', () => {
       const wrote = rows.map((r) => r.querySelector('[data-sn="morning-wrote"]')!);
       // Monday's run starts 11 s after 07:45: its first reading. Tuesday's run file is missing: not recorded.
       expect(wrote[0]!.querySelector('.sn-screen-said')!.textContent).toBe('Ponedjeljak 0.');
-      expect(wrote[0]!.querySelector('a.sn-screen-photo')!.getAttribute('href')).toBe(`/api/snimka/v2/${MON.captures.kiosk!.path}`);
+      expect(wrote[0]!.querySelector('a')).toBeNull();
       expect(wrote[1]!.textContent).toBe('U ovoj minuti zaslon nije snimljen.');
       expect(wrote[2]!.querySelector('.sn-screen-said')!.textContent).toBe('U pokretu su 3 vozila, po voznom redu oko 230.');
       expect(wrote[4]!.textContent).toBe('U ovoj minuti zaslon nije snimljen.');
