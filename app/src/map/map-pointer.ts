@@ -43,6 +43,8 @@ export interface PointerHost {
   choose(next: MapSelection | null): void;
   /** The place's own stop (LAYERS.screenStop's one feature), null without one. */
   ownStop?(): { id: string; name: string; lon: number; lat: number } | null;
+  /** A drawn line is a target (CityMapOptions.pickRoutes, /snimka/): read after the platforms, before the closures. */
+  pickRoutes?(): boolean;
 }
 
 /** What a tap landed on: one of the map's selectable things, or a cluster of
@@ -137,6 +139,10 @@ export function bindCityMapPointer(m: PointerMap, l: PointerIds, host: PointerHo
     if (place) return {kind:'place',id:String(place.properties.id)};
     const platform = first([l.LAYERS.stopsSelected, l.LAYERS.stopsRoute, l.LAYERS.stops, l.LAYERS.stopLabels]);
     if (platform) return { kind: 'stop', id: String(platform.properties.id), ids: host.siblingPlatforms(String(platform.properties.name)) };
+    if (host.pickRoutes?.()) {
+      const line = first([l.LAYERS.networkSelected, l.LAYERS.liveNetwork, l.LAYERS.networkTram, l.LAYERS.networkBus]);
+      if (line && line.properties.route !== undefined) return { kind: 'route', id: String(line.properties.route) };
+    }
     const closure = host.closuresVisible() ? first([l.LAYERS.closures, l.LAYERS.closuresCasing]) : undefined;
     if (closure) return { kind: 'closure', id: String(closure.properties.id) };
     if (host.resolveStreet && m.unproject) {

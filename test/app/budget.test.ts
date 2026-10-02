@@ -264,6 +264,11 @@ describe('/snimka/: the replay page', () => {
     for (const forbidden of FORBIDDEN_CHUNKS) expect(graph, `${ENTRY} statically imports ${forbidden}`).not.toContain(forbidden);
     expect(manifest[MAP_LAYER]?.isDynamicEntry, 'the map layer is loaded on demand').toBe(true);
     expect(graph).not.toContain(MAP_LAYER);
+    // Lane V2 (snimka v2, plan section 8): the minimaps and the director ride the map graph; the living network's pure
+    // part may sit on the entry graph but never carries the network module with it.
+    expect(graph).not.toContain('src/snimka/minimap.ts');
+    expect(graph).not.toContain('src/snimka/director.ts');
+    expect(graph).not.toContain('src/ui/snimka-minimap.css');
     expect(graph).not.toContain('src/map/city-map.ts');
     expect(graph).not.toContain('src/motion/integrator.ts');
     expect(graph).not.toContain('../shared/motion/network.ts');

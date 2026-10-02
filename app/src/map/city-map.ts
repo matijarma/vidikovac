@@ -499,6 +499,12 @@ export interface CityMapOptions {
   /** CSS px of the map covered by something (the sheet along the bottom): every
    *  fit keeps its geometry inside the uncovered part. Changed live with setFitPadding. */
   fitPadding?: FitPadding;
+  /** /snimka/'s living network (overlays.ts liveNetworkLayers, liveStopsLayer): the network source is keyed by its
+   *  shapes' `sid` and the three live layers go on with the style, their state set through setLiveNetwork. Absent,
+   *  nothing is added: the kiosk and the phone draw exactly what they drew. */
+  liveNetwork?: boolean;
+  /** A tap on a drawn line (lit, live or the base network) selects the route (map-pointer.ts); absent, a line is not a target. */
+  pickRoutes?: boolean;
   /** Pointer selection on the map: a vehicle, a stop, a closure, or nothing. */
   onSelect?: (selection: MapSelection | null) => void;
   /** Resolves a rendered basemap label against verified street/settlement data. */
@@ -565,6 +571,10 @@ export interface CityMapHandle {
    *  (overlays.ts ghostLayer). The source and the layer exist only once a page has called this; a
    *  surface that never does draws exactly what it drew before. [] clears them. */
   setGhosts?(points: readonly (readonly [number, number])[]): void;
+  /** /snimka/'s living network (CityMapOptions.liveNetwork): which routes are alive and dead and which stops are
+   *  served by an alive route. Kept per feature and applied through feature state only where it changed; null
+   *  clears every state. Ignored on a map built without the option. */
+  setLiveNetwork?(state: LiveNetworkState | null): void;
   /** Ambient emphasis never changes personal selection, camera or follow. */
   setHighlight?(highlight: MapHighlight | null): void;
   setPresentationProfile?(profile: MapPresentation, symbolScale?: number): void;
@@ -588,6 +598,9 @@ export interface CityMapHandle {
    *  [] before the style loads or for a layer the style does not carry. */
   placedNames?(layerId: string): string[];
 }
+
+/** What setLiveNetwork takes: route ids (the network's), stop ids (the artefact's platforms). */
+export interface LiveNetworkState { alive: ReadonlySet<string>; dead: ReadonlySet<string>; stopsAlive: ReadonlySet<string> }
 
 export type MapFactory = (options: CityMapOptions) => CityMapHandle;
 
@@ -873,6 +886,13 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** setGhosts: null until a page asks for ghosts; from then on what the ghost source is set from. */
   let ghosts: readonly (readonly [number, number])[] | null = null;
   let ghostsOnStyle = false;
+  /** setLiveNetwork: the last state handed in (applied once the style and the artefact are up), the live layers as
+   *  the style carries them, and what each main shape and stop was last set to, so only a change is a call. */
+  let liveState: LiveNetworkState | null = null;
+  let liveOnStyle = false;
+  let liveLayers: StyleLayerLike[] = [];
+  const liveShapeApplied = new Map<number, 'alive' | 'dead' | 'quiet'>();
+  const liveStopsApplied = new Set<string>();
   let lastDrawn: Drawn[] = [];
   let lastPushedSignature = '';
   /** The model's output as the last frame saw it (vehicle-features.ts stepSignature): whether the fleet still moves. */
@@ -1346,7 +1366,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // handed. An artefact fills them in slices (queueNamedSources); none
       // empties them at once.
       dropSlices();
-      if (net) queueNamedSources();
+      liveShapeApplied.clear();
+      if (net) { queueNamedSources(); if (liveOnStyle && map) applyLiveState(map); }
       else {
         const empty = { type: 'FeatureCollection', features: [] };
         setData(lib.SOURCES.network, empty);
@@ -1579,6 +1600,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         fitCoordinates,
         selection: () => selection,
         ownStop: () => stop,
+        ...(options.pickRoutes === true ? { pickRoutes: () => true } : {}),
         choose: (next) => {
           select(next);
           options.onSelect?.(next);
@@ -1631,7 +1653,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // after this task (queueNamedSources), so the first vehicles and the
     // overlays are on the screen before the artefact's 2,000 platforms and
     // every shape are built and re-tiled.
-    created.addSource(l.SOURCES.network, geojson(empty));
+    created.addSource(l.SOURCES.network, options.liveNetwork ? { ...geojson(empty), promoteId: 'sid' } : geojson(empty));
     stopsData = empty;
     // Keyed by the platform id, so the name hysteresis addresses one stop's
     // name by feature state (decision 19).
@@ -1665,6 +1687,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addLayer({id:'ambient-highlight-line',type:'line',source:'ambient-highlight',filter:['!=',['geometry-type'],'Point'],paint:{'line-color':palette.selection,'line-width':3*scale}});
     created.addLayer({id:'ambient-highlight-point',type:'circle',source:'ambient-highlight',filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':18*scale,'circle-opacity':0,'circle-stroke-color':palette.selection,'circle-stroke-width':2*scale}});
     if (ghosts !== null) putGhosts(created, l);
+    if (options.liveNetwork) putLiveLayers(created, l);
     styled = true;
     refreshTileLabels();
     // A resize or a deliberate presentation can arrive before the library or
@@ -1848,7 +1871,66 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     tripApplied = tripShape();
     fadeInLit(map, l, litRouteOf(options));
     writeFocusProbe(map, l);
-    if (ghostsOnStyle) applyOps(map, [{ id: l.LAYERS.ghosts, kind: 'paint', key: 'circle-color', value: palette.rail }, { id: l.LAYERS.ghosts, kind: 'paint', key: 'circle-radius', value: l.GHOST_RADIUS_PX * scale }]);
+    if (ghostsOnStyle) applyOps(map, [{ id: l.LAYERS.ghosts, kind: 'paint', key: 'circle-stroke-color', value: palette.rail }, { id: l.LAYERS.ghosts, kind: 'paint', key: 'circle-radius', value: l.GHOST_RADIUS_PX * scale }]);
+    if (liveOnStyle) {
+      const next = liveLayerSpecs(l, palette);
+      applyOps(map, l.styleDiff(liveLayers, next));
+      liveLayers = next;
+    }
+  }
+
+  /** The three live layers for a palette (overlays.ts): the network pair and the stops, in insertion order. */
+  function liveLayerSpecs(l: MaplibreModule, palette: OverlayPalette): StyleLayerLike[] {
+    return [...l.liveNetworkLayers(palette, scale), l.liveStopsLayer(palette, scale)];
+  }
+
+  /** The living network's layers, added once with the style (CityMapOptions.liveNetwork): the lit lines under the
+   *  selected line's casing, the lit stops under the stop rings; then whatever state is already in hand. */
+  function putLiveLayers(m: MapApi, l: MaplibreModule): void {
+    if (liveOnStyle) return;
+    liveLayers = liveLayerSpecs(l, l.overlayPalette(theme));
+    for (const layer of liveLayers) m.addLayer(layer as unknown as Record<string, unknown>, layer.id === l.LAYERS.liveStops ? l.LAYERS.stops : l.LAYERS.networkSelectedCasing);
+    liveOnStyle = true;
+    liveShapeApplied.clear();
+    liveStopsApplied.clear();
+    applyLiveState(m);
+  }
+
+  /** Feature state for what changed since the last call: a route's state goes to its main shapes (the features'
+   *  `sid`, mainShapes), a stop's to its id. Nothing before the artefact is in; null state clears every mark. */
+  function applyLiveState(m: MapApi): void {
+    const l = lib;
+    if (!liveOnStyle || !l || !m.setFeatureState) return;
+    const state = liveState;
+    const shapeState = new Map<number, 'alive' | 'dead' | 'quiet'>();
+    if (state && net) {
+      for (const routeId of net.routes.keys()) {
+        const next = state.alive.has(routeId) ? 'alive' : state.dead.has(routeId) ? 'dead' : 'quiet';
+        if (next === 'quiet') continue;
+        for (const sid of mainShapes(net, routeId)) shapeState.set(sid, next);
+      }
+    }
+    for (const [sid, was] of liveShapeApplied) {
+      if (shapeState.has(sid)) continue;
+      if (was !== 'quiet') m.setFeatureState({ source: l.SOURCES.network, id: String(sid) }, { alive: false, dead: false });
+      liveShapeApplied.delete(sid);
+    }
+    for (const [sid, next] of shapeState) {
+      if (liveShapeApplied.get(sid) === next) continue;
+      m.setFeatureState({ source: l.SOURCES.network, id: String(sid) }, { alive: next === 'alive', dead: next === 'dead' });
+      liveShapeApplied.set(sid, next);
+    }
+    const stops = state?.stopsAlive ?? new Set<string>();
+    for (const id of liveStopsApplied) {
+      if (stops.has(id)) continue;
+      m.setFeatureState({ source: l.SOURCES.stops, id }, { alive: false });
+      liveStopsApplied.delete(id);
+    }
+    for (const id of stops) {
+      if (liveStopsApplied.has(id)) continue;
+      m.setFeatureState({ source: l.SOURCES.stops, id }, { alive: true });
+      liveStopsApplied.add(id);
+    }
   }
 
   /** The ghost source and layer (overlays.ts ghostLayer), added once, under the vehicle bodies and dots
@@ -2201,6 +2283,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     setGhosts(next) {
       ghosts = next;
       if (styled && map && lib) putGhosts(map, lib);
+    },
+    setLiveNetwork(next) {
+      liveState = next;
+      if (styled && map) applyLiveState(map);
     },
     setHighlight(next) {
       if(JSON.stringify(next)===JSON.stringify(highlight))return;

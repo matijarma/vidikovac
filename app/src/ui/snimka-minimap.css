@@ -1,0 +1,76 @@
+/* The two SVG minimaps of /snimka/ (app/src/snimka/minimap.ts, lane V2): "sada" and the normal day side by side,
+   the alive, dead and quiet lines of the network as classes on one <path> per route. Imported by minimap.ts, so
+   the sheet rides the map graph with it, never the entry. Prefix sn-mm-* only. Both themes through the tokens. */
+.sn-mm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  align-items: start;
+  min-width: 0;
+}
+.sn-mm-side {
+  margin: 0;
+  min-width: 0;
+}
+.sn-mm-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--tone-surface-2);
+  border-radius: var(--r-md);
+  --sn-mm-quiet: var(--tone-stroke);
+  --sn-mm-dead: var(--tone-text-muted);
+  --sn-mm-alive: var(--tone-action-brand);
+}
+.sn-mm-route {
+  fill: none;
+  stroke: var(--sn-mm-quiet);
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.55;
+}
+.sn-mm-route.sn-mm-bus { stroke-width: 0.8; }
+.sn-mm-route.sn-mm-dead { stroke: var(--sn-mm-dead); stroke-width: 2; opacity: 0.8; }
+.sn-mm-route.sn-mm-dead.sn-mm-bus { stroke-width: 1.4; }
+.sn-mm-route.sn-mm-alive { stroke: var(--sn-mm-alive); stroke-width: 2.4; opacity: 1; }
+.sn-mm-route.sn-mm-alive.sn-mm-bus { stroke-width: 1.7; }
+.sn-mm-route.sn-mm-subject { stroke: var(--tone-text-primary); stroke-width: 3.2; opacity: 1; }
+.sn-mm-caption {
+  margin-top: var(--sp-1);
+  font-size: var(--type-meta);
+  color: var(--tone-text-muted);
+  line-height: 1.3;
+}
+.sn-mm-name {
+  display: block;
+  color: var(--tone-text-primary);
+  font-weight: var(--weight-medium);
+}
+.sn-mm-count { display: block; font-variant-numeric: tabular-nums; }
+.sn-mm-legend {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--type-meta);
+  color: var(--tone-text-muted);
+}
+.sn-mm-legend li { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.sn-mm-swatch {
+  display: inline-block;
+  width: 1.25rem;
+  height: 0;
+  border-top: 3px solid var(--tone-stroke);
+  border-radius: 2px;
+}
+.sn-mm-swatch[data-state="alive"] { border-top-color: var(--tone-action-brand); }
+.sn-mm-swatch[data-state="dead"] { border-top-color: var(--tone-text-muted); }
+.sn-mm-swatch[data-state="quiet"] { border-top-width: 1px; }
+@media (max-width: 24rem) {
+  .sn-mm { grid-template-columns: 1fr; }
+}
