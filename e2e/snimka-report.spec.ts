@@ -38,7 +38,7 @@ async function open(page: Page, query = '?t=2026-09-28T07:45&brzina=600', o: { n
 
 /** Brings the lazy parts into view: the BAJS table and the live card. */
 async function settle(page: Page): Promise<void> {
-  await page.locator('#zamjene').scrollIntoViewIfNeeded();
+  await page.locator('[data-sn-mount="alternatives"]').scrollIntoViewIfNeeded();
   await expect(page.locator('#zamjene-bajs [aria-busy]')).toHaveCount(0);
   await page.locator('[data-sn-mount="live"]').scrollIntoViewIfNeeded();
   await expect(page.locator('[data-sn-mount="live"]')).not.toHaveAttribute('data-sn-live', 'pending');
@@ -68,7 +68,7 @@ test.describe('/snimka/ dossier', () => {
         await page.emulateMedia({ colorScheme: scheme });
         await open(page);
         await settle(page);
-        await expect(page.locator('[data-card="sentences"]')).not.toHaveAttribute('aria-busy', /.*/);
+        await expect(page.locator('[data-sn-mount="reckoning"]')).not.toHaveAttribute('aria-busy', /.*/);
         const results = await new AxeBuilder({ page })
           .include('#ukratko').include('#brojke').include('#zamjene').include('#vidjelo').include('#otvoreno')
           .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])

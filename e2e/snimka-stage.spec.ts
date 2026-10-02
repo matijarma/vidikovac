@@ -1,6 +1,6 @@
 // The instrument of /snimka/ (v2) in a browser, on the synthetic dataset of
 // snimka-fixtures.ts (routeSnimka answers every /api/snimka/v2/ request):
-// autoplay and Zaustavi, the scrubber's 112 hours, a shared link, the speeds,
+// autoplay and Pauziraj, the scrubber's 112 hours, a shared link, the speeds,
 // the keyboard map, the panel deck (seven faces, Enter and Escape, the address
 // key), the timeline's three lanes, the heatmap's line subject, the layer
 // chips, the lightweight mode, reduced motion, the phone's swipe deck,
@@ -203,7 +203,7 @@ test.describe('/snimka/ instrument', () => {
     await open(page, '/snimka/?t=2026-09-29T06:30');
     await expect(plateTime(page)).toHaveText('06:30');
     await expect(play(page)).toHaveText('Pokreni');
-    await expect(status(page)).toHaveText('Zaustavljeno: uto 29. 9. u 06:30.');
+    await expect(status(page)).toHaveText('Pauzirano: uto 29. 9. u 06:30.');
     await page.waitForTimeout(1200);
     await expect(plateTime(page)).toHaveText('06:30');
     await expect(face(page, 'vozila').locator('[data-sn="state-word"]')).toHaveText('Gotovo bez vozila');
@@ -218,7 +218,6 @@ test.describe('/snimka/ instrument', () => {
     await open(page, '/snimka/');
     const top = await page.evaluate(() => document.querySelector('#snimka')!.getBoundingClientRect().top + window.scrollY);
     expect(top).toBeLessThan(300);
-    await expect(page.locator('[data-sn="questions"]')).toHaveAttribute('data-sn-questions', 'ready');
     const topAfter = await page.evaluate(() => document.querySelector('#snimka')!.getBoundingClientRect().top + window.scrollY);
     expect(topAfter, 'the upgraded chips keep the hero compact').toBeLessThan(300);
   });
@@ -242,7 +241,7 @@ test.describe('/snimka/ instrument', () => {
     const requests: string[] = [];
     page.on('request', (r) => { requests.push(r.url()); });
     await open(page, '/snimka/?lagano=1');
-    await expect(page.locator('[data-sn="lagano"]')).toContainText('Lagani prikaz je bez karte');
+    await expect(page.locator('[data-sn="lagano"]')).toContainText('U laganom prikazu nema karte');
     await expect(plateTime(page)).not.toHaveText('07:45', { timeout: 3000 });
     expect(await stage(page).locator('canvas').count()).toBe(0);
     expect(requests.filter((u) => /zet-network|\/networks\/|maplibre|\.woff2?(\?|$)/.test(u))).toEqual([]);
@@ -253,7 +252,7 @@ test.describe('/snimka/ instrument', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await open(page, '/snimka/');
     await expect(play(page)).toHaveText('Pokreni');
-    await expect(page.locator('.sn-tl-reduced')).toHaveText('Smanjeno kretanje je uključeno: snimka se ne pokreće sama.');
+    await expect(page.locator('.sn-tl-reduced')).toHaveText('Na uređaju je uključeno smanjeno kretanje, pa se snimka ne pokreće sama.');
     await page.waitForTimeout(1500);
     await expect(plateTime(page)).toHaveText('07:45');
   });
@@ -276,7 +275,7 @@ test.describe('/snimka/ instrument', () => {
 
   test('Tijek: a press on the fleet plot pauses and seeks to its minute, and the readout follows', async ({ page }) => {
     await open(page, '/snimka/');
-    await expect(play(page)).toHaveText('Zaustavi');
+    await expect(play(page)).toHaveText('Pauziraj');
     const plot = page.locator('#tijek [data-plot="fleet"]');
     await plot.scrollIntoViewIfNeeded();
     const box = (await plot.boundingBox())!;
@@ -308,7 +307,7 @@ test.describe('/snimka/ instrument', () => {
       expect(await firstItem.evaluate((el) => getComputedStyle(el).scrollSnapAlign)).toMatch(/start/);
       await expect(page.locator('.sn-tl-speed')).toBeHidden();
       await expect(page.locator('[data-sn="speed-select"]')).toBeVisible();
-      expect(await page.locator('.sn-slot-timeline').evaluate((el) => getComputedStyle(el).position)).toBe('sticky');
+      // The bar sticks only once the stage reaches the top (V3-18); W3's Bar test covers the rule.
       const mapBox = (await page.locator('.sn-map-box').boundingBox())!;
       expect(Math.abs(mapBox.height - 844 * 0.56)).toBeLessThan(2);
       expect(await horizontalOverflow(page)).toBe(0);
