@@ -19,7 +19,7 @@ export interface Paths {
   main: string;
   /** The recordings root (`<main>/review.local` by default). */
   inputs: string;
-  /** The build root (`<inputs>/snimka/build/v1` by default). */
+  /** The build root (`<inputs>/snimka/build/v2` by default). */
   out: string;
   objects: string;
   work: string;
@@ -39,7 +39,7 @@ export function mainCheckout(repo: string): string {
 export function resolvePaths(repo: string, o: { inputs?: string; out?: string } = {}): Paths {
   const main = mainCheckout(repo);
   const inputs = resolve(o.inputs ?? join(main, 'review.local'));
-  const out = resolve(o.out ?? join(inputs, 'snimka', 'build', 'v1'));
+  const out = resolve(o.out ?? join(inputs, 'snimka', 'build', 'v2'));
   const paths = { repo, main, inputs, out, objects: join(out, 'objects'), work: join(out, 'work'), state: join(out, 'state') };
   for (const dir of [paths.objects, paths.work, paths.state]) mkdirSync(dir, { recursive: true });
   // Read-only inputs: the build root may sit inside them, but never in the recorders' own folders.

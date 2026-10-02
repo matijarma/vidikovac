@@ -72,7 +72,7 @@ const ANCHOR = /zagreb|zagrepc|tomasevic|\bzet\b|\bzet-a\b|tramvaj|\brebr|\bkbc\
 const EXCLUDED = /sport|nogomet|kosark|rukomet|tenis|\batp\b|\bnba\b|euroliga|aba liga|vaterpolo|reprezentacij|hajduk|dinamo|\bhnl\b|liga nacija|svijet|world|regij|crna[ -]kronika|zvijezde|showbiz|lifestyle|horoskop|promo/;
 const LIVE = /\buzivo\b|\blive\b|\bblog\b/;
 
-/** Zagreb wall time of the strike week (CEST), epoch seconds. */
+/** Zagreb wall time of the strike week (CEST), epoch seconds; day 31 of September is Thursday 1 October. */
 const z = (day: number, hh: number, mm = 0): number => Date.UTC(2026, 8, day, hh - 2, mm) / 1000;
 
 interface Beat {
@@ -91,6 +91,7 @@ export const BEATS: readonly Beat[] = [
   { key: 'linija-228', test: /\b228\b|\brebr/ },
   { key: 'sud-privremeno', test: /privremen|zabran/, also: /sud/, to: z(30, 0) },
   { key: 'presuda', test: /nezakonit|presud|proglasi|odluk|odluci|sud/, also: /strajk|zet|holding/, from: z(30, 0) },
+  { key: 'nakon', test: /strajk/, also: /gotov|zavrs|nakon|posljedic|normal/, from: z(31, 0) },
   { key: 'povratak', test: /vrac|vratil|vratit|ponovno (vozi|voze|prometuj|na ulic)|kraj strajka|prekid strajka|obustav|zavrsi|normaliz|redovit|punom opsegu/, from: z(30, 11) },
   { key: 'bajs', test: /bajs|bicikl|nextbike|romobil|pedal/ },
   { key: 'taksi', test: /taksi|taxi|\buber\b|\bbolt\b|prijevoznik|dijeljen|cijen\w* voznj/ },
