@@ -245,7 +245,7 @@ function mreza(ctx: SnimkaContext, host: HTMLElement): () => void {
   const doc = ctx.doc;
   const routes = ctx.routes;
   const minis = el(doc, 'div', { class: 'sn-panel-minis-large' });
-  const chipsLabel = el(doc, 'p', { class: 'sn-panel-caption', id: 'sn-panel-lines-label' });
+  const chipsLabel = el(doc, 'p', { class: 'sn-panel-caption', id: 'sn-ro-lines-label' });
   const chips = el(doc, 'ul', { class: 'sn-panel-chips', 'aria-labelledby': chipsLabel.id, 'data-sn': 'line-chips' });
   const subjectHost = el(doc, 'div', { class: 'sn-panel-subject-host' });
   host.replaceChildren(minis, chipsLabel, chips, subjectHost);
@@ -423,7 +423,7 @@ function bicikli(ctx: SnimkaContext, host: HTMLElement): () => void {
   const s = ctx.series;
   const status = el(doc, 'p', { class: 'sn-panel-note', text: SN.readout.loading });
   const maps = el(doc, 'div', { class: 'sn-panel-dotmaps', 'data-sn': 'station-maps' });
-  const listHead = el(doc, 'h4', { class: 'sn-panel-subhead', id: 'sn-panel-stations-h', text: SN.readout.stations });
+  const listHead = el(doc, 'h4', { class: 'sn-panel-subhead', id: 'sn-ro-stations-h', text: SN.readout.stations });
   const list = el(doc, 'ol', { class: 'sn-panel-stations', 'aria-labelledby': listHead.id, 'data-sn': 'emptied' });
   const legend = el(doc, 'ul', { class: 'st-legend sn-panel-legend' },
     key(doc, 'sn-panel-key-dot sn-panel-dot-full', SN.layers.bikes), key(doc, 'sn-panel-key-dot sn-panel-dot-empty', SN.readout.emptyForms[0]));

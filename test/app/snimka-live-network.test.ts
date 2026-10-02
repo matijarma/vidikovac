@@ -6,7 +6,10 @@
 import { describe, expect, it } from 'vitest';
 import { ROUTES_STEP_S, SNIMKA_WINDOW } from '../../shared/snimka';
 import { ROUTES_MISSING, encodeRoutes } from '../../shared/snimka-codec';
-import { aliveSets, aliveStates, diffStates, liveCounts, routeSlotAt, sampleIndex, scheduledCount, stopAliveSet, stopRoutesOf } from '../../app/src/snimka/live-network';
+import { aliveSets, aliveStates, diffStates, liveCounts, networkCounts, routeSlotAt, sampleIndex, scheduledCount, stopAliveSet, stopRoutesOf } from '../../app/src/snimka/live-network';
+import { mrezaFace } from '../../app/src/snimka/readouts';
+import { buildComparisonRoutes, buildRoutes } from '../../e2e/snimka-fixtures';
+import { SNIMKA_COMPARISONS } from '../../shared/snimka';
 
 const T0 = SNIMKA_WINDOW.fromSec;
 const at = (slot: number): number => T0 + slot * ROUTES_STEP_S + 17;
@@ -44,11 +47,29 @@ describe('aliveStates', () => {
     expect(sampleIndex(file, at(4))).toBe(4);
     expect(routeSlotAt(file, T0 + 6 * ROUTES_STEP_S)).toBe(-1);
   });
-  it('scheduledCount counts the routes with a timetable in the sample, 255 excluded', () => {
+  it('scheduledCount (V3-30): the routes with a timetable in the sample, 255 excluded, together with every alive route', () => {
     expect(scheduledCount(file, at(0))).toBe(3);
-    expect(scheduledCount(file, at(1))).toBe(2);
+    // Sample 1: 17's timetable is missing (255), but it is alive (a vehicle in sample 0), so it counts.
+    expect(scheduledCount(file, at(1))).toBe(3);
     expect(scheduledCount(file, at(4))).toBe(2);
     expect(scheduledCount(file, T0 - 1)).toBe(0);
+    // A route running without a timetable still counts: never more lines with a vehicle than scheduled.
+    const offTimetable = encodeRoutes(T0, ROUTES_STEP_S, [{ id: '6', shortName: '6', type: 0 }], [row(1, 1, 1)], [row(0, 0, 0)]);
+    expect(networkCounts(offTimetable, at(2))).toMatchObject({ alive: 1, scheduled: 1 });
+    expect(networkCounts(offTimetable, T0 - 1)).toBeNull();
+  });
+  it('one definition: the Mreža face and the minimaps count the same at every minute of the fixture, alive never over scheduled', () => {
+    const files = [buildRoutes(), ...SNIMKA_COMPARISONS.map((c) => buildComparisonRoutes(c))];
+    for (const routes of files) {
+      for (let t = routes.t0; t < routes.t0 + routes.n * routes.step; t += 60) {
+        const face = mrezaFace(routes, t);
+        const minimap = networkCounts(routes, t)!;
+        expect(face.alive).toBe(minimap.alive);
+        expect(face.scheduled).toBe(minimap.scheduled);
+        expect(face.scheduled).toBe(scheduledCount(routes, t));
+        expect(minimap.alive).toBeLessThanOrEqual(minimap.scheduled);
+      }
+    }
   });
 });
 

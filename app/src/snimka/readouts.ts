@@ -68,15 +68,15 @@ export interface Bar2Handle {
 const pct = (x: number): string => `${(Math.max(0, Math.min(1, x)) * 100).toFixed(2)}%`;
 const setText = (node: HTMLElement, text: string): void => { if (node.textContent !== text) node.textContent = text; };
 
-/** The reusable two-bar glyph (sn-bar2): outline = the normal day, fill = now, updated by widths and textContent only. */
+/** The reusable two-bar glyph (sn-ro-bar2): outline = the normal day, fill = now, updated by widths and textContent only. */
 export function bar2(now: number | null, normal: number | null, opts: Bar2Options = {}): Bar2Handle {
   const doc = opts.doc ?? document;
-  const fillBar = el(doc, 'span', { class: 'sn-bar2-now' });
-  const outline = el(doc, 'span', { class: 'sn-bar2-normal' });
-  const track = el(doc, 'span', { class: 'sn-bar2-track', role: 'img' }, outline, fillBar);
-  const label = el(doc, 'span', { class: 'sn-bar2-label' });
-  const missing = el(doc, 'span', { class: 'sn-bar2-missing', text: NV, hidden: true });
-  const root = el(doc, 'span', { class: 'sn-bar2', 'data-sn-bar2': '' }, track, label, missing);
+  const fillBar = el(doc, 'span', { class: 'sn-ro-bar2-now' });
+  const outline = el(doc, 'span', { class: 'sn-ro-bar2-normal' });
+  const track = el(doc, 'span', { class: 'sn-ro-bar2-track', role: 'img' }, outline, fillBar);
+  const label = el(doc, 'span', { class: 'sn-ro-bar2-label' });
+  const missing = el(doc, 'span', { class: 'sn-ro-bar2-missing', text: NV, hidden: true });
+  const root = el(doc, 'span', { class: 'sn-ro-bar2', 'data-sn-bar2': '' }, track, label, missing);
   const handle: Bar2Handle = {
     root,
     update(n, m, o = {}) {
@@ -229,7 +229,7 @@ function chevron(doc: Document): HTMLElement {
 
 function faceHead(face: HTMLElement, title: string): HTMLElement {
   const doc = face.ownerDocument;
-  const head = el(doc, 'span', { class: 'sn-panel-head' }, el(doc, 'span', { class: 'sn-panel-name', text: title }));
+  const head = el(doc, 'span', { class: 'sn-ro-head' }, el(doc, 'span', { class: 'sn-panel-name', text: title }));
   face.replaceChildren(head);
   return head;
 }
