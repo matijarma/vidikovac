@@ -64,7 +64,7 @@ describe('open data catalog', () => {
     }
   });
 
-  it('lists the strike replay as an archive dataset: published once, eight stable aliases, ZET sentence verbatim', () => {
+  it('lists the strike replay as an archive dataset: published once, nine stable aliases, ZET sentence verbatim', () => {
     expect(ARCHIVE_DATASETS.map((a) => a.id)).toEqual(['snimka-2026-09']);
     expect(ZET_LICENCE_SENTENCE).toBe('Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669');
     const archive = buildCatalog(ORIGIN, ISSUED)['dcat:dataset'].find((d) => d['dct:identifier'] === 'snimka-2026-09')!;
@@ -82,10 +82,10 @@ describe('open data catalog', () => {
     expect(Date.parse('2026-09-27T18:00:00Z') / 1000).toBe(1790532000);
     expect(Date.parse('2026-10-02T10:00:00Z') / 1000).toBe(1790935200);
     expect(archive['dct:source']).toHaveLength(4);
-    const names = ['series.csv', 'hourly.csv', 'routes-5min.csv', 'bikes-5min.csv', 'stations.csv', 'events.json', 'closures.geojson', 'opis.json'];
+    const names = ['series.csv', 'hourly.csv', 'routes-5min.csv', 'bikes-5min.csv', 'stations.csv', 'sentences.csv', 'events.json', 'closures.geojson', 'opis.json'];
     expect(archive['dcat:distribution'].map((x) => x['dcat:downloadURL'])).toEqual(names.map((n) => `${ORIGIN}/api/snimka/v2/exports/latest/${n}`));
     expect(archive['dcat:distribution'].map((x) => x['dcat:mediaType'])).toEqual([
-      'text/csv', 'text/csv', 'text/csv', 'text/csv', 'text/csv', 'application/json', 'application/geo+json', 'application/json',
+      'text/csv', 'text/csv', 'text/csv', 'text/csv', 'text/csv', 'text/csv', 'application/json', 'application/geo+json', 'application/json',
     ]);
     for (const x of archive['dcat:distribution']) expect(x['dct:license']).toBe(OPEN_LICENCE.url);
     // never the war-word in the catalogue, and no dash

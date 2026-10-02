@@ -62,6 +62,7 @@ export function sample(): SnimkaManifest {
     },
     attribution: [
       { id: 'zet', text: 'Public dataset by ZET provided under Open license', url: 'http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669', licence: 'Open license', adaptation: 'položaji vozila izvedeni modelom kretanja iz snimljenih podataka' },
+      { id: 'court', text: 'Županijski sud u Zagrebu: rješenja o štrajku od 30. rujna 2026.', url: 'https://n1info.hr/vijesti/strajk-zet-odluka-suda-o-zakonitosti-30-09-2026/', licence: 'javna objava', adaptation: null },
       { id: 'osm', text: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', licence: 'ODbL', adaptation: null },
     ],
     notes: ['Minutne serije počinju 27. rujna u 22:07.'],
@@ -214,6 +215,14 @@ describe('decodeManifest', () => {
     expect(() => checkRefPath({ ...ref('x'), path: `x.${sha('x').slice(0, 16)}.txt` }, 'test')).toThrow(SnimkaError);
   });
 
+  it('v3: accepts the court attribution (Županijski sud u Zagrebu, javna objava) and keeps the ZET sentence first', () => {
+    const m = decodeManifest(clone());
+    const court = m.attribution.find((x) => x.id === 'court')!;
+    expect(court).toMatchObject({ licence: 'javna objava', adaptation: null });
+    expect(court.text).toContain('Županijski sud u Zagrebu');
+    expect(m.attribution[0]!.id).toBe('zet');
+  });
+
   it('rejects a malformed attribution and a malformed notes list', () => {
     const a = clone();
     (a.attribution as Record<string, unknown>[])[0]!.id = 'hrt';
@@ -239,6 +248,15 @@ describe('the built v2 manifest (test/fixtures/snimka/manifest.sample.json, re-c
     expect(notes).toContain('od ponoći do 02:00');
     expect(notes).toContain('predložaka');
     expect(notes).toContain('spremište');
+  });
+
+  it('v3: carries the court attribution and the corrected licence wording', () => {
+    const by = new Map(built.attribution.map((x) => [x.id, x] as const));
+    expect(by.get('court')).toMatchObject({ licence: 'javna objava', adaptation: null });
+    expect(by.get('kajima')!.licence).toBe('podaci: Otvorena dozvola · kod: AGPL-3.0');
+    expect(by.get('news')!.licence).toBe('osnova: navod naslova s poveznicom');
+    expect(built.attribution[0]!.text).toBe('Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669');
+    expect(built.notes.join(' ')).toContain('Lokalni snimači rade tek od');
   });
 
   it('lists the routes, places, voice index and opis as hashed json refs, every export under exports/', () => {

@@ -42,7 +42,7 @@ export type Col<T> = (T | null)[];
 
 export interface HashedRef { path: string; bytes: number; sha256: string }
 export interface NetworkRef extends HashedRef { feedVersion: string; graphHash: string; paths: number; shapes: number }
-export interface Attribution { id: 'zet' | 'zet-rss' | 'nextbike' | 'zagreb-closures' | 'dhmz' | 'news' | 'osm' | 'kajima'; text: string; url: string | null; licence: string; adaptation: string | null }
+export interface Attribution { id: 'zet' | 'zet-rss' | 'nextbike' | 'zagreb-closures' | 'dhmz' | 'news' | 'court' | 'osm' | 'kajima'; text: string; url: string | null; licence: string; adaptation: string | null }
 
 // ---- focus, mentions, facts (what an item points the instrument at) ----------
 

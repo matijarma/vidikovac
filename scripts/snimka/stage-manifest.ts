@@ -27,18 +27,19 @@ import { CONTENT_TYPES, readWork, writeJsonObject, writeObject, type Paths } fro
 import { SEGMENT_KEYS, segmentOf } from './segments';
 
 export const ATTRIBUTION: Attribution[] = [
-  { id: 'zet', text: 'Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669', url: 'http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669', licence: 'Otvorena dozvola (NN 67/17)', adaptation: 'položaji vozila izvedeni modelom kretanja iz snimljenih GTFS-RT okvira, 10-sekundni korak; sirovi okviri se ne objavljuju' },
+  { id: 'zet', text: 'Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669', url: 'http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669', licence: 'Otvorena dozvola (NN 67/17)', adaptation: 'položaji vozila izvedeni modelom kretanja iz snimljenih GTFS-RT okvira, u koracima od 10 sekundi; sirovi okviri se ne objavljuju' },
   { id: 'zet-rss', text: 'ZET, obavijesti: naslov, vrijeme objave i poveznica na obavijest', url: 'https://www.zet.hr/', licence: 'uvjeti ponovne uporabe nisu objavljeni; upit ZET-u je otvoren', adaptation: null },
   { id: 'nextbike', text: 'nextbike (BAJS), GBFS: stanje stanica svake minute', url: 'https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_hd/hr/', licence: 'CC0 1.0', adaptation: 'brojevi bicikala po stanici svakih pet minuta; zbroj bicikala i praznih stanica po minuti' },
-  { id: 'zagreb-closures', text: "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba'", url: 'https://data.zagreb.hr/', licence: 'Otvorena dozvola (OD), http://data.gov.hr/otvorena-dozvola', adaptation: 'svaka snimljena inačica skupa, s krajem zatvaranja kako ga je ta inačica objavila' },
-  { id: 'dhmz', text: 'Izvor: DHMZ, Otvorena dozvola; postaja Zagreb-Maksimir', url: 'https://vrijeme.hr/hrvatska1_n.xml', licence: 'Otvorena dozvola (NN 67/17)', adaptation: 'temperatura i vrijeme po satu' },
-  { id: 'news', text: 'Jutarnji list, Večernji list i N1: naslovi i poveznice uz atribuciju, bez teksta članaka', url: null, licence: 'navod naslova s poveznicom na izvorni članak', adaptation: null },
+  { id: 'zagreb-closures', text: 'Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup „Zatvaranje prometnica na području Grada Zagreba”', url: 'https://data.zagreb.hr/', licence: 'Otvorena dozvola (OD), http://data.gov.hr/otvorena-dozvola', adaptation: 'svaka snimljena inačica skupa, s krajem zatvaranja kako ga je ta inačica objavila' },
+  { id: 'dhmz', text: 'DHMZ, postaja Zagreb-Maksimir', url: 'https://vrijeme.hr/hrvatska1_n.xml', licence: 'Otvorena dozvola (NN 67/17)', adaptation: 'temperatura i vrijeme po satu' },
+  { id: 'news', text: 'Jutarnji list, Večernji list i N1: naslovi i poveznice uz atribuciju, bez teksta članaka', url: null, licence: 'osnova: navod naslova s poveznicom', adaptation: null },
+  { id: 'court', text: 'Županijski sud u Zagrebu: rješenja o štrajku od 30. rujna 2026., prema izvorima uz svaki događaj snimke', url: 'https://n1info.hr/vijesti/strajk-zet-odluka-suda-o-zakonitosti-30-09-2026/', licence: 'javna objava', adaptation: null },
   { id: 'osm', text: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', licence: 'ODbL 1.0', adaptation: 'podloga karte i karta u snimkama zaslona' },
-  { id: 'kajima', text: 'Kaj ima?: snimke javnog zaslona, objavljeni brojevi i stanje usluge izračunano istim pravilima nad snimljenim podacima', url: 'https://github.com/matijarma/vidikovac', licence: 'AGPL-3.0 (izvorni kod)', adaptation: null },
+  { id: 'kajima', text: 'Kaj ima?: snimke javnog zaslona, objavljeni brojevi i stanje usluge izračunano istim pravilima nad snimljenim podacima', url: 'https://github.com/matijarma/vidikovac', licence: 'podaci: Otvorena dozvola · kod: AGPL-3.0', adaptation: 'stanje usluge izračunano istim pravilima iz snimljenih podataka' },
 ];
 
 export const NOTES: string[] = [
-  'Lokalni snimači rade od nedjelje 27. rujna u 22:07: za ranije minute brojevi koje je aplikacija objavila, bicikli i zatvorene ulice nemaju podatka.',
+  'Lokalni snimači rade tek od nedjelje 27. rujna u 22:07: za ranije minute brojevi koje je aplikacija objavila, bicikli i zatvorene ulice nemaju podatka.',
   'U srijedu 30. rujna od 22:41 do 22:54 lokalni snimači nisu radili; ZET-ovi podaci snimljeni su bez prekida.',
   'Aplikacija objavljuje stanje usluge od utorka 29. rujna u 23:17; za ranije minute stanje je izračunano naknadno, istim pravilima, iz snimljenih podataka.',
   'U utorak 29. rujna od 21:18 do 23:17 ZET-ovi podaci nisu se mijenjali gotovo dva sata; rečenice zaslona po današnjim pravilima u tom razdoblju govore o nepotvrđenim polascima.',
@@ -46,7 +47,7 @@ export const NOTES: string[] = [
   'Običan četvrtak 24. rujna nema snimljenih ZET-ovih podataka od ponoći do 02:00.',
   'Običnom ponedjeljku 21. rujna u snimci nedostaju dva okvira.',
   'Rečenice zaslona po današnjim pravilima izračunane su naknadno, samo iz predložaka aplikacije, bez jezičnog modela; zapis stvarnog zaslona postoji samo za snimljena razdoblja.',
-  'Vozila koja ulaze u spremište označena su kako ih označava i aplikacija.',
+  'Vozila na putu u spremište označena su jednako kao u aplikaciji.',
   'Snimka završava u petak 2. listopada u 12:00.',
 ];
 

@@ -6,7 +6,7 @@ import { beatDefaults, eventDefaults, noticeDefaults, resolvePointers, withDefau
 import { KNOWN_SOURCES, resolveRule } from '../../scripts/snimka/stage-events';
 import { SNIMKA_WINDOW, type SeriesFile } from '../../shared/snimka';
 
-interface Entry { id: string; at?: string; rule?: { kind: string; value?: number; after: string }; kind: string; title: string; text: string | null; sources: { url: string }[]; chapter: boolean }
+interface Entry { id: string; noticeId?: number; internal?: boolean; focus?: { kind: string }; at?: string; rule?: { kind: string; value?: number; after: string }; kind: string; title: string; text: string | null; sources: { url: string }[]; chapter: boolean }
 const events = (JSON.parse(readFileSync('scripts/snimka/events.json', 'utf8')) as { events: Entry[] }).events;
 const byId = new Map(events.map((e) => [e.id, e] as const));
 const z = (month: 9 | 10, day: number, hh: number, mm = 0, ss = 0): number => Date.UTC(2026, month - 1, day, hh - 2, mm, ss) / 1000;
@@ -21,14 +21,14 @@ const known: Known = {
 describe('the four new events', () => {
   it('feed-stoji-pon: a derived ZET marker, the header-age rule after Mon 04:30', () => {
     const e = byId.get('feed-stoji-pon')!;
-    expect(e).toMatchObject({ kind: 'zet', chapter: false, title: 'ZET-ovi podaci se ne mijenjaju: prvi put', rule: { kind: 'header-age-over', value: 300, after: '2026-09-28T04:30:00+02:00' } });
+    expect(e).toMatchObject({ kind: 'zet', chapter: false, title: 'Prvi zastoj ZET-ovih podataka', rule: { kind: 'header-age-over', value: 180, after: '2026-09-28T04:30:00+02:00' } });
     expect(e.at).toBeUndefined();
   });
 
   it('vozni-red-396: the timetable swap at 08:34:58 with ZET\'s GTFS download as its source', () => {
     const e = byId.get('vozni-red-396')!;
     expect(Date.parse(e.at!) / 1000).toBe(z(9, 28, 8, 34, 58));
-    expect(e.title).toBe('ZET objavljuje novi vozni red (000396)');
+    expect(e.title).toBe('ZET objavljuje novi vozni red (inačica 000396)');
     expect(e.sources.map((s) => s.url)).toEqual(['https://www.zet.hr/gtfs-scheduled/latest']);
     expect(KNOWN_SOURCES.has('https://www.zet.hr/gtfs-scheduled/latest')).toBe(true);
   });
@@ -37,6 +37,27 @@ describe('the four new events', () => {
     expect(byId.get('drugo-uobicajeno-jutro')).toMatchObject({ kind: 'recording', chapter: true, at: '2026-10-02T07:45:00+02:00' });
     expect(byId.get('kraj-snimke')).toMatchObject({ kind: 'recording', chapter: false });
     expect(Date.parse(byId.get('kraj-snimke')!.at!) / 1000).toBe(SNIMKA_WINDOW.toSec);
+  });
+
+  it('v3: the three freezes use the 180 s threshold of FROZEN_AFTER_S and say "tri minute"', () => {
+    for (const id of ['feed-stoji-pon', 'feed-stoji', 'feed-stoji-opet']) expect(byId.get(id)!.rule).toMatchObject({ kind: 'header-age-over', value: 180 });
+    expect(byId.get('feed-stoji')).toMatchObject({ title: 'Novi zastoj ZET-ovih podataka', text: 'ZET-ovi podaci ne mijenjaju se više od tri minute.' });
+    expect(byId.get('feed-stoji-opet')!.title).toBe('Treći zastoj ZET-ovih podataka');
+  });
+
+  it('v3: noticeId on the two duplicate pairs only, each a recorded ZET notice that the event also cites', () => {
+    const withNotice = events.filter((e) => e.noticeId !== undefined);
+    expect(withNotice.map((e) => [e.id, e.noticeId])).toEqual([['linija-228', 10166], ['puni-opseg', 10168]]);
+    for (const e of withNotice) expect(e.sources.some((s) => s.url.endsWith(`id=${e.noticeId}`))).toBe(true);
+  });
+
+  it('v3: internal on the three upgrade events and the recorder gap, never on a plain chapter of the story', () => {
+    expect(events.filter((e) => e.internal).map((e) => e.id)).toEqual(['nadogradnja-1', 'nadogradnja-2', 'stanje-usluge', 'prekid-snimanja']);
+    for (const e of events.filter((x) => x.internal)) expect(e.kind).toBe('recording');
+  });
+
+  it('v3: the four mornings look at the city', () => {
+    for (const id of ['prvo-jutro', 'trece-jutro', 'prvo-uobicajeno-jutro', 'drugo-uobicajeno-jutro']) expect(byId.get(id)!.focus).toEqual({ kind: 'city' });
   });
 
   it('carries no dash, double hyphen or ellipsis in a title or text', () => {

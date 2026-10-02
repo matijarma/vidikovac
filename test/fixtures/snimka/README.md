@@ -7,7 +7,7 @@ One ten-minute motion chunk of the public /snimka/ dataset and the manifest of t
 | File | What |
 |---|---|
 | `motion-396-20260928-0730.a6abc6025822650e.json` | network 396, 2026-09-28 07:30 to 2026-09-28 07:40 Zagreb, 2 vehicle entries, 432 bytes; the positions the product's twin published for every 10-second tick, as metres along the paths and shapes of zet-network.json (feed 000396) |
-| `manifest.sample.json` | the v2 manifest of that build (built 2026-10-02T13:25:47.950Z, commit d93ec874): the window Sun 27 Sep 20:00 to Fri 2 Oct 12:00, the comparison days cet-0924 and pon-0921, 8 boards, 9 downloads, places, routes and the voice index; its other objects are not here |
+| `manifest.sample.json` | the v2 manifest of that build (built 2026-10-02T15:53:01.966Z, commit 7acbe501, minified to keep the folder under 20,000 bytes): the window Sun 27 Sep 20:00 to Fri 2 Oct 12:00, the comparison days cet-0924 and pon-0921, 8 boards, 9 downloads, places, routes and the voice index; its other objects are not here |
 
 Derived positions only: the raw GTFS-Realtime frames they come from are never committed and never served. ZET publishes the feed under the Croatian Open Licence (Otvorena dozvola); attribution, verbatim:
 

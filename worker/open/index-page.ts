@@ -82,7 +82,7 @@ function distributionName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
 }
 
-/** The "Arhiva" card: a finished dataset published once, with its eight files and its licence line. */
+/** The "Arhiva" card: a finished dataset published once, with its nine files and its licence line. */
 function archiveCard(a: OpenArchiveDataset): string {
   return (
     `<article id="${escapeHtml(a.id)}">` +
