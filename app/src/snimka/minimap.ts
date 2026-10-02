@@ -5,7 +5,7 @@
 // sample from the window's routes and from the weekday-matched comparison
 // day aligned by time of day. No second MapLibre instance. On the map graph:
 // load it with `import('./minimap')` beside map-layer.ts, never statically
-// from the entry; it brings its own sheet (ui/snimka-minimap.css).
+// from the entry; its sheet (ui/snimka-minimap.css) is linked by app/snimka/index.html like every snimka sheet.
 import type { XY } from '../../../shared/motion/geo';
 import { decodeNetwork, mainShapes, type Network } from '../../../shared/motion/network';
 import { ZAGREB_OFFSET_S } from '../../../shared/snimka';
@@ -14,7 +14,6 @@ import type { MountMinimaps, Subject } from './contracts';
 import { aliveStates, routeSlotAt, scheduledCount, liveCounts, type AliveState, type RouteStates } from './live-network';
 import { SN, fill } from './strings';
 import { comparisonDayLabel } from './subject';
-import '../ui/snimka-minimap.css';
 
 /** Ramer-Douglas-Peucker tolerance in metres: 20,711 main-shape points come down to about 6,900 (plan section 3.3). */
 export const RDP_TOLERANCE_M = 25;
