@@ -8,10 +8,11 @@ import { describe, expect, it } from 'vitest';
 import { FROZEN_AFTER_S as SHARED_FROZEN_AFTER_S, ROUTES_STEP_S, SNIMKA_COMPARISONS, SNIMKA_WINDOW, type Col, type RoutesFile, type ScreenIndex, type SeriesFile, type SnimkaState } from '../../shared/snimka';
 import { ROUTES_MISSING, encodeRoutes } from '../../shared/snimka-codec';
 import {
-  FROZEN_AFTER_S, GHOST_SETTLED_MIN, bikeDrain, feedAlerts, frozenAt, ghostExcess, ghostSeries, feedHealth, ghostInflation, heroTiles, linesByDay, longestSilent, midnightOf, minutesText, peakAt0745, renderHero, renderReckoning, returnDuration, sentenceFamilies, silentMinutes,
+  FROZEN_AFTER_S, GHOST_SETTLED_MIN, LINES_TO_SEC, STRIKE_END_SEC, STRIKE_FROM_SEC, bikeDrain, bikesOnThursday, feedAlerts, frozenAt, ghostExcess, ghostSeries, ghostsAt, feedHealth, ghostInflation, heroTiles, linesByDay, linesRan,
+  longestSilent, midnightOf, minutesText, mornings, peakAt0745, renderHero, renderReckoning, returnDuration, returnShares, sentenceFamilies, silentMinutes,
 } from '../../app/src/snimka/reckoning';
 import { SN } from '../../app/src/snimka/strings';
-import { MARKS, buildComparisonSeries, buildRoutes, buildWindowSeries } from '../../e2e/snimka-fixtures';
+import { MARKS, buildComparisonSeries, buildRoutes, buildWindowSeries, zg } from '../../e2e/snimka-fixtures';
 
 const T0 = SNIMKA_WINDOW.fromSec; // Sun 27 Sep 20:00 Zagreb
 const N = SNIMKA_WINDOW.minutes;
@@ -191,7 +192,7 @@ describe('ghostInflation', () => {
     fillRange(s.published!.vehicles, 100, 200, 183); // a normal fleet: the difference is the samples' lag, not ghosts
     s.seen.all[210] = 15;
     s.published!.vehicles[210] = 16; // one more in a small fleet: not counted
-    const r = ghostInflation(s)!;
+    const r = ghostInflation(s, null)!; // the v2 rule without the strike window (the window has its own test)
     expect(r.max).toBe(12);
     expect(r.maxAt).toBe(at(45));
     expect(r.publishedAtMax).toBe(12);
@@ -204,11 +205,40 @@ describe('ghostInflation', () => {
   });
   it('a series with nothing published is null; equal numbers are zero minutes, a real count', () => {
     expect(ghostInflation({ ...blank(), published: null })).toBeNull();
-    expect(ghostInflation(blank())).toBeNull();
+    expect(ghostInflation(blank(), null)).toBeNull();
     const s = blank();
     fillRange(s.seen.all, 0, 10, 3);
     fillRange(s.published!.vehicles, 0, 10, 3);
-    expect(ghostInflation(s)).toMatchObject({ max: 0, minutes: 0, maxAt: null });
+    expect(ghostInflation(s, null)).toMatchObject({ max: 0, minutes: 0, maxAt: null });
+  });
+  it('v3: counts only strike minutes, Mon 03:30 to Wed 20:16 in the silent or reduced state; the headline is Mon 07:45', () => {
+    const s = buildWindowSeries();
+    const m = (sec: number): number => (sec - s.t0) / 60;
+    // The midnight collapse before the strike (Mon 00:37, reduced) and the normal night fleet (Thu 02:00): ghosts by
+    // the v2 rule, not by the strike rule.
+    for (const [sec, len] of [[zg(9, 28, 0, 30), 60], [zg(10, 1, 1, 30), 60]] as const) {
+      for (let k = m(sec); k < m(sec) + len; k++) { (s.seen.all as (number | null)[])[k] = 1; s.published!.vehicles[k] = 13; }
+    }
+    // The screen said 7 while 2 had a position at Mon 07:45.
+    s.seen.all[m(MARKS.monday0745)] = 2;
+    s.published!.vehicles[m(MARKS.monday0745)] = 7;
+    const loose = ghostInflation(s, null)!;
+    const strict = ghostInflation(s)!;
+    expect(loose.minutes).toBeGreaterThan(strict.minutes);
+    expect(loose.max).toBe(12);
+    // The fixture's ghosts in the strike: +5 on Mon 17:00 to 21:00 and the 07:45 minute.
+    expect(strict.max).toBe(5);
+    expect(strict.fromSec).toBeGreaterThanOrEqual(STRIKE_FROM_SEC);
+    expect(strict.toSec).toBeLessThanOrEqual(STRIKE_END_SEC);
+    expect(strict.byDay.find((d) => d.day === zg(9, 28, 0, 0))!.minutes).toBe(241);
+    expect(ghostsAt(s)).toEqual({ shown: 7, real: 2 });
+    const card = renderCards(s).querySelector('[data-card="ghosts"]')!;
+    expect(card.querySelector('.sn-figure-value')!.textContent).toBe('7 umjesto 2');
+    expect(card.querySelector('dd')!.textContent).toBe('pon 28. 9.: 4 h 1 min');
+    // The Monday two-line plot on one scale: the vehicles with a position, then the screen's number.
+    expect([...card.querySelectorAll('path')].map((p) => p.getAttribute('class'))).toEqual(['sn-card-line sn-card-tone-seen', 'sn-card-line sn-card-tone-shown']);
+    expect(card.querySelector('.st-legend')!.textContent).toBe('s položajemna zaslonu');
+    expect(card.querySelectorAll('.st-table tbody tr')).toHaveLength(24);
   });
 });
 
@@ -307,21 +337,13 @@ describe('the hero tiles over the fixture strike', () => {
     expect(tiles.silent!.value).toBe('65');
     expect(tiles.silent!.sub).toBe('od pon 28. 9. u 02:00 do sri 30. 9. u 19:05');
   });
-  it('Monday at 07:45 against the normal Thursday', () => {
-    expect(tiles.peak!.value).toBe(String(series.seen.all[(MARKS.monday0745 - series.t0) / 60]));
-    expect(tiles.peak!.sub).toBe(`običan četvrtak u isto doba: ${comparison.seen.all[465]}`);
-  });
-  it('names the Monday figure with its Croatian plural form, never "1 vozila"', () => {
-    const at = (MARKS.monday0745 - series.t0) / 60;
-    const label = (n: number): string => {
-      const s = buildWindowSeries();
-      (s.seen.all as (number | null)[])[at] = n;
-      return heroTiles(s, comparison).find((t) => t.key === 'peak')!.label;
-    };
-    expect(label(1)).toBe('vozilo u ponedjeljak u 07:45');
-    expect(label(3)).toBe('vozila u ponedjeljak u 07:45');
-    expect(label(12)).toBe('vozila u ponedjeljak u 07:45');
-    expect(label(21)).toBe('vozilo u ponedjeljak u 07:45');
+  it('three tiles (v3): the "2 vozila" and the alerts tiles are gone; each seeks to its moment', () => {
+    expect(heroTiles(series, comparison).map((t) => t.key)).toEqual(['silent', 'bikes', 'return']);
+    expect(tiles.silent!.atSec).toBe(MARKS.silentFrom);
+    expect(tiles.bikes!.atSec).toBe(bikeDrain(series)!.maxEmptyAt);
+    expect(tiles.return!.atSec).toBe(returnDuration(series)!.fromSec);
+    expect(tiles.silent!.label).toBe('sati gotovo bez vozila');
+    expect(tiles.return!.label).toBe('minuta od prvih vozila do uobičajenog stanja');
   });
   it('the return: the first held ten at 18:21 to the normal state at 20:20', () => {
     expect(tiles.return!.value).toBe('119');
@@ -336,9 +358,11 @@ describe('the hero tiles over the fixture strike', () => {
     expect(r.minAt).toBeLessThanOrEqual(Date.UTC(2026, 8, 30, 10, 0) / 1000);
     // The v2 tile (Appendix B kpi.bikes): the most empty stations, when, and the drain.
     expect(tiles.bikes!.value).toBe('110');
-    // v3 (Appendix A kpi.bikes): the form follows the figure; Thursday's same minute is W4a's (bez podatka until then).
+    // v3 (Appendix A kpi.bikes): the form follows the figure; Thursday 1 October at the same time of day.
     expect(tiles.bikes!.label).toBe('od 200 stanica BAJS-a prazno');
-    expect(tiles.bikes!.sub).toMatch(/^sri 30\. 9\. u 1[12]:\d\d · čet 1\. 10\. u isto doba: bez podatka$/);
+    const thu = bikesOnThursday(series, r.maxEmptyAt!);
+    expect(thu).toBe(series.bikes!.empty[(r.maxEmptyAt! + 86_400 - series.t0) / 60]);
+    expect(tiles.bikes!.sub).toMatch(new RegExp(`^sri 30\\. 9\\. u 1[12]:\\d\\d · čet 1\\. 10\\. u isto doba: ${thu}$`));
   });
   it('minutes text never reads a counted zero as "under a minute"', () => {
     expect(minutesText(0)).toBe('0 min');
@@ -370,62 +394,92 @@ describe('the frozen rule of decision S-19', () => {
   });
 });
 
-describe('ZET\'s own alerts', () => {
-  it('sums alerts and cancelled trips over the window; null when both columns are entirely missing, never a 0', () => {
+describe('ZET\'s own alerts (v3: the most in one minute of the strike, never a sum of minutes)', () => {
+  it('is the maximum inside the strike window; null when it has no known value, never a 0', () => {
     const s = blank();
     expect(feedAlerts(s)).toBeNull();
-    s.feed.alerts[5] = 0;
-    expect(feedAlerts(s)).toEqual({ alerts: 0, cancelled: 0, hours: 112 });
-    s.feed.alerts[6] = 3;
-    s.feed.cancelledTrips[7] = 2;
-    expect(feedAlerts(s)).toEqual({ alerts: 3, cancelled: 2, hours: 112 });
+    const m = (sec: number): number => (sec - T0) / 60;
+    s.feed.alerts[m(STRIKE_FROM_SEC) + 5] = 0;
+    expect(feedAlerts(s)).toMatchObject({ alerts: 0, cancelled: 0, episode: null });
+    // One alert standing for a day is one alert, not 1,440.
+    fillRange(s.feed.alerts, m(STRIKE_FROM_SEC) + 10, m(STRIKE_FROM_SEC) + 1450, 1);
+    s.feed.cancelledTrips[m(STRIKE_FROM_SEC) + 20] = 2;
+    expect(feedAlerts(s)).toMatchObject({ alerts: 1, cancelled: 2 });
   });
-  it('the hero leaves the alerts tile out (not zero) without the columns, and has five tiles with them', () => {
-    const s = blank();
-    expect(heroTiles(s, null).map((t) => t.key)).toEqual(['silent', 'peak', 'bikes', 'return']);
-    s.feed.cancelledTrips[0] = 1;
-    const tiles = heroTiles(s, null);
-    expect(tiles.map((t) => t.key)).toEqual(['silent', 'peak', 'bikes', 'return', 'alerts']);
-    expect(tiles[4]!.value).toBe('0');
-    expect(tiles[4]!.sub).toBe('0 upozorenja i 1 otkazanih vožnji u 112 sati snimke');
+  it('a strike-shaped series reads 0 and 0 in the strike, and the episode after it on its own', () => {
+    const s = buildWindowSeries();
+    const r = feedAlerts(s)!;
+    expect([r.alerts, r.cancelled]).toEqual([0, 0]);
+    // The fixture's normal days carry two alerts 07:00 to 09:00 on Thursday and Friday: the first is the longest.
+    expect(r.episode).toEqual({ fromSec: zg(10, 1, 7, 0), toSec: zg(10, 1, 9, 0), alerts: 2, cancelled: 1, toEnd: false });
+    const card = renderCards(s).querySelector('[data-card="zet"]')!;
+    const lines = [...card.querySelectorAll('.sn-card-lines li')].map((li) => li.textContent);
+    expect(lines[0]).toBe(SN.reckoning.zetAlerts);
+    expect(lines).toContain('U četvrtak 1. 10. od 07:00 do 09:00 u podacima je stajalo do 2 upozorenja s otkazanim vožnjama.');
+    expect(lines.some((l) => /^\d+ h( \d+ min)? ZET nije slao nijedno vozilo \(pon 18:42 do uto \d\d:\d\d\)$/.test(l!))).toBe(true);
+    // An episode that runs to the end of the recording says so.
+    const end = buildWindowSeries();
+    fillRange(end.feed.alerts, end.n - 200, end.n, 3);
+    expect(feedAlerts(end)!.episode).toMatchObject({ toEnd: true, alerts: 3, toSec: end.t0 + end.n * 60 });
   });
-  it('renderHero removes the alerts tile from the page when the series has no such column', () => {
+  it('the tiles have no alerts tile, and renderHero removes a v2 alerts or peak tile and binds the seek', () => {
     const win = new Window({ url: 'http://localhost/snimka/' });
     const doc = win.document as unknown as Document;
     doc.body.innerHTML = '<div data-sn="kpis" aria-busy="true">' + ['silent', 'peak', 'bikes', 'return', 'alerts'].map((k) => `<div class="st-kpi" data-sn="kpi-${k}"></div>`).join('') + '</div>';
-    renderHero(doc, blank(), null);
-    expect(doc.querySelectorAll('.st-kpi')).toHaveLength(4);
+    const seeks: number[] = [];
+    renderHero(doc, buildWindowSeries(), null, null, (t) => seeks.push(t));
+    expect(doc.querySelectorAll('.st-kpi')).toHaveLength(3);
     expect(doc.querySelector('[data-sn="kpi-alerts"]')).toBeNull();
     expect(doc.querySelector('[data-sn="kpis"]')!.hasAttribute('aria-busy')).toBe(false);
-  });
-  it('the alerts card says the sums, or "bez podatka" without the columns', () => {
-    const s = blank();
-    expect(renderCards(s).querySelector('[data-card="alerts"] .st-empty')!.textContent).toBe('bez podatka');
-    s.feed.alerts[0] = 4;
-    s.feed.cancelledTrips[1] = 2;
-    const card = renderCards(s).querySelector('[data-card="alerts"]')!;
-    expect(card.querySelector('dd')!.textContent).toBe('4 upozorenja, 2 otkazanih vožnji');
-    expect(card.querySelector('.st-method')!.textContent).toContain('zbrojeni po minutama');
+    const buttons = [...doc.querySelectorAll<HTMLButtonElement>('.sn-kpi-button')];
+    expect(buttons).toHaveLength(3);
+    expect(buttons.every((b) => b.type === 'button' && b.textContent!.includes('Pokaži u snimci'))).toBe(true);
+    buttons[2]!.click();
+    expect(seeks).toEqual([returnDuration(buildWindowSeries())!.fromSec]);
+    // A tile without a moment is plain text, never a button that seeks nowhere.
+    doc.body.innerHTML = '<div data-sn="kpis"><div data-sn="kpi-silent"></div><div data-sn="kpi-bikes"></div><div data-sn="kpi-return"></div></div>';
+    renderHero(doc, blank(), null);
+    expect(doc.querySelectorAll('.sn-kpi-button')).toHaveLength(0);
+    expect(doc.querySelector('[data-sn="kpi-silent"] .st-kpi-value')!.textContent).toBe('bez podatka');
   });
 });
 
-describe('the Monday tile against the weekday-matched normal day', () => {
-  it('names Mon 21 Sep and reads its 07:45', () => {
-    const series = buildWindowSeries();
-    const monday = buildComparisonSeries(SNIMKA_COMPARISONS[1]);
-    const thursday = buildComparisonSeries(SNIMKA_COMPARISONS[0]);
-    const peak = heroTiles(series, thursday, { series: monday, fromSec: SNIMKA_COMPARISONS[1].fromSec }).find((t) => t.key === 'peak')!;
-    const normal = monday.seen.all[(SNIMKA_COMPARISONS[1].fromSec + 7 * 3600 + 45 * 60 - monday.t0) / 60]!;
-    expect(peak.sub).toBe(`pon 21. 9., običan dan u isto doba: ${normal}`);
-    expect(SN.kpi.peakDaySub).toContain('{day}');
+describe('the six cards', () => {
+  it('are, in order: silent, mornings, lines, ghosts, ZET, return; each with its method line', () => {
+    const comparisons = SNIMKA_COMPARISONS.map((c) => ({ id: c.id, fromSec: c.fromSec, series: buildComparisonSeries(c) })).sort((a, b) => a.fromSec - b.fromSec);
+    const root = renderCards(buildWindowSeries(), { routes: buildRoutes(), comparisons });
+    const cards = [...root.querySelectorAll<HTMLElement>('.st-card')];
+    expect(cards.map((c) => c.dataset.card)).toEqual(['silent', 'mornings', 'lines', 'ghosts', 'zet', 'return']);
+    expect(cards.map((c) => c.querySelector('h3')!.textContent)).toEqual(['Tri dana gotovo bez vozila', 'Pet jutara u 07:45', 'Što je vozilo', 'Broj koji nije bio točan', 'Što je ZET javio u podacima', 'Povratak']);
+    for (const c of cards) expect(c.querySelector('.st-method')!.textContent).not.toBe('');
   });
-  it('the peak card lists the five mornings and both normal days', () => {
+  it('the silent card: bars Monday to Wednesday, and the days after it in one line', () => {
+    const card = renderCards(buildWindowSeries()).querySelector('[data-card="silent"]')!;
+    expect([...card.querySelectorAll('.st-bar-label')].map((l) => l.textContent)).toEqual(['pon 28. 9.', 'uto 29. 9.', 'sri 30. 9.']);
+    expect(card.querySelector('.sn-card-lines')!.textContent).toBe('čet i pet: 0 min');
+  });
+  it('the mornings card: vehicles with both normal days, and empty stations with Thursday and Friday', () => {
     const series = buildWindowSeries();
     const comparisons = SNIMKA_COMPARISONS.map((c) => ({ id: c.id, fromSec: c.fromSec, series: buildComparisonSeries(c) })).sort((a, b) => a.fromSec - b.fromSec);
-    const card = renderCards(series, { comparisons }).querySelector('#vidjelo-jutra')!;
-    expect(card.querySelector('h3')!.textContent).toBe('Jutra u 07:45');
-    const labels = [...card.querySelectorAll('.st-bar-label')].map((l) => l.textContent);
-    expect(labels).toEqual(['pon 28. 9.', 'uto 29. 9.', 'sri 30. 9.', 'čet 1. 10.', 'pet 2. 10.', 'pon 21. 9., običan dan', 'čet 24. 9., običan dan']);
+    const card = renderCards(series, { comparisons }).querySelector('[data-card="mornings"]')!;
+    const cols = [...card.querySelectorAll('.sn-card-col')];
+    expect(cols.map((c) => c.querySelector('h4')!.textContent)).toEqual(['Vozila u pokretu', 'Prazne stanice BAJS-a']);
+    expect([...cols[0]!.querySelectorAll('.st-bar-label')].map((l) => l.textContent)).toEqual(['pon 28. 9.', 'uto 29. 9.', 'sri 30. 9.', 'čet 1. 10.', 'pet 2. 10.', 'pon 21. 9., običan dan', 'čet 24. 9., običan dan']);
+    const rows = mornings(series);
+    expect([...cols[1]!.querySelectorAll('.st-bar-value')].map((v) => v.textContent)).toEqual(rows.map((r) => String(r.empty)));
+    expect(cols[1]!.querySelectorAll('.sn-card-bar-normal')).toHaveLength(2);
+  });
+  it('the return card: trams and buses as shares of their timetable on one % scale, Wed 18:00 to 22:00', () => {
+    const series = buildWindowSeries();
+    const r = returnShares(series);
+    expect(r.tram).toHaveLength(240);
+    expect(r.fromSec).toBe(zg(9, 30, 18, 0));
+    const m = (zg(9, 30, 21, 0) - series.t0) / 60;
+    expect(r.tram[180]).toBeCloseTo((series.seen.tram[m]! / series.expected.tram[m]!) * 100, 0);
+    const card = renderCards(series).querySelector('[data-card="return"]')!;
+    expect(card.querySelector('.st-legend')!.textContent).toBe('TramvajiAutobusi');
+    expect(card.querySelector('.sn-scale')!.textContent).toMatch(/^\d+ %$/);
+    expect(card.querySelectorAll('.st-table tbody tr')).toHaveLength(8);
   });
 });
 
@@ -459,12 +513,23 @@ describe('linesByDay', () => {
     expect(r[0]!.count).toBe(0);
     expect(r[0]!.total).toBe(4);
   });
-  it('the card names the days and lists Monday\'s lines on the fixture', () => {
+  it('with a span, only the slots inside it count (v3: Mon 03:30 to Wed 18:00)', () => {
+    const f = file((i, j) => (i === 1 && j < 42 ? [1, 1] : [0, 1])); // 17 runs only before 03:30 on Monday
+    expect(linesByDay(f)[0]!.shortNames).toEqual(['17']);
+    expect(linesByDay(f, { from: STRIKE_FROM_SEC, to: LINES_TO_SEC })[0]!.count).toBe(0);
+  });
+  it('linesRan: a vehicle in at least one slot of the strike, against every line of the file, with the single-vehicle ones', () => {
+    const r = linesRan(file((i, j) => {
+      if (i === 0) return [j < 42 ? 3 : 0, 4]; // 6: only before 03:30
+      if (i === 1) return [j === 100 ? 1 : 0, 4]; // 17: one vehicle once
+      if (i === 2) return [j > 120 ? 4 : 0, 2]; // 228: four
+      return [ROUTES_MISSING, ROUTES_MISSING];
+    }));
+    expect(r).toMatchObject({ count: 2, total: 4, single: 1 });
+    expect(r.lines.map((l) => l.shortName)).toEqual(['17', '228']);
     const card = renderCards(buildWindowSeries(), { routes: buildRoutes() }).querySelector('[data-card="lines"]')!;
-    expect(card.querySelector('h3')!.textContent).toBe('Što je vozilo');
-    expect(card.querySelectorAll('.st-bar')).toHaveLength(6);
-    const monday = card.querySelector('dd')!.textContent!;
-    expect(monday).toMatch(/^\d+ linij[ae]: /);
+    const fixture = linesRan(buildRoutes());
+    expect(card.querySelector('.sn-figure-value')!.textContent).toBe(`${fixture.count} od ${fixture.total} linije; ${fixture.single} od njih jednim vozilom`); // 32: the "few" form
     expect(card.querySelector('.st-method')!.textContent).toContain('petominutnom');
   });
 });

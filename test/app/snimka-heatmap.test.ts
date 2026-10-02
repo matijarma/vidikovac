@@ -1,16 +1,19 @@
 // The heatmap "Sve linije, svaki sat" (app/src/snimka/heatmap.ts): an hour's
 // cell is the mean of its ratios min(1, seen/expected), the same rule as
-// route-series.ts hourMeans; an hour with nothing scheduled is hatched, an
-// hour with nothing recorded blank (never a zero); trams, then the bus lines
-// that ran in the strike, then one aggregate row of the rest; the table twin
-// has one row per line and one column per day; a row's button sets the subject.
+// route-series.ts hourMeans; v3: an hour with nothing scheduled is the plain
+// page (no rect), an hour with nothing recorded hatched (never a zero); trams,
+// then the bus lines that ran in the strike (at least six samples with a
+// vehicle), then one aggregate row of the rest; the table twin has one row per
+// line and one column per day; a row's button sets the subject; the ramp's
+// tokens are the validated ones and the phone fit is in the sheet.
+import { readFileSync } from 'node:fs';
 import { Window } from 'happy-dom';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { RoutesFile } from '../../shared/snimka';
 import { encodeBase64, ROUTES_MISSING } from '../../shared/snimka-codec';
 import { createReplayClock } from '../../app/src/snimka/clock';
 import { createViewStore, type SnimkaContext } from '../../app/src/snimka/context';
-import { cellText, dayTable, heatmapModel, hourCells, mountHeatmap, rampStep } from '../../app/src/snimka/heatmap';
+import { STRIKE_MIN_SAMPLES, cellText, dayTable, heatmapModel, hourCells, mountHeatmap, rampStep } from '../../app/src/snimka/heatmap';
 import { hourMeans } from '../../app/src/snimka/route-series';
 import { MARKS, buildRoutes } from '../../e2e/snimka-fixtures';
 
@@ -82,6 +85,19 @@ describe('heatmapModel', () => {
     expect(m.aggregate!.cells).toEqual([0]);
     expect(m.aggregate!.expected).toEqual([4]);
   });
+  it('a bus line gets its own row only with a vehicle in at least six samples of the strike (a stray run folds into the aggregate)', () => {
+    expect(STRIKE_MIN_SAMPLES).toBe(6);
+    const row = (n: number): number[] => [...new Array<number>(n).fill(1), ...new Array<number>(12 - n).fill(0)];
+    const f = file([
+      { id: '6', type: 0, seen: twelve(0), expected: twelve(1) },
+      { id: '300', type: 3, seen: row(6), expected: twelve(1) },
+      { id: '301', type: 3, seen: row(5), expected: twelve(1) },
+      { id: '302', type: 3, seen: [ROUTES_MISSING, ...row(5).slice(1)], expected: twelve(1) },
+    ]);
+    const m = heatmapModel(f, { from: f.t0, to: f.t0 + 3600 });
+    expect(m.strike.map((r) => r.id)).toEqual(['300']);
+    expect(m.others.map((r) => r.id)).toEqual(['301', '302']);
+  });
 });
 
 describe('ramp, tip and table twin', () => {
@@ -92,9 +108,9 @@ describe('ramp, tip and table twin', () => {
     const model = heatmapModel(routes);
     const row = model.strike.find((r) => r.id === '228')!;
     const h = Math.floor((MARKS.line228 + 2.5 * 3600 - model.t0) / 3600);
-    expect(cellText(model, row, h)).toMatch(/^linija 228, uto 29\. 9\. u 12 h: \d+ od \d+$/);
+    expect(cellText(model, row, h)).toMatch(/^linija 228, uto 29\. 9\. u 12 h: \d+ od \d+ vozila$/);
     const hatched = { ...row, cells: row.cells.map(() => 'off' as const) };
-    expect(cellText(model, hatched, h)).toBe('linija 228, uto 29. 9. u 12 h: ne vozi po voznom redu');
+    expect(cellText(model, hatched, h)).toBe('linija 228, uto 29. 9. u 12 h: u to doba ne vozi');
     const blank = { ...row, cells: row.cells.map(() => null) };
     expect(cellText(model, blank, h)).toBe('linija 228, uto 29. 9. u 12 h: bez podatka');
   });
@@ -104,7 +120,7 @@ describe('ramp, tip and table twin', () => {
     expect(t.head).toEqual(['Linija', 'ned 27. 9.', 'pon 28. 9.', 'uto 29. 9.', 'sri 30. 9.', 'čet 1. 10.', 'pet 2. 10.']);
     expect(t.body).toHaveLength(22);
     expect(t.body[0]![0]).toBe(model.trams[0]!.label);
-    expect(t.body.every((r) => r.slice(1).every((c) => /^\d+ %$|^ne vozi po voznom redu$|^bez podatka$/.test(c)))).toBe(true);
+    expect(t.body.every((r) => r.slice(1).every((c) => /^\d+ %$|^u to doba ne vozi$|^bez podatka$/.test(c)))).toBe(true);
   });
 });
 
@@ -136,9 +152,14 @@ describe('mountHeatmap', () => {
     const svgs = root.querySelectorAll('svg.sn-hm-svg');
     expect(svgs).toHaveLength(2);
     const model = heatmapModel(routes);
-    const known = [...model.trams, ...model.strike, model.aggregate!].reduce((a, r) => a + r.cells.filter((c) => c !== null).length, 0);
-    expect(svgs[0]!.querySelectorAll('rect:not(.sn-hm-hatch-bg)')).toHaveLength(known);
-    expect(svgs[0]!.querySelectorAll('rect.sn-hm-off').length).toBeGreaterThan(0);
+    const rows = [...model.trams, ...model.strike, model.aggregate!];
+    // Not scheduled is the plain page (no rect); missing is the hatch; a zero is the pale silent wash (step 0).
+    const drawn = rows.reduce((a, r) => a + r.cells.filter((c) => c !== 'off').length, 0);
+    expect(svgs[0]!.querySelectorAll('rect:not(.sn-hm-hatch-bg)')).toHaveLength(drawn);
+    expect(svgs[0]!.querySelectorAll('rect.sn-hm-off')).toHaveLength(0);
+    expect(svgs[0]!.querySelectorAll('rect.sn-hm-none')).toHaveLength(rows.reduce((a, r) => a + r.cells.filter((c) => c === null).length, 0));
+    expect(svgs[0]!.querySelectorAll('rect.sn-hm-c0')).toHaveLength(rows.reduce((a, r) => a + r.cells.filter((c) => c === 0).length, 0));
+    expect(root.querySelector('.sn-hm-legend')!.textContent).toContain('udio voznog reda');
     expect(root.querySelectorAll('.sn-hm-more summary')[0]!.textContent).toBe('Prikaži sve autobusne linije');
     expect(root.querySelectorAll('details.st-table')).toHaveLength(1);
     root.querySelector<HTMLButtonElement>('.sn-hm-row[data-route="228"]')!.click();
@@ -148,5 +169,27 @@ describe('mountHeatmap', () => {
     expect(x).toBeCloseTo((MARKS.wednesday0745 - routes.t0) / 3600 / 112, 4);
     off();
     expect(root.querySelector('[data-sn-heatmap]')).toBeNull();
+  });
+});
+
+describe('the ramp and the phone fit in the sheet', () => {
+  const css = readFileSync(new URL('../../app/src/ui/snimka-report.css', import.meta.url), 'utf8');
+  const panels = readFileSync(new URL('../../app/src/ui/snimka-panels.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  it('lives in snimka-report.css (moved out of the panel sheet)', () => {
+    expect(panels).not.toMatch(/\.sn-hm[\s{.-]/);
+    expect(css).toContain('.sn-hm {');
+  });
+  it('0 is the silent tone washed at 30 %, 1 to 4 brand blue at 56 / 71 / 86 / 100 % over the page surface (the validated steps)', () => {
+    expect(css).toContain('--sn-hm-c0: color-mix(in oklab, var(--tone-state-danger) 30%, var(--tone-surface-1))');
+    for (const [i, p] of [[1, 56], [2, 71], [3, 86]] as const) expect(css).toContain(`--sn-hm-c${i}: color-mix(in oklab, var(--tone-action-brand) ${p}%, var(--tone-surface-1))`);
+    expect(css).toContain('--sn-hm-c4: var(--tone-action-brand)');
+  });
+  it('on a phone the grid fits the width: a 36 px label column, 16 px rows, the plot shrinking to the rest', () => {
+    const phone = /@container sn-hm \(max-width: 40rem\) \{([\s\S]*?)\n\}/.exec(css)![1]!;
+    expect(phone).toContain('--sn-hm-label-w: 2.25rem; grid-template-columns: var(--sn-hm-label-w) minmax(0, 1fr)');
+    expect(phone).toContain('grid-auto-rows: 1rem');
+    expect(phone).toContain('.sn-hm-row { display: none; }');
+    // Desktop rows stay 24 px (decision S-22).
+    expect(css).toContain('--sn-hm-row-h: 1.5rem');
   });
 });

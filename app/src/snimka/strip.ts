@@ -1,34 +1,36 @@
-// Tijek: small multiples on one shared 112-hour axis (the window of the
-// contract), one cursor that
-// follows the replay clock, and a readout line of real text. Curves are
-// inline SVG paths drawn once at mount (viewBox in minutes, strokes that do
-// not scale); bands and marks are HTML spans placed by percent. Per frame the
-// strip only moves its cursors (a transform each, no layout read); the
-// readout changes on pause and seek only, so a playing replay never floods a
-// screen reader. A pointer press on a plot pauses and seeks, dragging keeps
-// seeking; hovering shows the values at the pointer without moving anything.
-//
-// Every panel says what it draws in words (a legend with a mark beside each
-// word) and carries its numbers in a table, "Brojevi po satu". The fleet
-// panel carries trams and buses as two sub-plots, the weather has its own
-// plot, ZET's data panel adds the depot lane and the future-stamp ticks, the
-// frozen lane reads feed.frozen (FROZEN_AFTER_S 180, S-19), and panel 7 is
-// the heatmap "Sve linije, svaki sat" (heatmap.ts). The normal day is the
-// weekday-matched comparison per minute (context.ts comparisonMinute, S-12).
+// Tijek (v3, decision V3-23): three charts on one shared axis (the window of
+// the contract), one cursor that follows the replay clock, and a readout line
+// of real text. "Vozila u pokretu" draws the seen line over the weekday-
+// matched normal day as a grey silhouette, with the service state as a tint
+// behind (a dashed top edge where it was computed afterwards) and a 6 px rug
+// under it for the minutes ZET sent no vehicle or its data did not change;
+// "Prazne stanice BAJS-a" draws the empty stations against Thursday
+// 1 October at the same time of day (the bikes' only normal day); the third
+// is the heatmap "Sve linije, svaki sat" (heatmap.ts). Curves are inline SVG
+// paths drawn once at mount (viewBox in minutes, strokes that do not scale);
+// tints and the rug are HTML spans placed by percent. Per frame the strip
+// only moves its cursors (a transform each, no layout read); the readout
+// changes on pause and seek only. A pointer press on a plot pauses and seeks,
+// dragging keeps seeking; hovering shows the values at the pointer. Every
+// chart carries its numbers in one table, "{title}: brojevi po satu".
 import { ZAGREB_OFFSET_S, type Col, type SeriesFile, type SnimkaState } from '../../../shared/snimka';
-import { columns, hideTip, showTip, tableDetails } from '../statistika/charts';
+import { hideTip, showTip, tableDetails } from '../statistika/charts';
 import { escapeHtml } from '../ui/dom/escape';
 import { comparisonFor, comparisonMinute as contextComparisonMinute, type SnimkaContext } from './context';
 import { mountHeatmap } from './heatmap';
 import { num, zagrebClock, zagrebDateTime, zagrebDay } from './format';
-import { FROZEN_AFTER_S, frozenAt, ghostSeries, midnightOf } from './reckoning';
+import { PLOT_H, areaPath, colMax, linePath, runsOf } from './paths';
+import { BIKES_REF_DAY_SEC, FROZEN_AFTER_S, bikeDrain, bikesOnThursday, frozenAt, midnightOf } from './reckoning';
 import { SN, fill } from './strings';
 
-/** The viewBox height of every curve; x runs in minutes. */
-export const PLOT_H = 100;
+export { PLOT_H, areaPath, columnsPath, linePath, runsOf, subpaths, type Run } from './paths';
+
 const MINUTE_MS = 60_000;
 const STEP_SMALL_MS = 10 * MINUTE_MS;
 const STEP_LARGE_MS = 60 * MINUTE_MS;
+const zg = (month: number, day: number, hour: number, minute = 0): number => Date.UTC(2026, month - 1, day, hour, minute) / 1000 - ZAGREB_OFFSET_S;
+/** The bikes chart is drawn to Wednesday 30 September 24:00; after it Thursday is the reference itself. */
+export const BIKES_TO_SEC = zg(10, 1, 0, 0);
 
 // ---- pure geometry ---------------------------------------------------------------
 
@@ -46,115 +48,35 @@ export function seekTime(fraction: number, startMs: number, endMs: number): numb
   return Math.min(endMs, Math.max(startMs, Math.round(t / MINUTE_MS) * MINUTE_MS));
 }
 
-/** Tenths of a viewBox unit, so relative steps never drift; values outside [0, max] stay on the plot's edges. */
-const tenths = (v: number, max: number): number => {
-  const share = max > 0 ? Math.min(1, Math.max(0, v / max)) : 0;
-  return Math.round((PLOT_H - share * PLOT_H) * 10);
-};
-const fmt = (t: number): string => String(t / 10);
-
-/** Relative steps through points one minute apart (dx 1 forward, -1 backward), runs of equal values as `h`. */
-function stepsOf(ys: readonly number[], dx: 1 | -1): string {
-  let d = '';
-  let flat = 0;
-  for (let k = 1; k < ys.length; k++) {
-    const dy = ys[k]! - ys[k - 1]!;
-    if (dy === 0) { flat++; continue; }
-    if (flat > 0) d += `h${flat * dx}`;
-    flat = 0;
-    d += `l${dx} ${fmt(dy)}`;
-  }
-  if (flat > 0) d += `h${flat * dx}`;
-  return d;
-}
-
-const present = (v: number | null | undefined): v is number => v !== null && v !== undefined;
-
-/** The runs of present values, as [start, end) indices. */
-function presentRuns(values: readonly (number | null | undefined)[]): [number, number][] {
-  const out: [number, number][] = [];
-  let i = 0;
-  while (i < values.length) {
-    if (!present(values[i])) { i++; continue; }
-    const start = i;
-    while (i < values.length && present(values[i])) i++;
-    out.push([start, i]);
-  }
-  return out;
-}
-
-/**
- * A line through a minute column: x is the minute index (the viewBox starts at -0.5 so a minute's point sits at
- * its middle), y the value against `max`. A null is a gap: the line stops and starts again at the next value,
- * so missing is never drawn as zero. A lone value is a zero-length step, which the round cap draws as a dot.
- */
-export function linePath(values: readonly (number | null | undefined)[], max: number): string {
-  return presentRuns(values)
-    .map(([start, end]) => {
-      const ys = values.slice(start, end).map((v) => tenths(v!, max));
-      return `M${start} ${fmt(ys[0]!)}${end - start === 1 ? 'h0' : stepsOf(ys, 1)}`;
-    })
-    .join('');
-}
-
-/** The number of separate stretches a path draws (one per run of values between nulls). */
-export function subpaths(d: string): number {
-  return (d.match(/M/g) ?? []).length;
-}
-
-/** A filled silhouette from the baseline up to a column, gaps left open. */
-export function areaPath(values: readonly (number | null | undefined)[], max: number): string {
-  return presentRuns(values)
-    .map(([start, end]) => {
-      const ys = values.slice(start, end).map((v) => tenths(v!, max));
-      return `M${start - 0.5} ${PLOT_H}V${fmt(ys[0]!)}h0.5${stepsOf(ys, 1)}h0.5V${PLOT_H}Z`;
-    })
-    .join('');
-}
-
-/** Columns from the baseline, one minute wide, for the present values only (a null minute has no column). */
-export function columnsPath(values: readonly (number | null | undefined)[], max: number): string {
-  return presentRuns(values)
-    .map(([start, end]) => {
-      let d = `M${start - 0.5} ${PLOT_H}`;
-      let prev = -1;
-      let flat = 0;
-      for (let k = start; k < end; k++) {
-        const y = tenths(values[k]!, max);
-        if (y === prev) { flat++; continue; }
-        if (flat > 0) d += `h${flat}`;
-        flat = 0;
-        d += `V${fmt(y)}h1`;
-        prev = y;
-      }
-      if (flat > 0) d += `h${flat}`;
-      return `${d}V${PLOT_H}Z`;
-    })
-    .join('');
-}
-
 export type StateClass = SnimkaState | 'none';
-export interface Run<T extends string> { cls: T; from: number; to: number }
-
-/** Consecutive minutes of one class, as [from, to) minute indices. */
-export function runsOf<T extends string>(n: number, classOf: (m: number) => T | null): Run<T>[] {
-  const out: Run<T>[] = [];
-  let cur: Run<T> | null = null;
-  for (let m = 0; m < n; m++) {
-    const cls = classOf(m);
-    if (cur && cls === cur.cls) { cur.to = m + 1; continue; }
-    if (cur) out.push(cur);
-    cur = cls === null ? null : { cls, from: m, to: m + 1 };
-  }
-  if (cur) out.push(cur);
-  return out;
-}
 
 /** The class of a minute on the service band: its state where the machine judged it, "none" where it held. */
 export function stateClass(s: SeriesFile, m: number): StateClass {
   const state = s.service.state[m];
   if (state === null || state === undefined || s.service.hold[m] !== null) return 'none';
   return state;
+}
+
+/** The tint behind the fleet chart: the two states that are the story (silent, reduced); "bez procjene", unknown and
+ *  normal draw nothing (no hatch, decision V3-23). */
+export function tintClass(s: SeriesFile, m: number): 'silent' | 'reduced' | null {
+  const c = stateClass(s, m);
+  return c === 'silent' || c === 'reduced' ? c : null;
+}
+
+/** The tint's runs as [from, to) minute indices, each marked when it lies before the state was published live
+ *  (`retro`: the dashed top edge "izračunano naknadno"); a run that crosses the moment is split there. */
+export function tintRuns(s: SeriesFile, serviceLiveFromSec: number): { cls: 'silent' | 'reduced'; from: number; to: number; retro: boolean }[] {
+  const liveFrom = Math.max(0, Math.min(s.n, Math.ceil((serviceLiveFromSec - s.t0) / 60)));
+  return runsOf(s.n, (m) => {
+    const c = tintClass(s, m);
+    return c === null ? null : `${c}${m < liveFrom ? '-retro' : ''}`;
+  }).map((r) => ({ cls: r.cls.replace('-retro', '') as 'silent' | 'reduced', from: r.from, to: r.to, retro: r.cls.endsWith('-retro') }));
+}
+
+/** The rug under the fleet chart: the minutes in which ZET's data carried no vehicle or did not change (S-19). */
+export function rugRuns(s: SeriesFile): { from: number; to: number }[] {
+  return runsOf<'on'>(s.n, (m) => (s.feed.entities[m] === 0 || frozenMinute(s, m) === true ? 'on' : null)).map(({ from, to }) => ({ from, to }));
 }
 
 export function isFrozen(age: number | null | undefined): boolean {
@@ -166,6 +88,32 @@ export function dayLines(startMs: number, endMs: number): { at: number; x: numbe
   const out: { at: number; x: number }[] = [];
   for (let d = midnightOf(startMs / 1000) * 1000 + 86_400_000; d < endMs; d += 86_400_000) out.push({ at: d, x: cursorFraction(d, startMs, endMs) });
   return out;
+}
+
+/** The empty BAJS stations per window minute up to Wednesday 24:00, and the same time of day on Thursday 1 October
+ *  as the reference (null outside that span and where the recording has nothing). */
+export function bikesColumns(s: SeriesFile, toSec: number = BIKES_TO_SEC): { now: (number | null)[]; thu: (number | null)[] } {
+  const now: (number | null)[] = new Array<number | null>(s.n).fill(null);
+  const thu: (number | null)[] = new Array<number | null>(s.n).fill(null);
+  if (!s.bikes) return { now, thu };
+  for (let m = 0; m < s.n; m++) {
+    const sec = s.t0 + m * 60;
+    if (sec >= toSec) break;
+    now[m] = s.bikes.empty[m] ?? null;
+    thu[m] = bikesOnThursday(s, sec);
+  }
+  return { now, thu };
+}
+
+/** The most empty stations on each strike day (Mon, Tue, Wed) and on Thursday 1 October, for the bikes headline. */
+export function bikesHeadline(s: SeriesFile): string | null {
+  const r = bikeDrain(s);
+  if (!r) return null;
+  const at = (day: number): number | null => r.byDay.find((d) => d.day === day)?.maxEmpty ?? null;
+  const days = [zg(9, 28, 0, 0), zg(9, 29, 0, 0), zg(9, 30, 0, 0), BIKES_REF_DAY_SEC].map(at);
+  if (days.every((d) => d === null)) return null;
+  const t = (v: number | null): string => (v === null ? SN.strip.noValue : num(v));
+  return fill(SN.strip.bikesHeadline, { mon: t(days[0]!), tue: t(days[1]!), wed: t(days[2]!), thu: t(days[3]!) });
 }
 
 // ---- values at an instant ----------------------------------------------------------
@@ -212,37 +160,33 @@ export interface ReadoutInput {
   compareCol?: readonly (number | null)[] | null;
 }
 
-/** The values of every panel at an instant, as words: "u pokretu 5, po voznom redu 230, ...". */
+/** The values of the three charts at an instant, as words: "u pokretu 5, po voznom redu 230, običan dan 321, ...". */
 export function readoutValues(o: ReadoutInput, tMs: number): string[] {
   const s = o.series;
   const m = minuteAt(s, tMs);
   const nv = SN.strip.noValue;
+  const S = SN.strip;
   const n = (label: string, v: number | null): string => `${label} ${v === null ? nv : num(v)}`;
-  const out = [n(SN.strip.fleetSeen, value(s.seen.all, m)), n(SN.strip.fleetExpected, value(s.expected.all, m))];
-  if (o.compare && o.compareCol) out.push(n(SN.strip.fleetCompare, o.compareCol[m] ?? null));
+  const out = [n(S.fleetSeen, value(s.seen.all, m)), n(S.fleetExpected, value(s.expected.all, m))];
+  if (o.compare && o.compareCol) out.push(n(S.fleetNormal, o.compareCol[m] ?? null));
   else if (o.compare && o.comparison) {
     const cm = comparisonMinute(o.comparison, tMs);
-    out.push(n(SN.strip.fleetCompare, cm === null ? null : value(o.comparison.seen.all, cm)));
+    out.push(n(S.fleetNormal, cm === null ? null : value(o.comparison.seen.all, cm)));
   }
   const cls = stateClass(s, m);
-  const retro = s.t0 + m * 60 < o.serviceLiveFromSec ? ` (${SN.strip.stateRetro})` : '';
-  out.push(`${lowerFirst(SN.strip.state)}: ${cls === 'none' ? SN.strip.stateNone : lowerFirst(STATE_WORD[cls])}${retro}`);
+  const retro = s.t0 + m * 60 < o.serviceLiveFromSec ? ` (${SN.timeline.retro})` : '';
+  out.push(`${lowerFirst(SN.badge.label)}: ${cls === 'none' ? S.stateNone : lowerFirst(STATE_WORD[cls])}${retro}`);
   if (s.bikes) {
-    out.push(n(lowerFirst(SN.strip.bikes), value(s.bikes.total, m)));
-    out.push(n(lowerFirst(SN.strip.bikesEmpty), value(s.bikes.empty, m)));
+    const sec = s.t0 + m * 60;
+    out.push(n(lowerFirst(S.bikesEmpty), value(s.bikes.empty, m)));
+    if (sec < BIKES_TO_SEC) out.push(n(S.bikesRef, bikesOnThursday(s, sec)));
   }
   const entities = value(s.feed.entities, m);
   const age = value(s.feed.headerAgeS, m);
-  if (entities === null && age === null) out.push(`${SN.strip.feed} ${nv}`);
+  if (entities === null && age === null) out.push(`${S.feed} ${nv}`);
   else {
-    if (entities === 0) out.push(`${SN.strip.feed} ${SN.strip.feedEmpty}`);
-    if (frozenMinute(s, m)) out.push(`${SN.strip.feed} ${SN.strip.feedFrozen}`);
-  }
-  if (s.published) out.push(n(SN.strip.productScreen, value(s.published.vehicles, m)));
-  const pulse = s.hourly.newsPulse;
-  if (pulse) {
-    const h = Math.floor((tMs / 1000 - s.hourly.t0) / 3600);
-    out.push(n(lowerFirst(SN.strip.news), h >= 0 && h < pulse.length ? (pulse[h] ?? null) : null));
+    if (entities === 0) out.push(`${S.feed} ${S.feedEmpty}`);
+    if (frozenMinute(s, m)) out.push(`${S.feed} ${S.feedFrozen}`);
   }
   return out;
 }
@@ -255,7 +199,7 @@ export function readoutText(o: ReadoutInput, tMs: number): string {
 
 // ---- the DOM -------------------------------------------------------------------------
 
-type KeyKind = 'line' | 'area' | 'band' | 'hatch' | 'mark' | 'wash' | 'column';
+type KeyKind = 'line' | 'area' | 'band' | 'hatch' | 'retro' | 'rug';
 interface LegendItem { kind: KeyKind; tone: string; label: string; layer?: 'compare' }
 
 function legend(items: readonly LegendItem[]): HTMLElement {
@@ -292,18 +236,15 @@ function svg(n: number, paths: readonly { d: string; cls: string; layer?: string
   return el;
 }
 
-function bandSpans(runs: readonly Run<string>[], n: number, prefix: string): string {
-  return runs
-    .map((r) => `<span class="sn-seg ${prefix}-${r.cls}" style="--x:${(r.from / n).toFixed(5)};--w:${((r.to - r.from) / n).toFixed(5)}"></span>`)
-    .join('');
-}
+const span = (cls: string, from: number, to: number, n: number): string =>
+  `<span class="${cls}" style="--x:${(from / n).toFixed(5)};--w:${((to - from) / n).toFixed(5)}"></span>`;
 
 interface Plot { el: HTMLElement; cursor: HTMLElement; hover: HTMLElement }
 
 /** A plot box: the marks, the day lines, the scale label, the cursor and the hover line. */
-function plot(kind: string, inner: (Node | string)[], days: readonly { x: number }[], scale: string | null, height: 'tall' | 'short' | 'band' | 'lane'): Plot {
+function plot(kind: string, inner: (Node | string)[], days: readonly { x: number }[], scale: string | null): Plot {
   const el = document.createElement('div');
-  el.className = `sn-plot sn-plot-${height}`;
+  el.className = 'sn-plot sn-strip-plot';
   el.dataset.plot = kind;
   el.setAttribute('aria-hidden', 'true');
   const lines = days.map((d) => `<span class="sn-dayline" style="--x:${d.x.toFixed(5)}"></span>`).join('');
@@ -316,9 +257,9 @@ function plot(kind: string, inner: (Node | string)[], days: readonly { x: number
   return { el, cursor: el.querySelector<HTMLElement>('.sn-cursor')!, hover: el.querySelector<HTMLElement>('.sn-hover')! };
 }
 
-function panel(id: string, title: string, items: readonly LegendItem[] | null, plots: readonly HTMLElement[], table: HTMLElement, sub?: HTMLElement[]): HTMLElement {
+function panel(id: string, title: string, items: readonly LegendItem[] | null, body: readonly HTMLElement[], headline?: string | null): HTMLElement {
   const section = document.createElement('section');
-  section.className = 'sn-panel';
+  section.className = 'sn-panel sn-strip-chart';
   section.dataset.panel = id;
   const head = document.createElement('div');
   head.className = 'sn-panel-head';
@@ -328,25 +269,29 @@ function panel(id: string, title: string, items: readonly LegendItem[] | null, p
   h.textContent = title;
   section.setAttribute('aria-labelledby', h.id);
   head.append(h);
+  if (headline) {
+    const p = document.createElement('p');
+    p.className = 'sn-strip-headline';
+    p.textContent = headline;
+    head.append(p);
+  }
   if (items) head.append(legend(items));
-  section.append(head, ...plots, ...(sub ?? []), table);
+  section.append(head, ...body);
   return section;
 }
 
-const hourRows = <T,>(s: SeriesFile, row: (m: number, hourSec: number) => T[]): (string | T)[][] => {
+const hourRows = <T,>(s: SeriesFile, row: (m: number, hourSec: number) => T[], toSec = Infinity): (string | T)[][] => {
   const rows: (string | T)[][] = [];
   for (let m = 0; m < s.n; m += 60) {
     const sec = s.t0 + m * 60;
+    if (sec >= toSec) break;
     rows.push([zagrebDateTime(sec * 1000), ...row(m, sec)]);
   }
   return rows;
 };
 const cell = (v: number | null | undefined): string => (v === null || v === undefined ? SN.strip.noValue : num(v));
-const colMax = (...cols: (readonly (number | null | undefined)[] | null | undefined)[]): number => {
-  let max = 0;
-  for (const c of cols) if (c) for (const v of c) if (v !== null && v !== undefined && v > max) max = v;
-  return max;
-};
+const table = (title: string, head: readonly string[], rows: readonly (readonly string[])[]): HTMLElement =>
+  tableDetails(fill(SN.strip.tableCaption, { title }), head, rows, fill(SN.strip.tableCaption, { title }));
 
 export interface StripHandle {
   /** Moves the cursors to an instant (the frame loop's callback). */
@@ -361,9 +306,9 @@ export interface StripHandle {
 /** Builds Tijek into its slot. The clock and the layers are wired by mountStrip. */
 export interface StripOptions {
   series: SeriesFile; comparison: SeriesFile | null; startMs: number; endMs: number; serviceLiveFromSec: number; compare: boolean; onSeek: (tMs: number) => void;
-  /** The weekday-matched normal day per window minute, for all vehicles, trams and buses (comparisonColumn); the one comparison series otherwise. */
-  compareCols?: { all: readonly (number | null)[]; tram: readonly (number | null)[]; bus: readonly (number | null)[] } | null;
-  /** Panel 7 (the heatmap), built by the caller into the element it is given. */
+  /** The weekday-matched normal day per window minute (comparisonColumn); `tram` and `bus` are no longer drawn (v3). */
+  compareCols?: { all: readonly (number | null)[]; tram?: readonly (number | null)[]; bus?: readonly (number | null)[] } | null;
+  /** The heatmap, built by the caller into the element it is given. */
   lines?: ((host: HTMLElement) => void) | null;
 }
 
@@ -377,8 +322,13 @@ export function renderStrip(root: HTMLElement, o: StripOptions): StripHandle {
   let compare = o.compare;
   /** A missing count while ZET's data stood still says so; "bez podatka" is kept for a true gap. */
   const seenCell = (m: number): string => (s.seen.all[m] === null && frozenAt(s, m) ? SN.reckoning.feedFrozen : cell(s.seen.all[m]));
+  const stateWord = (m: number): string => {
+    const cls = stateClass(s, m);
+    const word = cls === 'none' ? S.stateNone : STATE_WORD[cls];
+    return s.t0 + m * 60 < o.serviceLiveFromSec ? `${word}, ${SN.timeline.retro}` : word;
+  };
 
-  // 1. Vehicles in motion: seen (the line that matters), the timetable as a grey silhouette, the normal day as a grey line.
+  // 1. Vehicles in motion: the seen line over the normal day's silhouette, the state as a tint behind, the rug under.
   const compareCol: (number | null)[] = o.compareCols ? [...o.compareCols.all] : new Array(n).fill(null);
   if (!o.compareCols && o.comparison) {
     for (let m = 0; m < n; m++) {
@@ -386,195 +336,56 @@ export function renderStrip(root: HTMLElement, o: StripOptions): StripHandle {
       compareCol[m] = cm === null ? null : (o.comparison.seen.all[cm] ?? null);
     }
   }
-  const fleetMax = colMax(s.seen.all, s.expected.all, compareCol);
-  const fleet = panel('fleet', S.fleet, [
+  const fleetMax = colMax(s.seen.all, compareCol);
+  const tints = tintRuns(s, o.serviceLiveFromSec);
+  const rug = rugRuns(s);
+  const [tintSilent, tintReduced] = S.fleetTint;
+  const fleetItems: LegendItem[] = [
     { kind: 'line', tone: 'sn-tone-seen', label: S.fleetSeen },
-    { kind: 'area', tone: 'sn-tone-expected', label: S.fleetExpected },
-    { kind: 'line', tone: 'sn-tone-compare', label: S.fleetCompare, layer: 'compare' },
-  ], [keep(plot('fleet', [svg(n, [
-    { d: areaPath(s.expected.all, fleetMax), cls: 'sn-area-expected' },
-    { d: linePath(compareCol, fleetMax), cls: 'sn-line-compare', layer: 'compare' },
-    { d: linePath(s.seen.all, fleetMax), cls: 'sn-line-seen' },
-  ])], days, num(fleetMax), 'tall'))], tableDetails(`${S.fleet}, ${S.table}`, [S.hour, S.fleetSeen, S.fleetExpected, S.fleetCompare, S.tram, S.bus], hourRows(s, (m) => [seenCell(m), cell(s.expected.all[m]), cell(compareCol[m]), cell(s.seen.tram[m]), cell(s.seen.bus[m])]), S.table),
-  // Trams and buses: two sub-plots, each on its own scale (never a second axis on one plot).
-  (['tram', 'bus'] as const).flatMap((mode) => {
-    const normal = o.compareCols ? o.compareCols[mode] : null;
-    const max = colMax(s.seen[mode], s.expected[mode], normal);
-    const title = document.createElement('p');
-    title.className = 'sn-subplot-title';
-    title.dataset.mode = mode;
-    title.textContent = mode === 'tram' ? S.tram : S.bus;
-    return [title, keep(plot(`fleet-${mode}`, [svg(n, [
-      { d: areaPath(s.expected[mode], max), cls: 'sn-area-expected' },
-      ...(normal ? [{ d: linePath(normal, max), cls: 'sn-line-compare', layer: 'compare' }] : []),
-      { d: linePath(s.seen[mode], max), cls: 'sn-line-seen' },
-    ])], days, num(max), 'short'))];
-  }));
+    { kind: 'area', tone: 'sn-tone-compare', label: S.fleetNormal, layer: 'compare' },
+    { kind: 'band', tone: 'sn-strip-tone-silent', label: tintSilent! },
+    { kind: 'band', tone: 'sn-strip-tone-reduced', label: tintReduced! },
+    ...(tints.some((t) => t.retro) ? [{ kind: 'retro' as const, tone: 'sn-strip-tone-retro', label: SN.timeline.retro }] : []),
+    { kind: 'rug', tone: 'sn-strip-tone-rug', label: SN.timeline.rug },
+  ];
+  const fleetPlot = keep(plot('fleet', [
+    `<div class="sn-strip-tints">${tints.map((t) => span(`sn-strip-tint sn-strip-tint-${t.cls}${t.retro ? ' sn-strip-tint-retro' : ''}`, t.from, t.to, n)).join('')}</div>`,
+    svg(n, [
+      { d: areaPath(compareCol, fleetMax), cls: 'sn-area-compare', layer: 'compare' },
+      { d: linePath(s.seen.all, fleetMax), cls: 'sn-line-seen' },
+    ]),
+  ], days, num(fleetMax)));
+  const rugEl = document.createElement('div');
+  rugEl.className = 'sn-strip-rug';
+  rugEl.dataset.runs = String(rug.length);
+  rugEl.setAttribute('aria-hidden', 'true');
+  rugEl.innerHTML = rug.map((r) => span('sn-strip-rug-run', r.from, r.to, n)).join('');
+  const fleet = panel('fleet', S.fleet, fleetItems, [fleetPlot, rugEl,
+    table(S.fleet, [S.hour, S.fleetSeen, S.fleetExpected, S.fleetNormal, SN.badge.label], hourRows(s, (m) => [seenCell(m), cell(s.expected.all[m]), cell(compareCol[m]), stateWord(m)]))]);
 
-  // 2. The service state: one band, a hatch where the machine held its verdict, an overlay where it was computed afterwards.
-  const liveFrom = Math.max(0, Math.min(n, Math.ceil((o.serviceLiveFromSec - s.t0) / 60)));
-  const stateRuns = runsOf<StateClass>(n, (m) => stateClass(s, m));
-  const retro = liveFrom > 0
-    ? `<span class="sn-band-retro" style="--x:0;--w:${(liveFrom / n).toFixed(5)}"></span>`
-    : '';
-  const retroLabel = liveFrom > 0
-    ? `<div class="sn-band-retro-label" aria-hidden="true" style="--w:${(liveFrom / n).toFixed(5)}"><span>${escapeHtml(S.stateRetro)}</span></div>`
-    : '';
-  const stateWord = (m: number): string => {
-    const cls = stateClass(s, m);
-    const word = cls === 'none' ? S.stateNone : STATE_WORD[cls];
-    return s.t0 + m * 60 < o.serviceLiveFromSec ? `${word}, ${S.stateRetro}` : word;
-  };
-  const statePanel = panel('state', S.state, [
-    { kind: 'band', tone: 'sn-state-normal', label: SN.badge.normal },
-    { kind: 'band', tone: 'sn-state-reduced', label: SN.badge.reduced },
-    { kind: 'band', tone: 'sn-state-silent', label: SN.badge.silent },
-    { kind: 'band', tone: 'sn-state-unknown', label: SN.badge.unknown },
-    { kind: 'hatch', tone: 'sn-state-none', label: S.stateNone },
-    ...(liveFrom > 0 ? [{ kind: 'hatch' as const, tone: 'sn-key-retro', label: S.stateRetro }] : []),
-  ], [keep(plot('state', [retroLabel, `<div class="sn-band">${bandSpans(stateRuns, n, 'sn-state')}${retro}</div>`], days, null, 'band'))],
-  tableDetails(`${S.state}, ${S.table}`, [S.hour, S.state], hourRows(s, (m) => [stateWord(m)]), S.table));
-
-  // 3. Bikes on the stations and empty stations: two plots, each on its own scale (never a second axis on one plot).
+  // 2. Empty BAJS stations against Thursday 1 October at the same time of day (Sun 22:07 to Wed 24:00).
   let bikes: HTMLElement | null = null;
   if (s.bikes) {
-    const b = s.bikes;
-    const totalMax = colMax(b.total);
-    const emptyMax = colMax(b.empty);
-    const emptyLabel = document.createElement('p');
-    emptyLabel.className = 'sn-subplot-title';
-    emptyLabel.innerHTML = `<span class="sn-key sn-key-line sn-tone-bike-empty" aria-hidden="true"></span>${escapeHtml(S.bikesEmpty)}`;
-    bikes = panel('bikes', S.bikes, null, [
-      keep(plot('bikes', [svg(n, [{ d: areaPath(b.total, totalMax), cls: 'sn-area-bike' }, { d: linePath(b.total, totalMax), cls: 'sn-line-bike' }])], days, num(totalMax), 'short')),
-      emptyLabel,
-      keep(plot('bikes-empty', [svg(n, [{ d: areaPath(b.empty, emptyMax), cls: 'sn-area-bike' }, { d: linePath(b.empty, emptyMax), cls: 'sn-line-bike' }])], days, num(emptyMax), 'short')),
-    ], tableDetails(`${S.bikes}, ${S.table}`, [S.hour, S.bikes, S.bikesEmpty], hourRows(s, (m) => [cell(b.total[m]), cell(b.empty[m])]), S.table));
+    const cols = bikesColumns(s);
+    const max = colMax(cols.now, cols.thu);
+    const from = s.bikes.empty.findIndex((v) => v !== null && v !== undefined);
+    const lineLabel = from < 0 ? S.bikesEmpty : `${zagrebDay((s.t0 + from * 60) * 1000)} – ${zagrebDay((BIKES_TO_SEC - 60) * 1000)}`;
+    bikes = panel('bikes', S.bikesEmpty, [
+      { kind: 'line', tone: 'sn-tone-bike-empty', label: lineLabel },
+      { kind: 'area', tone: 'sn-tone-compare', label: S.bikesRef },
+    ], [
+      keep(plot('bikes', [svg(n, [{ d: areaPath(cols.thu, max), cls: 'sn-area-compare' }, { d: linePath(cols.now, max), cls: 'sn-line-bike' }])], days, num(max))),
+      table(S.bikesEmpty, [S.hour, S.bikesEmpty, S.bikesRef], hourRows(s, (m) => [cell(cols.now[m]), cell(cols.thu[m])], BIKES_TO_SEC)),
+    ], bikesHeadline(s));
   }
 
-  // 4. ZET's data: two lanes of marks, the minutes it carried no vehicle and the minutes it did not change.
-  const emptyRuns = runsOf<'on'>(n, (m) => (s.feed.entities[m] === 0 ? 'on' : null));
-  const frozenRuns = runsOf<'on'>(n, (m) => (frozenMinute(s, m) ? 'on' : null));
-  const depotRuns = runsOf<'on'>(n, (m) => ((s.feed.hiddenDepot[m] ?? 0) > 0 ? 'on' : null));
-  const futureTicks: number[] = [];
-  for (let m = 0; m < n; m++) if ((s.feed.rejectedFuture[m] ?? 0) > 0) futureTicks.push(m);
-  const minutesIn = (m0: number, test: (m: number) => boolean | null): string => {
-    let seen = 0;
-    let c = 0;
-    for (let m = m0; m < Math.min(n, m0 + 60); m++) {
-      const t = test(m);
-      if (t === null) continue;
-      seen++;
-      if (t) c++;
-    }
-    return seen === 0 ? S.noValue : `${num(c)} min`;
-  };
-  const depotMax = colMax(s.feed.hiddenDepot);
-  const feedPanel = panel('feed', S.feed, [
-    { kind: 'mark', tone: 'sn-tone-feed-empty', label: S.feedEmpty },
-    { kind: 'mark', tone: 'sn-tone-feed-frozen', label: S.feedFrozen },
-    { kind: 'mark', tone: 'sn-panel-tone-depot', label: S.feedDepot },
-    { kind: 'mark', tone: 'sn-panel-tone-future', label: S.feedFuture },
-  ], [keep(plot('feed', [
-    `<div class="sn-lane" data-lane="empty">${bandSpans(emptyRuns, n, 'sn-feed-empty')}</div>`,
-    `<div class="sn-lane" data-lane="frozen">${bandSpans(frozenRuns, n, 'sn-feed-frozen')}</div>`,
-  ], days, null, 'lane')), keep(plot('feed-depot', [
-    `<div class="sn-panel-lane" data-lane="depot">${bandSpans(depotRuns, n, 'sn-panel-depot')}</div>`,
-    `<div class="sn-panel-lane" data-lane="future">${futureTicks.map((m) => `<span class="sn-panel-tick" style="--x:${(m / n).toFixed(5)}"></span>`).join('')}</div>`,
-  ], days, depotMax > 0 ? num(depotMax) : null, 'lane'))], tableDetails(`${S.feed}, ${S.table}`, [S.hour, S.feedEmpty, S.feedFrozen, S.feedDepot, S.feedFuture], hourRows(s, (m) => {
-    let depot: number | null = null;
-    let future: number | null = null;
-    for (let k = m; k < Math.min(n, m + 60); k++) {
-      const d = s.feed.hiddenDepot[k];
-      if (d !== null && d !== undefined) depot = Math.max(depot ?? 0, d);
-      const f = s.feed.rejectedFuture[k];
-      if (f !== null && f !== undefined) future = (future ?? 0) + (f > 0 ? 1 : 0);
-    }
-    return [
-      minutesIn(m, (k) => (s.feed.entities[k] === null || s.feed.entities[k] === undefined ? null : s.feed.entities[k] === 0)),
-      minutesIn(m, (k) => frozenMinute(s, k)),
-      cell(depot),
-      future === null ? S.noValue : `${num(future)} min`,
-    ];
-  }), S.table));
-
-  // The weather: DHMZ's hourly temperature as one line, the words at each change written on the plot.
-  let weather: HTMLElement | null = null;
-  const hr = s.hourly;
-  if (hr.n > 0 && hr.tempC.some((v) => v !== null && v !== undefined)) {
-    const known = hr.tempC.filter((v): v is number => v !== null && v !== undefined);
-    const lo = Math.floor(Math.min(...known)) - 1;
-    const shifted = hr.tempC.map((v) => (v === null || v === undefined ? null : v - lo));
-    const max = colMax(shifted);
-    const words: string[] = [];
-    let prev: string | null = null;
-    let lastAt = -Infinity;
-    hr.weather.forEach((w, h) => {
-      if (!w || w === prev) return;
-      prev = w;
-      if (h - lastAt < 6) return;
-      lastAt = h;
-      words.push(`<span class="sn-panel-word" style="--x:${((h + 0.5) / hr.n).toFixed(5)}">${escapeHtml(w)}</span>`);
-    });
-    const temps = svg(hr.n, [{ d: linePath(shifted, max), cls: 'sn-line-seen sn-panel-line-temp' }]);
-    weather = panel('weather', S.weather, null, [keep(plot('weather', [temps, ...words], days, `${num(lo + max)} °C`, 'short'))],
-      tableDetails(`${S.weather}, ${S.table}`, [S.hour, S.weather, SN.panel.weather], hr.tempC.map((t, h) => [
-        zagrebDateTime((hr.t0 + h * 3600) * 1000), t === null || t === undefined ? S.noValue : `${num(Math.round(t))} °C`, hr.weather[h] ?? S.noValue,
-      ]), S.table));
-  }
-
-  // 7. Sve linije, svaki sat: the heatmap, drawn by the caller (it needs the page's context).
+  // 3. Sve linije, svaki sat: the heatmap, drawn by the caller (it needs the page's context).
   let lines: HTMLElement | null = null;
   if (o.lines) {
     const host = document.createElement('div');
-    host.className = 'sn-panel-strip-lines';
-    lines = panel('lines', S.lines, null, [host], document.createElement('div'));
-    lines.querySelector(':scope > div:last-child')?.remove();
+    host.className = 'sn-strip-lines';
+    lines = panel('lines', SN.heatmap.title, null, [host]);
     o.lines(host);
-  }
-
-  // 5. The vehicles the screen counted that had no position: published minus seen, on its own small scale, only in
-  // the minutes where the difference cannot be the lag between two samples or the hold of a shrinking fleet (reckoning.ts ghostSeries).
-  let ghosts: HTMLElement | null = null;
-  if (s.published) {
-    const pub = s.published.vehicles;
-    const excess = ghostSeries(s);
-    const max = colMax(excess);
-    const R = SN.reckoning;
-    const hourGhosts = (m0: number): string[] => {
-      let compared = 0;
-      let minutes = 0;
-      let most = 0;
-      for (let m = m0; m < Math.min(n, m0 + 60); m++) {
-        if (pub[m] === null || pub[m] === undefined || s.seen.all[m] === null || s.seen.all[m] === undefined) continue;
-        compared++;
-        const e = excess[m];
-        if (e === null || e === undefined) continue;
-        minutes++;
-        most = Math.max(most, e);
-      }
-      return compared === 0 ? [S.noValue, S.noValue] : [num(most), `${num(minutes)} min`];
-    };
-    ghosts = panel('ghosts', S.ghosts, null, [keep(plot('ghosts', [svg(n, [{ d: columnsPath(excess, max), cls: 'sn-cols-ghost' }])], days, max > 0 ? num(max) : null, 'short'))],
-      tableDetails(`${S.ghosts}, ${S.table}`, [S.hour, R.ghostsMax, R.ghostsMinutes], hourRows(s, (m) => hourGhosts(m)), S.table));
-  }
-
-  // 6. Press items per hour: the report's own columns, on the same axis.
-  let news: HTMLElement | null = null;
-  const pulse = s.hourly.newsPulse;
-  if (pulse) {
-    const names = pulse.map((_, h) => zagrebDateTime((s.hourly.t0 + h * 3600) * 1000));
-    const chart = columns({
-      values: pulse, names, ticks: [], valueText: (v) => num(v), label: S.news,
-      summary: `${S.news}: ${num(pulse.reduce((a, b) => a + b, 0))}`, nullText: S.noValue,
-    });
-    chart.classList.add('sn-columns');
-    const colsPlot = chart.querySelector<HTMLElement>('.st-cols-plot');
-    if (colsPlot) {
-      colsPlot.classList.add('sn-cols-plot');
-      colsPlot.insertAdjacentHTML('beforeend', `${days.map((d) => `<span class="sn-dayline" style="--x:${d.x.toFixed(5)}"></span>`).join('')}<span class="sn-hover" hidden></span><span class="sn-cursor"></span>`);
-      plots.push({ el: colsPlot, cursor: colsPlot.querySelector<HTMLElement>(':scope > .sn-cursor')!, hover: colsPlot.querySelector<HTMLElement>(':scope > .sn-hover')! });
-    }
-    news = panel('news', S.news, null, [chart], tableDetails(`${S.news}, ${S.table}`, [S.hour, S.news], names.map((name, h) => [name, cell(pulse[h])]), S.table));
   }
 
   // The shared axis: the day under each midnight line.
@@ -596,7 +407,7 @@ export function renderStrip(root: HTMLElement, o: StripOptions): StripHandle {
   frame.setAttribute('role', 'group');
   frame.setAttribute('aria-label', S.plotsLabel);
   frame.setAttribute('aria-describedby', readout.id);
-  frame.append(axis, fleet, statePanel, ...(bikes ? [bikes] : []), feedPanel, ...(weather ? [weather] : []), ...(ghosts ? [ghosts] : []), ...(news ? [news] : []), ...(lines ? [lines] : []));
+  frame.append(axis, fleet, ...(bikes ? [bikes] : []), ...(lines ? [lines] : []));
   root.replaceChildren(frame, readout);
   root.removeAttribute('aria-busy');
 
@@ -624,7 +435,7 @@ export function renderStrip(root: HTMLElement, o: StripOptions): StripHandle {
     return box.width > 0 ? (clientX - box.left) / box.width : 0;
   };
   const plotOf = (target: EventTarget | null): HTMLElement | null =>
-    target instanceof Element ? target.closest<HTMLElement>('.sn-plot, .sn-cols-plot') : null;
+    target instanceof Element ? target.closest<HTMLElement>('.sn-plot') : null;
   let dragging: { plot: HTMLElement; id: number } | null = null;
   const seekTo = (plotEl: HTMLElement, clientX: number): void => o.onSeek(seekTime(fractionAt(plotEl, clientX), o.startMs, o.endMs));
   const hideHover = (): void => {
@@ -638,7 +449,6 @@ export function renderStrip(root: HTMLElement, o: StripOptions): StripHandle {
       p.hover.hidden = false;
       p.hover.style.transform = shift;
     }
-    if (plotEl.classList.contains('sn-cols-plot')) return; // the columns draw their own tip
     const t = seekTime(f, o.startMs, o.endMs);
     const box = plotEl.getBoundingClientRect();
     const lines = [`${zagrebDay(t)} u ${zagrebClock(t)}`, ...readoutValues(readoutInput(), t)];
@@ -720,12 +530,9 @@ export function mountStrip(ctx: SnimkaContext, root: HTMLElement): () => void {
     endMs: ctx.clock.end,
     serviceLiveFromSec: ctx.manifest.serviceLiveFromSec,
     compare: ctx.layers.get().compare,
-    compareCols: ctx.comparisons.length ? {
-      all: comparisonColumn(ctx, ctx.series, (c) => c.seen.all),
-      tram: comparisonColumn(ctx, ctx.series, (c) => c.seen.tram),
-      bus: comparisonColumn(ctx, ctx.series, (c) => c.seen.bus),
-    } : null,
-    lines: (host) => { heatmapOff = mountHeatmap(ctx, host); },
+    compareCols: ctx.comparisons.length ? { all: comparisonColumn(ctx, ctx.series, (c) => c.seen.all) } : null,
+    // A tapped heatmap cell writes its words into the strip's readout (on a phone there is no hover tip).
+    lines: (host) => { heatmapOff = mountHeatmap(ctx, host, { onCell: (text) => { const r = root.querySelector('.sn-strip-readout'); if (r) r.textContent = text; } }); },
     onSeek: (t) => {
       ctx.clock.pause();
       ctx.clock.seek(t);

@@ -1,13 +1,16 @@
-// The heatmap "Sve linije, svaki sat" (plan section 3.6): rows are the 19
-// tram lines, then the bus lines that ran during the strike, then one
-// aggregate row of every other bus line (all of them one disclosure away);
-// columns are the window's 112 hours; a cell is the mean of the hour's
-// twelve ratios min(1, seen/expected). Not scheduled is hatched, missing is
-// blank (never a zero). One inline SVG of <rect>s built once, a five-step
-// single-hue ramp from --tone-surface-3 to --tone-action-brand (validated
-// with the dataviz validator in both themes: snimka-panels.css), one tip per
-// cell, the shared cursor, a table twin per route and day, and the row
-// labels as buttons that set the route subject.
+// The heatmap "Sve linije, svaki sat" (Tijek's third chart, decision V3-23):
+// rows are the 19 tram lines, then the bus lines that ran during the strike
+// (a vehicle in at least six five-minute samples), then one aggregate row of
+// every other bus line (all of them one disclosure away); columns are the
+// window's 112 hours; a cell is the mean of the hour's twelve ratios
+// min(1, seen/expected). The ramp (snimka-report.css, validated with the
+// dataviz validator in both themes): 0 = a pale wash of the silent tone (so
+// the strike's hole reads at a glance), 1 to 4 = brand blue light to dark at
+// <= 25 / 50 / 75 / > 75 %; not scheduled = the plain page (no rect); missing =
+// hatch (never a zero). One inline SVG of <rect>s built once, one tip per
+// cell, the shared cursor, a table twin per route and day, and the row labels
+// as buttons that set the route subject (on a phone the rows are plain text
+// and a tapped cell writes its words into the strip's readout).
 import { ROUTES_STEP_S, ZAGREB_OFFSET_S } from '../../../shared/snimka';
 import { ROUTES_MISSING, decodeBase64 } from '../../../shared/snimka-codec';
 import { hideTip, showTip, tableDetails } from '../statistika/charts';
@@ -19,9 +22,11 @@ import { el } from './panels';
 import { SN, fill } from './strings';
 
 const SLOTS_PER_HOUR = 3600 / ROUTES_STEP_S;
-/** The strike days for the row choice: a bus line with a vehicle in any sample from Mon 28 Sep 03:30 to Wed 30 Sep 18:00 Zagreb (the relight began at 18:10) gets its own row. */
+/** The strike days for the row choice: a bus line with a vehicle in at least STRIKE_MIN_SAMPLES samples from Mon 28 Sep 03:30 to Wed 30 Sep 18:00 Zagreb (the relight began at 18:10) gets its own row. */
 export const STRIKE_FROM_SEC = Date.UTC(2026, 8, 28, 3, 30) / 1000 - ZAGREB_OFFSET_S;
 export const STRIKE_TO_SEC = Date.UTC(2026, 8, 30, 18, 0) / 1000 - ZAGREB_OFFSET_S;
+/** Half an hour of service: fewer samples with a vehicle is a stray run (172's two samples on the real data), folded into the aggregate. */
+export const STRIKE_MIN_SAMPLES = 6;
 /** The viewBox size of one cell: an hour is 6 units wide, a row 24 units tall (the label buttons' height in px). */
 export const CELL_W = 6;
 export const ROW_H = 24;
@@ -94,7 +99,8 @@ export function heatmapModel(routes: RoutesLike, strike: { from: number; to: num
   const j0 = Math.max(0, Math.floor((strike.from - routes.t0) / ROUTES_STEP_S));
   const j1 = Math.min(n, Math.ceil((strike.to - routes.t0) / ROUTES_STEP_S));
   const ranInStrike = (i: number): boolean => {
-    for (let j = j0; j < j1; j++) { const s = seen[i]![j]!; if (s !== ROUTES_MISSING && s > 0) return true; }
+    let samples = 0;
+    for (let j = j0; j < j1; j++) { const s = seen[i]![j]!; if (s !== ROUTES_MISSING && s > 0 && ++samples >= STRIKE_MIN_SAMPLES) return true; }
     return false;
   };
   const trams: HeatRow[] = [];
@@ -114,7 +120,7 @@ export function heatmapModel(routes: RoutesLike, strike: { from: number; to: num
   others.sort(byNumber);
   // The aggregate: per sample, the summed vehicles over the summed timetable of every other bus line with both known.
   const aggregate: HeatRow | null = others.length ? {
-    id: 'ostali', label: fill(SN.strip.linesOtherBuses, { n: num(others.length) }), kind: 'aggregate',
+    id: 'ostali', label: fill(SN.heatmap.otherBuses, { n: num(others.length) }), kind: 'aggregate',
     ...hourCells(n, (j) => {
       let s = 0;
       let e = 0;
@@ -141,12 +147,12 @@ const hourLabel = (sec: number): string => `${new Date((sec + ZAGREB_OFFSET_S) *
 export function cellText(model: Pick<HeatModel, 't0'>, row: HeatRow, h: number): string {
   const sec = model.t0 + h * 3600;
   const cell = row.cells[h] ?? null;
-  const where = { short: row.label, day: zagrebDay(sec * 1000), hour: hourLabel(sec) };
-  const head = `${row.kind === 'aggregate' ? row.label : `linija ${row.label}`}, ${where.day} u ${where.hour}`;
+  const where = { short: row.label, day: zagrebDay(sec * 1000), time: hourLabel(sec) };
+  const head = `${row.kind === 'aggregate' ? row.label : `linija ${row.label}`}, ${where.day} u ${where.time}`;
   if (cell === null) return `${head}: ${SN.heatmap.missing}`;
-  if (cell === 'off') return `${head}: ${SN.strip.linesNone}`;
+  if (cell === 'off') return `${head}: ${SN.heatmap.none}`;
   if (row.kind === 'aggregate') return `${head}: ${num(Math.round(row.seen[h] ?? 0))} od ${num(Math.round(row.expected[h] ?? 0))}`;
-  return fill(SN.strip.linesCell, { ...where, seen: num(Math.round(row.seen[h] ?? 0)), expected: num(Math.round(row.expected[h] ?? 0)) });
+  return fill(SN.heatmap.cell, { ...where, seen: num(Math.round(row.seen[h] ?? 0)), expected: num(Math.round(row.expected[h] ?? 0)) });
 }
 
 /** The table twin: per route and Zagreb day, the day's mean share ("37 %"), the word where nothing ran on the timetable or nothing was recorded. */
@@ -166,7 +172,7 @@ export function dayTable(model: HeatModel, rows: readonly HeatRow[]): { head: st
       const cell = row.cells[h];
       if (typeof cell === 'number') { sum += cell; c += 1; } else if (cell === 'off') off = true;
     }
-    return c ? `${num(Math.round((sum / c) * 100))} %` : off ? SN.strip.linesNone : SN.heatmap.missing;
+    return c ? `${num(Math.round((sum / c) * 100))} %` : off ? SN.heatmap.none : SN.heatmap.missing;
   })]);
   return { head: [SN.heatmap.route, ...days.map((d) => d.label)], body };
 }
@@ -179,11 +185,15 @@ function grid(doc: Document, model: HeatModel, rows: readonly HeatRow[], onRoute
   const labels = el(doc, 'div', { class: 'sn-hm-labels', role: 'list' });
   for (const row of rows) {
     const item = el(doc, 'div', { class: 'sn-hm-label', role: 'listitem', 'data-kind': row.kind });
+    // The name as text always; the button beside it where a row can set the subject (the sheet hides the button and
+    // shows the text on a phone, where the 16 px rows are too small a target: the table twin carries the rows there).
+    const name = el(doc, 'span', { class: 'sn-hm-name', text: row.label, title: row.label });
     if (onRoute && row.kind !== 'aggregate') {
       const b = el(doc, 'button', { type: 'button', class: 'sn-hm-row', 'data-route': row.id, text: row.label, 'aria-label': fill(SN.subject.line, { short: row.label }) });
       b.addEventListener('click', () => onRoute(row.id));
-      item.append(b);
-    } else item.append(el(doc, 'span', { class: 'sn-hm-name', text: row.label }));
+      name.classList.add('sn-hm-name-alt');
+      item.append(name, b);
+    } else item.append(name);
     labels.append(item);
   }
   const svg = doc.createElementNS(SVG_NS, 'svg');
@@ -193,14 +203,14 @@ function grid(doc: Document, model: HeatModel, rows: readonly HeatRow[], onRoute
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('focusable', 'false');
   svg.style.setProperty('--rows', String(rows.length));
-  // The hatch of an unscheduled hour; its id is per SVG so two heatmaps on the page never share one.
+  // The hatch of a missing hour; its id is per SVG so two heatmaps on the page never share one.
   const hatchId = `sn-hm-hatch-${Math.random().toString(36).slice(2, 8)}`;
   let markup = `<defs><pattern id="${hatchId}" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)"><rect class="sn-hm-hatch-bg" width="4" height="4"/><line class="sn-hm-hatch-line" x1="0" y1="0" x2="0" y2="4"/></pattern></defs>`;
   rows.forEach((row, r) => {
     row.cells.forEach((cell, h) => {
-      if (cell === null) return;
-      const cls = cell === 'off' ? 'sn-hm-off' : `sn-hm-c${rampStep(cell)}`;
-      const fillAttr = cell === 'off' ? ` fill="url(#${hatchId})"` : '';
+      if (cell === 'off') return; // not scheduled: the plain page
+      const cls = cell === null ? 'sn-hm-none' : `sn-hm-c${rampStep(cell)}`;
+      const fillAttr = cell === null ? ` fill="url(#${hatchId})"` : '';
       markup += `<rect class="${cls}" x="${h * CELL_W}" y="${r * ROW_H}" width="${CELL_W}" height="${ROW_H}"${fillAttr}/>`;
     });
   });
@@ -238,8 +248,9 @@ function axis(doc: Document, model: HeatModel): HTMLElement {
 
 function legend(doc: Document): HTMLElement {
   const ul = el(doc, 'ul', { class: 'st-legend sn-hm-legend' });
+  ul.append(el(doc, 'li', { class: 'sn-hm-legend-label', text: `${SN.heatmap.rampLabel}:` }));
   SN.heatmap.ramp.forEach((word, i) => ul.append(el(doc, 'li', {}, el(doc, 'span', { class: `sn-hm-key sn-hm-key-c${i}`, 'aria-hidden': 'true' }), word)));
-  ul.append(el(doc, 'li', {}, el(doc, 'span', { class: 'sn-hm-key sn-hm-key-off', 'aria-hidden': 'true' }), SN.strip.linesNone));
+  ul.append(el(doc, 'li', {}, el(doc, 'span', { class: 'sn-hm-key sn-hm-key-off', 'aria-hidden': 'true' }), SN.heatmap.none));
   ul.append(el(doc, 'li', {}, el(doc, 'span', { class: 'sn-hm-key sn-hm-key-none', 'aria-hidden': 'true' }), SN.heatmap.missing));
   return ul;
 }
@@ -251,6 +262,8 @@ export interface HeatmapOptions {
   routes?: RoutesLike;
   /** Draws the lede and the legend above the plot (the strip has its own head). */
   head?: boolean;
+  /** A click or tap on a cell hands its words here (Tijek writes them into its readout; on a phone there is no tip). */
+  onCell?: ((text: string) => void) | null;
 }
 
 /** Mounts the heatmap into `root`: the cursor follows the frame loop, the tip follows the pointer. */
@@ -259,19 +272,20 @@ export function mountHeatmap(ctx: SnimkaContext, root: HTMLElement, opts: Heatma
   const model = heatmapModel(opts.routes ?? ctx.routes);
   const onRoute = opts.onRoute === undefined ? (id: string) => ctx.view.set({ subject: { kind: 'route', id } }, 'user') : opts.onRoute;
   const mainRows = [...model.trams, ...model.strike, ...(model.aggregate ? [model.aggregate] : [])];
-  const main = grid(doc, model, mainRows, onRoute, SN.strip.lines);
+  const main = grid(doc, model, mainRows, onRoute, SN.heatmap.title);
   const parts: HTMLElement[] = [];
-  if (opts.head !== false) parts.push(el(doc, 'p', { class: 'sn-hm-lede', text: SN.strip.linesLede }), legend(doc));
+  if (opts.head !== false) parts.push(el(doc, 'p', { class: 'sn-hm-lede', text: SN.heatmap.lede }), legend(doc));
   parts.push(main.root);
   const grids = [{ ...main, rows: mainRows }];
   if (model.others.length) {
-    const more = grid(doc, model, model.others, onRoute, SN.strip.linesAll);
-    const details = el(doc, 'details', { class: 'sn-hm-more' }, el(doc, 'summary', { text: SN.strip.linesAll }), more.root);
+    const more = grid(doc, model, model.others, onRoute, SN.heatmap.allBuses);
+    const details = el(doc, 'details', { class: 'sn-hm-more' }, el(doc, 'summary', { text: SN.heatmap.allBuses }), more.root);
     parts.push(details);
     grids.push({ ...more, rows: model.others });
   }
   const table = dayTable(model, [...mainRows, ...model.others]);
-  parts.push(tableDetails(`${SN.strip.lines}, ${SN.strip.table}`, table.head, table.body, SN.strip.table));
+  const caption = fill(SN.strip.tableCaption, { title: SN.heatmap.title });
+  parts.push(tableDetails(caption, table.head, table.body, caption));
   const box = el(doc, 'div', { class: 'sn-hm', 'data-sn-heatmap': String(mainRows.length) }, ...parts);
   root.replaceChildren(box);
 
@@ -293,7 +307,10 @@ export function mountHeatmap(ctx: SnimkaContext, root: HTMLElement, opts: Heatma
     };
     const click = (e: PointerEvent): void => {
       const hit = cellAt(g, e);
-      if (hit && onRoute && hit.row.kind !== 'aggregate') onRoute(hit.row.id);
+      if (!hit) return;
+      opts.onCell?.(cellText(model, hit.row, hit.h));
+      // A tap reads the cell; a mouse click also sets the line as the subject (as the row's button does).
+      if (e.pointerType !== 'touch' && onRoute && hit.row.kind !== 'aggregate') onRoute(hit.row.id);
     };
     const leave = (): void => hideTip();
     g.plot.addEventListener('pointermove', move);

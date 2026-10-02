@@ -1,26 +1,24 @@
 /* Kaj ima? / Snimka: the report (hero numbers, Zaslon, Tijek, Što se vidjelo). Owner: lane S3 (app/src/snimka/report.ts); page level is in snimka.css. */
 /* The chart roles, from the layer-2 tokens alone, so both themes follow the
-   page's own switch. Validated with the dataviz validator against the strip's
-   surface (surface-1) in light and dark: seen against the comparison grey
-   (normal vision 28.0 / 22.3), the service ramp normal 45 %, reduced 75 %, silent 100 % (monotone L,
-   adjacent CVD 9.2 / 9.6, normal vision 16.0 / 15.3; status hues, never
-   without their words). The ghost columns are one series on their own panel,
-   in the urgency role (contrast over 3:1 in both themes). */
+   page's own switch (lane W4a, v3). Validated with the dataviz validator
+   against the strip's surface (surface-1, light #fbfcfe, dark #192430):
+   the seen line against the normal day's grey silhouette; the ghost card's
+   two lines (brand blue "s položajem", urgency red "na zaslonu": normal
+   vision 31.7 light / 20.4 dark, CVD 22.0 / 12.4); the return card's trams
+   (brand blue, solid) against buses (primary ink, dashed: the dash is the
+   secondary encoding). The state tint behind the fleet is a wash (never a
+   mark): silent and reduced at 14 % of their status hue, their words in
+   the legend. */
 .sn-body {
   --sn-seen: var(--tone-action-brand);
-  --sn-expected-fill: color-mix(in oklab, var(--tone-text-muted) 16%, transparent);
-  --sn-expected-key: color-mix(in oklab, var(--tone-text-muted) 30%, var(--tone-surface-1));
+  --sn-compare-fill: color-mix(in oklab, var(--tone-text-muted) 22%, transparent);
   --sn-compare: color-mix(in oklab, var(--tone-text-muted) 55%, var(--tone-surface-1));
-  --sn-ghost: var(--tone-urgency);
+  --sn-shown: var(--tone-urgency);
   --sn-bike: var(--tone-bike);
-  --sn-bike-fill: color-mix(in oklab, var(--tone-bike) 12%, transparent);
-  --sn-state-normal: color-mix(in oklab, var(--tone-state-success) 45%, var(--tone-surface-1));
-  --sn-state-reduced: color-mix(in oklab, var(--tone-state-warning) 75%, var(--tone-surface-1));
-  --sn-state-silent: var(--tone-state-danger);
-  --sn-state-unknown: var(--tone-surface-3);
-  --sn-feed-mark: color-mix(in oklab, var(--tone-text-primary) 72%, var(--tone-surface-1));
+  --sn-tint-silent: color-mix(in oklab, var(--tone-state-danger) 14%, var(--tone-surface-1));
+  --sn-tint-reduced: color-mix(in oklab, var(--tone-state-warning) 14%, var(--tone-surface-1));
+  --sn-rug: color-mix(in oklab, var(--tone-text-primary) 72%, var(--tone-surface-1));
   --sn-hatch-none: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1.5px, transparent 1.5px 5px);
-  --sn-hatch-retro: repeating-linear-gradient(45deg, color-mix(in oklab, var(--tone-surface-1) 62%, transparent) 0 2px, transparent 2px 6px);
 }
 /* Hero numbers stand alone: proportional figures (tabular only where numbers line up in columns). */
 .sn-body .st-kpi-value { font-variant-numeric: normal; }
@@ -104,10 +102,10 @@
   .sn-screen-caption::before { content: ' · '; }
 }
 
-/* ---- Tijek: the small multiples on one axis --------------------------------------- */
+/* ---- Tijek: three charts on one axis (lane W4a, v3) ------------------------------ */
 .sn-strip-frame { container: sn-strip / inline-size; display: grid; gap: var(--sp-4); min-inline-size: 0; padding: clamp(0.875rem, 2.5vw, 1.5rem); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); }
 .sn-strip-frame:focus-visible { outline: 3px solid var(--tone-focus-ring); outline-offset: 3px; }
-.sn-strip-readout { margin-block-start: var(--sp-3); }
+.sn-strip-readout { margin-block-start: var(--sp-3); overflow-wrap: anywhere; }
 
 .sn-axis { position: relative; block-size: 1.25rem; }
 .sn-axis-day { position: absolute; inset-block-start: 0; inset-inline-start: calc(var(--x) * 100%); padding-inline-start: 0.3rem; border-inline-start: 1px solid var(--tone-stroke-strong); font-size: var(--type-meta); line-height: 1.25rem; color: var(--tone-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -116,43 +114,34 @@
 
 .sn-panel { display: grid; gap: var(--sp-2); min-inline-size: 0; }
 .sn-panel + .sn-panel { padding-block-start: var(--sp-4); border-block-start: 1px solid var(--tone-stroke); }
-.sn-panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-4); }
+.sn-panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-4); min-inline-size: 0; }
 .sn-panel-title { font-size: var(--type-control); font-weight: var(--weight-bold); letter-spacing: 0; }
-.sn-subplot-title { display: inline-flex; align-items: center; gap: var(--sp-2); margin: var(--sp-1) 0 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-strip-headline { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
+.sn-strip-lines { min-inline-size: 0; }
+.sn-legend { min-inline-size: 0; }
 .sn-legend li[hidden] { display: none; }
 
-/* Legend keys mirror their marks: a stroke for a line, a block for a band or an area, a hatch for no verdict. */
+/* Legend keys mirror their marks: a stroke for a line, a block for a tint or an area, the dashed edge, the rug. */
 .sn-key { display: inline-block; flex: none; inline-size: 0.875rem; block-size: 0.875rem; border-radius: 3px; background: var(--key, var(--tone-stroke-strong)); }
 .sn-key-line { inline-size: 1rem; block-size: 0; border-radius: 0; border-block-start: 2px solid var(--key); background: none; }
-.sn-key-hatch { background: var(--sn-hatch-none); box-shadow: inset 0 0 0 1px var(--tone-stroke-strong); }
-.sn-key-retro { background: var(--sn-hatch-retro), var(--sn-state-silent); }
-.sn-key-mark { block-size: 0.625rem; border-radius: 2px; }
+.sn-key-retro { background: transparent; border-block-start: 2px dashed var(--tone-text-muted); border-radius: 0; block-size: 0.5rem; }
+.sn-key-rug { block-size: 0.375rem; background: repeating-linear-gradient(135deg, var(--sn-rug) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--sn-rug); border-radius: 1px; }
 .sn-tone-seen { --key: var(--sn-seen); }
-.sn-tone-expected { --key: var(--sn-expected-key); }
-.sn-tone-compare { --key: var(--sn-compare); }
+.sn-tone-compare { --key: var(--sn-compare-fill); box-shadow: inset 0 0 0 1px var(--sn-compare); }
+.sn-key-line.sn-tone-compare { box-shadow: none; --key: var(--sn-compare); }
 .sn-tone-bike-empty { --key: var(--sn-bike); }
-.sn-tone-feed-empty { --key: var(--sn-feed-mark); }
-.sn-tone-feed-frozen { background: repeating-linear-gradient(135deg, var(--sn-feed-mark) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--sn-feed-mark); }
-.sn-state-normal { --key: var(--sn-state-normal); }
-.sn-state-reduced { --key: var(--sn-state-reduced); }
-.sn-state-silent { --key: var(--sn-state-silent); }
-.sn-state-unknown { --key: var(--sn-state-unknown); }
+.sn-strip-tone-silent { --key: var(--sn-tint-silent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tone-state-danger) 40%, transparent); }
+.sn-strip-tone-reduced { --key: var(--sn-tint-reduced); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tone-state-warning) 40%, transparent); }
 
-/* A plot: marks over a hairline baseline, midnight lines, the cursor; the press column chart joins the same rules. */
-.sn-plot, .sn-cols-plot { position: relative; overflow: clip visible; overflow-clip-margin: 2px; touch-action: pan-y; cursor: crosshair; -webkit-user-select: none; user-select: none; }
-.sn-plot { block-size: 7rem; border-block: 1px solid var(--tone-stroke); }
-.sn-plot-short { block-size: 4.25rem; }
-.sn-plot-band { block-size: 2.75rem; border-block: 0; }
-.sn-plot-lane { block-size: 2.25rem; border-block: 0; }
+/* A plot: marks over a hairline baseline, midnight lines, the cursor. */
+.sn-plot { position: relative; block-size: 7rem; border-block: 1px solid var(--tone-stroke); overflow: clip visible; overflow-clip-margin: 2px; touch-action: pan-y; cursor: crosshair; -webkit-user-select: none; user-select: none; }
+.sn-strip-plot[data-plot='bikes'] { block-size: 5.5rem; }
 .sn-curves { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; overflow: visible; }
 .sn-curves path { fill: none; stroke-width: 2px; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .sn-curves [hidden] { display: none; }
 .sn-line-seen { stroke: var(--sn-seen); }
-.sn-line-compare { stroke: var(--sn-compare); }
 .sn-line-bike { stroke: var(--sn-bike); }
-.sn-curves .sn-area-expected { fill: var(--sn-expected-fill); stroke: none; }
-.sn-curves .sn-area-bike { fill: var(--sn-bike-fill); stroke: none; }
-.sn-curves .sn-cols-ghost { fill: var(--sn-ghost); stroke: none; }
+.sn-curves .sn-area-compare { fill: var(--sn-compare-fill); stroke: none; }
 .sn-scale { position: absolute; z-index: 1; inset-block-start: 0.15rem; inset-inline-start: 0.15rem; padding: 0 0.25rem; border-radius: 3px; background: color-mix(in oklab, var(--tone-surface-1) 82%, transparent); font-size: var(--type-meta); line-height: 1.3; color: var(--tone-text-muted); font-variant-numeric: tabular-nums; pointer-events: none; }
 .sn-dayline { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: 1px; background: var(--tone-stroke); pointer-events: none; }
 /* The cursor is a full-width box moved by one transform per frame (a percent of its own width: no layout read). */
@@ -161,33 +150,19 @@
 .sn-hover::before { inset-inline-start: 0; inline-size: 1px; background: var(--tone-text-muted); }
 .sn-hover[hidden] { display: none; }
 
-/* The service band: the state in its colour, a hatch where the machine held its verdict, a lighter hatch over the hours computed afterwards. */
-.sn-band { position: absolute; inset-inline: 0; inset-block-end: 0; block-size: 1.5rem; border-radius: 3px; background: var(--tone-surface-2); }
-.sn-seg { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: calc(var(--w) * 100%); box-sizing: border-box; border-inline-end: 2px solid var(--tone-surface-1); background: var(--key); }
-.sn-seg:last-child { border-inline-end: 0; }
-.sn-seg.sn-state-none { background: var(--sn-hatch-none); }
-.sn-band-retro { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 100%); background: var(--sn-hatch-retro); pointer-events: none; }
-.sn-band-retro-label { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 100%); block-size: 1rem; border-inline: 1px solid var(--tone-stroke-strong); border-block-start: 1px solid var(--tone-stroke-strong); font-size: var(--type-meta); line-height: 1; color: var(--tone-text-muted); pointer-events: none; }
-.sn-band-retro-label span { position: relative; inset-block-start: 0.2rem; padding-inline: 0.35rem; white-space: nowrap; }
-
-/* ZET's data: two lanes, the minutes with no vehicle (solid) above the minutes it did not change (hatched). */
-.sn-lane { position: absolute; inset-inline: 0; block-size: 0.75rem; border-radius: 2px; background: var(--tone-surface-2); }
-.sn-lane[data-lane='empty'] { inset-block-start: 0.25rem; }
-.sn-lane[data-lane='frozen'] { inset-block-end: 0.25rem; }
-.sn-lane .sn-seg { border: 0; min-inline-size: 1px; }
-.sn-feed-empty-on { background: var(--sn-feed-mark); }
-.sn-feed-frozen-on { background: repeating-linear-gradient(135deg, var(--sn-feed-mark) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--sn-feed-mark); }
-
-/* The press columns: statistika's chart, shorter, on the strip's axis (its own tick row gives way to the shared one). */
-.sn-columns .st-cols { grid-template-rows: auto 4.25rem 0; }
-.sn-columns .st-cols-scale { border-block-start-style: solid; border-color: var(--tone-stroke); }
-.sn-columns .st-cols-scale span { position: relative; z-index: 1; transform: none; margin: 0.15rem 0 0 0.15rem; padding: 0 0.25rem; border-radius: 3px; background: color-mix(in oklab, var(--tone-surface-1) 82%, transparent); line-height: 1.3; }
-.sn-columns .st-cols-axis { display: none; }
-.sn-columns .st-readout { font-size: var(--type-secondary); color: var(--tone-text-muted); }
+/* The state tint behind the fleet: silent and reduced as washes; before the live state a dashed top edge. */
+.sn-strip-tints { position: absolute; inset: 0; pointer-events: none; }
+.sn-strip-tint { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: calc(var(--w) * 100%); }
+.sn-strip-tint-silent { background: var(--sn-tint-silent); }
+.sn-strip-tint-reduced { background: var(--sn-tint-reduced); }
+.sn-strip-tint-retro { border-block-start: 2px dashed var(--tone-text-muted); }
+/* The rug: 6 px under the fleet, hatched where ZET sent no vehicle or its data did not change. */
+.sn-strip-rug { position: relative; block-size: 6px; margin-block-start: -0.25rem; }
+.sn-strip-rug-run { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: max(1px, calc(var(--w) * 100%)); background: repeating-linear-gradient(135deg, var(--sn-rug) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--sn-rug); }
 
 @media (forced-colors: active) {
   .sn-cursor::before { background: CanvasText; }
-  .sn-seg, .sn-key, .sn-lane { forced-color-adjust: none; }
+  .sn-key, .sn-strip-tint, .sn-strip-rug-run, .sn-hm-svg rect, .sn-hm-key { forced-color-adjust: none; }
 }
 
 /* ---- Što se vidjelo -------------------------------------------------------------- */
@@ -202,6 +177,31 @@
 .sn-bar-null .st-bar-value { font-weight: var(--weight-medium); color: var(--tone-text-muted); }
 .sn-small-table .st-table-scroll { max-block-size: none; }
 .sn-skeleton-card { display: block; min-block-size: 10rem; }
+/* The six cards (lane W4a, v3): two bar columns, sentences, a small plot on one scale with ticks under it. */
+.sn-card-grid { align-items: start; }
+.sn-card-cols { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); min-inline-size: 0; }
+.sn-card-col { display: grid; gap: var(--sp-2); align-content: start; min-inline-size: 0; }
+.sn-card-col-title { margin: 0; font-size: var(--type-control); font-weight: var(--weight-bold); }
+.sn-card-bar-normal .st-bar-fill { background: var(--sn-compare); }
+.sn-card-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); font-size: var(--type-control); line-height: 1.45; font-variant-numeric: tabular-nums; }
+.sn-card-plot { margin: 0; display: grid; gap: var(--sp-2); min-inline-size: 0; }
+.sn-card-plot-box { position: relative; block-size: 7rem; border-block: 1px solid var(--tone-stroke); }
+.sn-card-ticks { position: relative; block-size: 1.1rem; font-size: var(--type-meta); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
+.sn-card-ticks span { position: absolute; inset-inline-start: calc(var(--x) * 100%); padding-inline-start: 0.25rem; border-inline-start: 1px solid var(--tone-stroke-strong); white-space: nowrap; }
+.sn-card-ticks span:last-child:not(:first-child) { translate: -100% 0; border-inline-start: 0; border-inline-end: 1px solid var(--tone-stroke-strong); padding-inline: 0 0.25rem; }
+.sn-curves .sn-card-line { fill: none; }
+.sn-curves .sn-card-area { stroke: none; }
+.sn-card-line.sn-card-tone-seen { stroke: var(--sn-seen); }
+.sn-card-line.sn-card-tone-shown { stroke: var(--sn-shown); }
+.sn-card-line.sn-card-tone-tram { stroke: var(--sn-seen); }
+.sn-card-line.sn-card-tone-bus { stroke: var(--tone-text-primary); stroke-dasharray: 5 3; }
+.sn-card-area.sn-card-tone-expected { fill: var(--sn-compare-fill); }
+.sn-card-tone-seen { --key: var(--sn-seen); }
+.sn-card-tone-shown { --key: var(--sn-shown); }
+.sn-card-tone-tram { --key: var(--sn-seen); }
+.sn-card-tone-bus { --key: var(--tone-text-primary); }
+.sn-key-line.sn-card-tone-bus { border-block-start-style: dashed; }
+.sn-card-tone-expected { --key: var(--sn-compare-fill); box-shadow: inset 0 0 0 1px var(--sn-compare); }
 
 @media print {
   .sn-cursor, .sn-hover { display: none; }
@@ -211,22 +211,105 @@
 /* ---- Brojke: the five tiles wrap on a narrow screen ---------------------------------- */
 .sn-numbers .st-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
 
-/* ---- Zamjene (lane V5) ------------------------------------------------------------- */
-.sn-alt-grid { align-items: start; }
-.sn-alt-table td.sn-alt-num, .sn-alt-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A tile's or a station's seek lands the instrument below the sticky nav (decision V3-19; the same margin as #snimka). */
+[data-sn-stage] { scroll-margin-block-start: calc(var(--sn-chrome-h, var(--st-bar-h, 3.75rem)) + var(--sp-2)); }
+
+/* ---- The three tiles of Što snimka pokazuje (lane W4a, v3): each a button that moves the instrument ---- */
+.sn-numbers .st-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
+.sn-numbers .st-kpi.sn-kpi { padding: 0; }
+.sn-kpi-button { display: grid; align-content: start; gap: var(--sp-1); inline-size: 100%; block-size: 100%; min-block-size: var(--target); padding: var(--sp-4); border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.sn-kpi-button:focus-visible { outline: 3px solid var(--tone-focus-ring); outline-offset: 2px; }
+@media (hover: hover) { .sn-kpi-button:hover { background: var(--tone-surface-2); } }
+.sn-kpi-value, .sn-kpi-label, .sn-kpi-sub { display: block; }
+.sn-kpi-show { display: inline-flex; align-items: center; margin-block-start: var(--sp-2); font-size: var(--type-control); font-weight: var(--weight-bold); color: var(--tone-text-brand); }
+/* A phone: one column of compact rows. */
+@media (max-width: 40rem) { .sn-kpi-button { padding: var(--sp-3); } .sn-kpi-show { margin-block-start: var(--sp-1); } }
+
+/* ---- The block "Čime se moglo umjesto tramvaja" (lane W4a, v3) ------------------------------ */
+.sn-alternatives-block { display: grid; gap: var(--sp-3); margin-block-start: clamp(2rem, 4vw, 3rem); min-inline-size: 0; }
+.sn-alt-grid { align-items: start; min-inline-size: 0; }
+/* The cards' own grid takes its track from the widest child unless it is told otherwise (R6's .st-card bug, fixed for
+   every page in statistika.css by lane W4b; here for the dossier's cards whichever lands first). */
+.sn-alt-grid > .st-card, .sn-card-grid > .st-card { grid-template-columns: minmax(0, 1fr); min-inline-size: 0; }
+.sn-alt-table thead th { white-space: normal; }
+.sn-alt-table table { inline-size: 100%; }
+.sn-alt-table td.sn-alt-num, .sn-alt-num { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: end; }
 .sn-alt-show { min-block-size: var(--target); white-space: nowrap; }
-.sn-alt-table tbody th { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
-.sn-alt-days { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
-.sn-alt-days li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-2); padding-block: var(--sp-1); border-block-end: 1px solid var(--tone-stroke); }
-.sn-alt-day { color: var(--tone-text-muted); }
-.sn-alt-cols .st-cols { grid-template-rows: auto 6rem auto; }
+.sn-alt-name { font-weight: var(--weight-medium); overflow-wrap: anywhere; min-inline-size: 0; }
+.sn-alt-name-button { display: none; min-block-size: var(--target); padding: 0; border: 0; background: none; color: var(--tone-text-brand); font: inherit; font-weight: var(--weight-medium); text-align: start; text-decoration: underline; text-underline-offset: 0.2em; overflow-wrap: anywhere; cursor: pointer; }
+/* A phone: the name is the button and the action column goes, so nothing is clipped at 360 px. */
+@media (max-width: 40rem) {
+  .sn-alt-name-text, .sn-alt-action { display: none; }
+  .sn-alt-name-button { display: inline; }
+}
+.sn-alt-plot .sn-card-plot-box { block-size: 6rem; }
 .sn-alt-source { margin: 0; }
-.sn-alt-press { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+.sn-alt-press { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); min-inline-size: 0; }
+.sn-alt-beat { min-inline-size: 0; }
 .sn-alt-beat h4 { margin: 0 0 var(--sp-2); font-size: var(--type-control); }
 .sn-alt-links { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
 .sn-alt-links li { display: grid; gap: 0.15rem; }
-.sn-alt-link { display: inline-block; padding-block: 0.6rem; line-height: 1.4; overflow-wrap: anywhere; }
+.sn-alt-link { display: inline-flex; align-items: center; min-block-size: var(--target); line-height: 1.4; overflow-wrap: anywhere; }
 .sn-alt-meta { font-size: var(--type-meta); color: var(--tone-text-muted); }
+
+/* ---- The heatmap "Sve linije, svaki sat" (moved from snimka-panels.css; lane W4a, v3) ----------------------
+   The ramp, validated with the dataviz validator against surface-1 in both themes (light #fbfcfe, dark #192430):
+   c1..c4 brand blue at 56 / 71 / 86 / 100 % over surface-1 (light #779edf #5585d5 #326bca #0751bf, dark #52719d
+   #6287bd #749fdf #84b5ff): ordinal check PASS (monotone L, adjacent dL >= 0.06, one hue, light end 2.64:1 light /
+   3.15:1 dark); c0 "nijedno vozilo" is the silent tone washed at 30 % (light #edc1c0, dark #584651): normal vision
+   15.1 against the plain page (light) and 15.0 against c1 (dark), CVD 14.0 / 13.9. Not scheduled is the plain page
+   (no rect); missing is the hatch. */
+.sn-hm { --sn-hm-c0: color-mix(in oklab, var(--tone-state-danger) 30%, var(--tone-surface-1)); --sn-hm-c1: color-mix(in oklab, var(--tone-action-brand) 56%, var(--tone-surface-1)); --sn-hm-c2: color-mix(in oklab, var(--tone-action-brand) 71%, var(--tone-surface-1)); --sn-hm-c3: color-mix(in oklab, var(--tone-action-brand) 86%, var(--tone-surface-1)); --sn-hm-c4: var(--tone-action-brand); --sn-hm-gap: var(--tone-surface-1); --sn-hm-label-w: 3.25rem; --sn-hm-row-h: 1.5rem; container: sn-hm / inline-size; display: grid; gap: var(--sp-2); min-inline-size: 0; font-variant-numeric: tabular-nums; }
+.sn-hm-lede { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); }
+.sn-hm-legend { font-size: var(--type-meta); }
+.sn-hm-legend-label { color: var(--tone-text-muted); }
+.sn-hm-key { display: inline-block; inline-size: 0.875rem; block-size: 0.875rem; border-radius: 2px; }
+.sn-hm-key-c0 { background: var(--sn-hm-c0); }
+.sn-hm-key-c1 { background: var(--sn-hm-c1); }
+.sn-hm-key-c2 { background: var(--sn-hm-c2); }
+.sn-hm-key-c3 { background: var(--sn-hm-c3); }
+.sn-hm-key-c4 { background: var(--sn-hm-c4); }
+.sn-hm-key-off { background: var(--tone-surface-1); box-shadow: inset 0 0 0 1px var(--tone-stroke); }
+.sn-hm-key-none { background: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1px, var(--tone-surface-2) 1px 4px); }
+.sn-hm-axis { position: relative; block-size: 1.1rem; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-hm-corner { position: sticky; inset-inline-start: 0; z-index: 2; background: var(--tone-surface-1); border-inline-end: 1px solid var(--tone-stroke); }
+.sn-hm-day { position: absolute; inset-inline-start: calc(var(--x) * 100%); white-space: nowrap; }
+.sn-hm-scroll { overflow-x: auto; overscroll-behavior-x: contain; border-radius: var(--r-sm); }
+.sn-hm-scroll:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 2px; }
+.sn-hm-grid { display: grid; grid-template-columns: var(--sn-hm-label-w) minmax(42rem, 1fr); min-inline-size: 0; }
+.sn-hm-labels { position: sticky; inset-inline-start: 0; z-index: 2; display: grid; grid-auto-rows: var(--sn-hm-row-h); background: var(--tone-surface-1); border-inline-end: 1px solid var(--tone-stroke); }
+.sn-hm-label { display: flex; align-items: stretch; min-inline-size: 0; }
+/* The group seams are drawn inside the row (a border would take a pixel from the 24 px target, decision S-22). */
+.sn-hm-label[data-kind='aggregate'], .sn-hm-label[data-kind='tram'] + .sn-hm-label[data-kind='strike'] { box-shadow: inset 0 1px 0 var(--tone-stroke-strong); }
+.sn-hm-row, .sn-hm-name { display: flex; align-items: center; inline-size: 100%; padding: 0 var(--sp-2); font-size: var(--type-meta); font-weight: var(--weight-bold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sn-hm-row { min-block-size: var(--sn-hm-row-h); min-inline-size: 1.5rem; border: 0; background: transparent; color: var(--tone-text-primary); font-family: inherit; cursor: pointer; }
+.sn-hm-row:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; }
+@media (hover: hover) { .sn-hm-row:hover { background: var(--tone-surface-2); } }
+.sn-hm-name { color: var(--tone-text-muted); font-weight: var(--weight-medium); }
+.sn-hm-name-alt { display: none; }
+.sn-hm-plot { position: relative; block-size: calc(var(--rows) * var(--sn-hm-row-h)); cursor: crosshair; background: var(--tone-surface-1); }
+.sn-hm-svg { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
+.sn-hm-svg rect { stroke: var(--sn-hm-gap); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.sn-hm-c0 { fill: var(--sn-hm-c0); }
+.sn-hm-c1 { fill: var(--sn-hm-c1); }
+.sn-hm-c2 { fill: var(--sn-hm-c2); }
+.sn-hm-c3 { fill: var(--sn-hm-c3); }
+.sn-hm-c4 { fill: var(--sn-hm-c4); }
+.sn-hm-hatch-bg { fill: var(--tone-surface-2); stroke: none !important; }
+.sn-hm-hatch-line { stroke: var(--tone-stroke-strong); stroke-width: 1.5; }
+.sn-hm-days { position: absolute; inset: 0; pointer-events: none; }
+.sn-hm-dayline { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: 2px; translate: -1px 0; background: var(--tone-surface-1); }
+.sn-hm-cursor { position: absolute; z-index: 1; inset-block: -0.25rem; inset-inline-start: calc(var(--x, 0) * 100%); inline-size: 2px; translate: -1px 0; background: var(--tone-text-primary); pointer-events: none; }
+.sn-hm-more > summary { min-block-size: var(--target); display: flex; align-items: center; font-size: var(--type-control); font-weight: var(--weight-bold); cursor: pointer; }
+/* A phone: the whole window fits the width (2.4 px an hour, 16 px rows, a 36 px label column); the rows are plain
+   text (the table twin carries them as targets) and a tap writes the cell into the strip's readout. */
+@container sn-hm (max-width: 40rem) {
+  .sn-hm-grid { --sn-hm-label-w: 2.25rem; grid-template-columns: var(--sn-hm-label-w) minmax(0, 1fr); }
+  .sn-hm-labels { grid-auto-rows: 1rem; }
+  .sn-hm-plot { block-size: calc(var(--rows) * 1rem); }
+  .sn-hm-row { display: none; }
+  .sn-hm-name, .sn-hm-name-alt { display: flex; padding: 0 0.25rem; }
+}
 
 /* ---- Podaci i izvori (lane W4b): the sentences, the downloads, the sources ----------------- */
 /* minmax(0, 1fr): an implicit auto track took the width of its widest child and clipped the block at 390 px (R6). */
