@@ -1,460 +1,1286 @@
 {
- "note": "The headlines of /snimka/ (lane S1, first curation of 1 October 2026, for the owner's read-through): Jutarnji list, Večernji list and N1 only, one at a time on the page, titles verbatim as first recorded, the link to the article, never its text. Chosen from review.local/snimka/build/v1/work/news-candidates.json by the brief's rules: the beats of the three days, the first report of a beat preferred, the outlets balanced, at most three an hour and ten minutes apart. The build fails on a link the recordings do not hold and on a title that differs from the recorded one. `at` is Zagreb time, for reading only.",
+ "note": "The headlines of /snimka/ (lane S1, first curation of 1 October 2026; lane V5 of the v2 pass, 2 October 2026, added the focus, facts and mentions of every item and eight after-day items under beat `nakon`, for the owner's read-through): Jutarnji list, Večernji list and N1 only, titles verbatim as first recorded, the link to the article, never its text. Chosen from review.local/snimka/build/v1/work/news-candidates.json (the after-days from build/v2) by the brief's rules: the beats of the days, the first report of a beat preferred, the outlets balanced, at most three an hour and ten minutes apart. `focus`, `facts` and `mentions` follow the beat defaults of the plan's Appendix C (scripts/snimka/focus-defaults.ts) with hand overrides where a title names a place or a line (KB Dubrava as stop 970_23, Rebro, Jelačić-plac and Glavni kolodvor, line 12, lines 2, 5 and 17); route ids as app/src/data/zet-routes.json keys them, places as scripts/snimka/places.json names them. The build fails on a link the recordings do not hold and on a title that differs from the recorded one. `at` is Zagreb time, for reading only.",
  "items": [
   {
    "at": "ned 27. 9. 21:38",
    "outlet": "vecernji",
    "beat": "volonteri",
    "title": "Tvrtka iz Zagreba sutra besplatno vozi do KB Dubrava: 'Ovo nije protiv nikoga, ovo je pomoć građanima'",
-   "link": "https://www.vecernji.hr/zagreb/sutra-besplatan-prijevoz-do-kb-a-dubrava-ovo-nije-protiv-nikoga-ovo-je-pomoc-gradanima-1999058"
+   "link": "https://www.vecernji.hr/zagreb/sutra-besplatan-prijevoz-do-kb-a-dubrava-ovo-nije-protiv-nikoga-ovo-je-pomoc-gradanima-1999058",
+   "focus": {
+    "kind": "stop",
+    "id": "970_23"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {
+    "tags": [
+     "bolnica"
+    ]
+   }
   },
   {
    "at": "ned 27. 9. 22:08",
    "outlet": "n1",
    "beat": "najava",
    "title": "ZET i Holding kreću u štrajk, Zagrebu prijeti prometni kolaps. Tomašević poslao poruku građanima",
-   "link": "https://n1info.hr/vijesti/zet-i-holding-krecu-u-strajk-zagrebu-prijeti-prometni-kolaps-tomasevic-poslao-poruku-gradjanima/"
+   "link": "https://n1info.hr/vijesti/zet-i-holding-krecu-u-strajk-zagrebu-prijeti-prometni-kolaps-tomasevic-poslao-poruku-gradjanima/",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "ned 27. 9. 23:11",
    "outlet": "jutarnji",
    "beat": "najava",
    "title": "Štrajk u ZET-u i Holdingu kreće u 3:30 ujutro. Sindikalisti u isto vrijeme izlaze pred medije",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/opci-strajk-zet-zagrebacki-holding-zagreb-3-30-jutro-15750510"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/opci-strajk-zet-zagrebacki-holding-zagreb-3-30-jutro-15750510",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 00:30",
    "outlet": "vecernji",
    "beat": "pregovori",
    "title": "Tomašević: Sindikalni lideri nisu pregovarali u dobroj vjeri. Ne pristajem na ultimatume!",
-   "link": "https://www.vecernji.hr/zagreb/tomasevic-sindikalni-lideri-nisu-pregovarali-u-dobroj-vjeri-ne-pristajem-na-ultimatume-1999078"
+   "link": "https://www.vecernji.hr/zagreb/tomasevic-sindikalni-lideri-nisu-pregovarali-u-dobroj-vjeri-ne-pristajem-na-ultimatume-1999078",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 03:45",
    "outlet": "vecernji",
    "beat": "pocetak",
    "title": "UŽIVO Počeo je štrajk u Zagrebu: Tramvaji i busevi nisu krenuli, očekuje se da će ih velika većina štrajkati",
-   "link": "https://www.vecernji.hr/zagreb/uzivo-poceo-je-strajk-u-zagrebu-tramvaju-nisu-krenuli-ocekuje-se-da-ce-ih-velika-vecina-strajkati-1999079"
+   "link": "https://www.vecernji.hr/zagreb/uzivo-poceo-je-strajk-u-zagrebu-tramvaju-nisu-krenuli-ocekuje-se-da-ce-ih-velika-vecina-strajkati-1999079",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 04:35",
    "outlet": "jutarnji",
    "beat": "pocetak",
    "title": "Pogledajte noćno obraćanje šefova sindikata: ‘Ono što je jučer Tomašević napravio... To je besramno!‘",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-a-zaustavio-tramvaje-i-autobuse-u-zagrebu-15750517"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-a-zaustavio-tramvaje-i-autobuse-u-zagrebu-15750517",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 05:24",
    "outlet": "vecernji",
    "beat": "prvo-jutro",
    "title": "FOTO Zagreb se budi bez tramvaja i buseva, metropolu zbog štrajka čeka nervozno jutro",
-   "link": "https://www.vecernji.hr/vijesti/foto-zagreb-se-budi-bez-tramvaja-i-buseva-metropolu-zbog-strajka-ceka-nervozno-jutro-1999082"
+   "link": "https://www.vecernji.hr/vijesti/foto-zagreb-se-budi-bez-tramvaja-i-buseva-metropolu-zbog-strajka-ceka-nervozno-jutro-1999082",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 06:19",
    "outlet": "jutarnji",
    "beat": "prvo-jutro",
    "title": "Reporteri Jutarnjeg na ulicama Zagreba: Čeka li nas kroz par minuta veliki prometni kolaps?",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/zagreb-bez-guzvi-na-zelenom-valu-prije-jutarnje-spice-15750520"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/zagreb-bez-guzvi-na-zelenom-valu-prije-jutarnje-spice-15750520",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 07:14",
    "outlet": "n1",
    "beat": "jedan-tramvaj",
    "title": "Jedan tramvaj ipak krenuo s Remize, za volanom vozačica",
-   "link": "https://n1info.hr/vijesti/jedan-tramvaj-ipak-krenuo-s-remize-za-volanom-vozacica/"
+   "link": "https://n1info.hr/vijesti/jedan-tramvaj-ipak-krenuo-s-remize-za-volanom-vozacica/",
+   "focus": {
+    "kind": "route",
+    "id": "17"
+   },
+   "facts": [
+    "route:17",
+    "seen"
+   ],
+   "mentions": {
+    "routes": [
+     "17"
+    ]
+   }
   },
   {
    "at": "pon 28. 9. 07:48",
    "outlet": "jutarnji",
    "beat": "prvo-jutro",
    "title": "Najveća hrvatska bolnica u golemim problemima, šef sindikata ZET-a: ‘Žao mi je, ali nitko se ne javlja‘",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-a-zaustavio-autobuse-prema-kbc-zagreb-rebro-blokada-15750533"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-a-zaustavio-autobuse-prema-kbc-zagreb-rebro-blokada-15750533",
+   "focus": {
+    "kind": "place",
+    "id": "rebro"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {
+    "places": [
+     "rebro"
+    ],
+    "tags": [
+     "bolnica"
+    ]
+   }
   },
   {
    "at": "pon 28. 9. 07:59",
    "outlet": "vecernji",
    "beat": "prvo-jutro",
    "title": "FOTO Grad duhova! Ovako trenutačno izgledaju Jelačić-plac i Glavni kolodvor",
-   "link": "https://www.vecernji.hr/zagreb/foto-grad-duhova-ovako-trenutacno-izgledaju-jelacic-plac-i-glavni-kolodvor-1999103"
+   "link": "https://www.vecernji.hr/zagreb/foto-grad-duhova-ovako-trenutacno-izgledaju-jelacic-plac-i-glavni-kolodvor-1999103",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {
+    "places": [
+     "jelacic",
+     "glavni-kolodvor"
+    ]
+   }
   },
   {
    "at": "pon 28. 9. 08:15",
    "outlet": "n1",
    "beat": "guzve",
    "title": "Grad objavio koliko tramvaja i autobusa vozi, na cestama 15 posto više automobila",
-   "link": "https://n1info.hr/vijesti/grad-objavio-koliko-tramvaja-i-autobusa-vozi-na-cestama-15-posto-vise-automobila/"
+   "link": "https://n1info.hr/vijesti/grad-objavio-koliko-tramvaja-i-autobusa-vozi-na-cestama-15-posto-vise-automobila/",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 08:36",
    "outlet": "n1",
    "beat": "taksi",
    "title": "Zbog štrajka eksplodirale cijene taksija: Neke vožnje više nego dvostruko skuplje",
-   "link": "https://n1info.hr/vijesti/zbog-trajka-eksplodirale-cijene-taksija-neke-vonje-vie-nego-dvostruko-skuplje/"
+   "link": "https://n1info.hr/vijesti/zbog-trajka-eksplodirale-cijene-taksija-neke-vonje-vie-nego-dvostruko-skuplje/",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 09:09",
    "outlet": "vecernji",
    "beat": "bajs",
    "title": "FOTO Danas je u Zagrebu ovo jedna od najpopularnijih opcija za prijevoz: Teško ih je uloviti",
-   "link": "https://www.vecernji.hr/zagreb/foto-danas-je-u-zagrebu-ovo-jedna-od-najpopularnijih-opcija-za-prijevoz-tesko-ih-je-uloviti-1999121"
+   "link": "https://www.vecernji.hr/zagreb/foto-danas-je-u-zagrebu-ovo-jedna-od-najpopularnijih-opcija-za-prijevoz-tesko-ih-je-uloviti-1999121",
+   "focus": {
+    "kind": "layer",
+    "layer": "bikes"
+   },
+   "facts": [
+    "bikes",
+    "bikesEmpty"
+   ],
+   "mentions": {
+    "tags": [
+     "bajs"
+    ]
+   }
   },
   {
    "at": "pon 28. 9. 09:29",
    "outlet": "vecernji",
    "beat": "volonteri",
    "title": "Zbog štrajka ZET-a odlučio pomoći Zagrepčanima: Svojim autobusom besplatno vozi do bolnice",
-   "link": "https://www.vecernji.hr/zagreb/zbog-strajka-zet-a-odlucio-pomoci-zagrepcanima-svojim-autobusom-besplatno-vozi-do-bolnice-1999131"
+   "link": "https://www.vecernji.hr/zagreb/zbog-strajka-zet-a-odlucio-pomoci-zagrepcanima-svojim-autobusom-besplatno-vozi-do-bolnice-1999131",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {
+    "tags": [
+     "bolnica"
+    ]
+   }
   },
   {
    "at": "pon 28. 9. 10:48",
    "outlet": "vecernji",
    "beat": "taksi",
    "title": "Tražite prijevoz zbog štrajka ZET-a? Ova stranica spaja vozače sa slobodnim mjestima i putnike",
-   "link": "https://www.vecernji.hr/barkod/trazite-prijevoz-zbog-strajka-zet-a-ova-stranica-spaja-vozace-sa-slobodnim-mjestima-i-putnike-1999161"
+   "link": "https://www.vecernji.hr/barkod/trazite-prijevoz-zbog-strajka-zet-a-ova-stranica-spaja-vozace-sa-slobodnim-mjestima-i-putnike-1999161",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 10:58",
    "outlet": "jutarnji",
    "beat": "skole",
    "title": "Fuchs: Zbog štrajka će učenicima biti opravdana kašnjenja",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/fuchs-nema-automatskih-ispricnica-zbog-strajka-zet-a-15750611"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/fuchs-nema-automatskih-ispricnica-zbog-strajka-zet-a-15750611",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 11:20",
    "outlet": "vecernji",
    "beat": "vlak",
    "title": "Štrajk ZET-a napunio vlakove: HŽ bilježi pojačan priljev putnika, evo koliko ih odjednom mogu prevesti",
-   "link": "https://www.vecernji.hr/zagreb/strajk-zet-a-napunio-vlakove-hz-biljezi-pojacan-priljev-putnika-evo-koliko-ih-odjednom-mogu-prevesti-1999183"
+   "link": "https://www.vecernji.hr/zagreb/strajk-zet-a-napunio-vlakove-hz-biljezi-pojacan-priljev-putnika-evo-koliko-ih-odjednom-mogu-prevesti-1999183",
+   "focus": {
+    "kind": "place",
+    "id": "glavni-kolodvor"
+   },
+   "facts": [
+    "state",
+    "seen"
+   ],
+   "mentions": {
+    "places": [
+     "glavni-kolodvor"
+    ],
+    "tags": [
+     "rail"
+    ]
+   }
   },
   {
    "at": "pon 28. 9. 11:34",
    "outlet": "n1",
    "beat": "volonteri",
    "title": "VIDEO / Kako se građani probijaju do Rebra? \"Nema parkinga, ljudi se snalaze kako tko zna\"",
-   "link": "https://n1info.hr/vijesti/video-kako-se-gradjani-probijaju-do-rebra-nema-parkinga-ljudi-se-snalaze-kako-tko-zna/"
+   "link": "https://n1info.hr/vijesti/video-kako-se-gradjani-probijaju-do-rebra-nema-parkinga-ljudi-se-snalaze-kako-tko-zna/",
+   "focus": {
+    "kind": "place",
+    "id": "rebro"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {
+    "places": [
+     "rebro"
+    ],
+    "tags": [
+     "bolnica"
+    ]
+   }
   },
   {
    "at": "pon 28. 9. 12:58",
    "outlet": "jutarnji",
    "beat": "taksi",
    "title": "Boltu: Potražnja nam je bila 300 posto veća u odnosu na prošli ponedjeljak",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/bolt-300-posto-rast-potraznje-zagreb-strajk-javnog-prijevoza-15750669"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/bolt-300-posto-rast-potraznje-zagreb-strajk-javnog-prijevoza-15750669",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 13:24",
    "outlet": "n1",
    "beat": "bajs",
    "title": "ZET stoji, biciklisti voze: Zagrepčani jutros \"odpedalirali\" gotovo do Los Angelesa",
-   "link": "https://n1info.hr/vijesti/zet-stoji-biciklisti-voze-zagrepcani-jutros-odpedalirali-gotovo-do-los-angelesa/"
+   "link": "https://n1info.hr/vijesti/zet-stoji-biciklisti-voze-zagrepcani-jutros-odpedalirali-gotovo-do-los-angelesa/",
+   "focus": {
+    "kind": "layer",
+    "layer": "bikes"
+   },
+   "facts": [
+    "bikes",
+    "bikesEmpty"
+   ],
+   "mentions": {
+    "tags": [
+     "bajs"
+    ]
+   }
   },
   {
    "at": "pon 28. 9. 14:46",
    "outlet": "jutarnji",
    "beat": "sud-privremeno",
    "title": "Doznajemo kada sutra počinju ročišta na kojima će Sud donijeti odluku o zakonitosti štrajka",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/sud-sutra-odlucuje-zakonitost-strajka-zagreb-holding-zet-privremena-mjera-15750711"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/sud-sutra-odlucuje-zakonitost-strajka-zagreb-holding-zet-privremena-mjera-15750711",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 15:03",
    "outlet": "n1",
    "beat": "holding",
    "title": "FOTO / Štrajk se vidi na ulicama: Prijeti li Zagrebu napuljski scenarij zbog gomilanja smeća?",
-   "link": "https://n1info.hr/vijesti/foto-strajk-se-vidi-na-ulicama-prijeti-li-zagrebu-napuljski-scenarij-zbog-gomilanja-smeca/"
+   "link": "https://n1info.hr/vijesti/foto-strajk-se-vidi-na-ulicama-prijeti-li-zagrebu-napuljski-scenarij-zbog-gomilanja-smeca/",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 15:31",
    "outlet": "jutarnji",
    "beat": "linija-228",
    "title": "Tomašević: Ovaj štrajk se nije trebao ni dogoditi. Sramotno je da nisu vozili ni liniju do najveće bolnice",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/zagreb-izbjegao-kolaps-unatoc-strajku-zet-a-i-holdinga-15750739"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/zagreb-izbjegao-kolaps-unatoc-strajku-zet-a-i-holdinga-15750739",
+   "focus": {
+    "kind": "route",
+    "id": "228"
+   },
+   "facts": [
+    "route:228",
+    "seen"
+   ],
+   "mentions": {
+    "routes": [
+     "228"
+    ],
+    "places": [
+     "rebro"
+    ],
+    "tags": [
+     "bolnica"
+    ]
+   }
   },
   {
    "at": "pon 28. 9. 15:45",
    "outlet": "jutarnji",
    "beat": "skole",
    "title": "Nastava se unatoč štrajku ZET-a normalno odvija",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-a-zagrebacke-skole-nastava-ide-dalje-minimalna-kasnjenja-online-moguc-15750748"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-a-zagrebacke-skole-nastava-ide-dalje-minimalna-kasnjenja-online-moguc-15750748",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 16:35",
    "outlet": "vecernji",
    "beat": "sud-privremeno",
    "title": "Štrajk koji je paralizirao Zagreb stiže sutra pred sud! Ove dvije žene vodit će postupke",
-   "link": "https://www.vecernji.hr/zagreb/strajk-koji-je-paralizirao-zagreb-stize-sutra-pred-sud-ove-dvije-zene-vodit-ce-postupke-1999328"
+   "link": "https://www.vecernji.hr/zagreb/strajk-koji-je-paralizirao-zagreb-stize-sutra-pred-sud-ove-dvije-zene-vodit-ce-postupke-1999328",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 19:10",
    "outlet": "jutarnji",
    "beat": "pocetak",
    "title": "VIDEO Zagreb izbjegao paralizu, ali obustava javnog prijevoza i odvoza smeća se nastavljaju, sutra odluka suda",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-a-i-zagrebackog-holdinga-sud-sutra-odlucuje-zagreb-se-snalazi-15750799"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-a-i-zagrebackog-holdinga-sud-sutra-odlucuje-zagreb-se-snalazi-15750799",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 20:05",
    "outlet": "jutarnji",
    "beat": "pocetak",
    "title": "Detaljna fotogalerija: Ovako je izgledao Zagreb na dan velikog štrajka",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-a-paralizira-zagreb-obustavljeno-134-autobusne-linije-i-stotine-vozila-15750809"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-a-paralizira-zagreb-obustavljeno-134-autobusne-linije-i-stotine-vozila-15750809",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 21:25",
    "outlet": "n1",
    "beat": "pregovori",
    "title": "Koliko će dugo trajati štrajk? Pravni stručnjak: \"Vrlo brzo znat ćemo odluku Suda\"",
-   "link": "https://n1info.hr/vijesti/koliko-ce-dugo-trajati-strajk-pravni-strucnjak-vrlo-brzo-znat-cemo-odluku-suda/"
+   "link": "https://n1info.hr/vijesti/koliko-ce-dugo-trajati-strajk-pravni-strucnjak-vrlo-brzo-znat-cemo-odluku-suda/",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "pon 28. 9. 23:37",
    "outlet": "jutarnji",
    "beat": "pregovori",
    "title": "VIDEO Tomašević se obratio direktno građanima: ‘Ne pristajem na ultimatume‘",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/tomislav-tomasevic-obracanje-strajk-zet-cistoca-zagreb-preporuke-15750845"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/tomislav-tomasevic-obracanje-strajk-zet-cistoca-zagreb-preporuke-15750845",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 05:35",
    "outlet": "jutarnji",
    "beat": "drugi-dan",
    "title": "Drugi dan štrajka. Javni prijevoz stao, smeće se ne odvozi, dogovor ni blizu. Tomašević: ‘Sramota gdje ne voze‘",
-   "link": "https://www.jutarnji.hr/vijesti/hrvatska/zagreb-drugi-dan-strajka-bez-zet-a-i-dogovora-15750855"
+   "link": "https://www.jutarnji.hr/vijesti/hrvatska/zagreb-drugi-dan-strajka-bez-zet-a-i-dogovora-15750855",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 06:33",
    "outlet": "n1",
    "beat": "jedan-tramvaj",
    "title": "Na ulicama Zagreba samo jedan tramvaj i autobus. Tomašević najavio obraćanje",
-   "link": "https://n1info.hr/vijesti/na-ulicama-zagreba-samo-jedan-tramvaj-i-autobus-tomasevic-najavio-obracanje/"
+   "link": "https://n1info.hr/vijesti/na-ulicama-zagreba-samo-jedan-tramvaj-i-autobus-tomasevic-najavio-obracanje/",
+   "focus": {
+    "kind": "route",
+    "id": "17"
+   },
+   "facts": [
+    "route:17",
+    "seen"
+   ],
+   "mentions": {
+    "routes": [
+     "17"
+    ]
+   }
   },
   {
    "at": "uto 29. 9. 07:17",
    "outlet": "jutarnji",
    "beat": "drugi-dan",
    "title": "FOTO ZET ne vozi, Zagreb nekim čudom još postoji. Pogledajte stanje na cestama",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/zagreb-bez-guzvi-drugi-dan-strajka-zet-a-i-holdinga-15750864"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/zagreb-bez-guzvi-drugi-dan-strajka-zet-a-i-holdinga-15750864",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 08:07",
    "outlet": "jutarnji",
    "beat": "volonteri",
    "title": "Ivan besplatno prevozi ljude na Rebro: ‘Vozio sam tri sata, napravio 20 krugova...‘",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/besplatan-prijevoz-ivan-kaspret-rebro-kb-dubrava-strajk-zet-zagreb-15750870"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/besplatan-prijevoz-ivan-kaspret-rebro-kb-dubrava-strajk-zet-zagreb-15750870",
+   "focus": {
+    "kind": "place",
+    "id": "rebro"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {
+    "places": [
+     "rebro"
+    ],
+    "tags": [
+     "bolnica"
+    ]
+   }
   },
   {
    "at": "uto 29. 9. 08:42",
    "outlet": "vecernji",
    "beat": "holding",
    "title": "FOTO Krenuli problemi! Čistoća štrajka, ovako danas izgleda Zagreb",
-   "link": "https://www.vecernji.hr/zagreb/foto-krenuli-problemi-cistoca-strajka-ovako-danas-izgleda-zagreb-1999488"
+   "link": "https://www.vecernji.hr/zagreb/foto-krenuli-problemi-cistoca-strajka-ovako-danas-izgleda-zagreb-1999488",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 10:00",
    "outlet": "n1",
    "beat": "guzve",
    "title": "Zagrebačke ulice u crvenom! Evo gdje su najveće gužve",
-   "link": "https://n1info.hr/vijesti/drugi-dan-strajka-zagreb-se-jutros-puni-automobilima-evo-gdje-su-najvece-guzve/"
+   "link": "https://n1info.hr/vijesti/drugi-dan-strajka-zagreb-se-jutros-puni-automobilima-evo-gdje-su-najvece-guzve/",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 10:33",
    "outlet": "jutarnji",
    "beat": "skole",
    "title": "Ravnatelj Preloga: U školu je došlo 80 posto djece, ali ako ovo potraje, spremni smo za online nastavu",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/ucenici-zagreb-bez-zet-a-skola-online-nastava-sindikalni-strajk-15750929"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/ucenici-zagreb-bez-zet-a-skola-online-nastava-sindikalni-strajk-15750929",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 11:03",
    "outlet": "vecernji",
    "beat": "linija-228",
    "title": "Sindikat i ZET se uspjeli dogovoriti: Uspostavljena jedna redovna autobusna linija",
-   "link": "https://www.vecernji.hr/zagreb/sindikat-i-zet-se-uspjeli-dogovoriti-uspostavljena-jedna-redovna-autobusna-linija-1999556"
+   "link": "https://www.vecernji.hr/zagreb/sindikat-i-zet-se-uspjeli-dogovoriti-uspostavljena-jedna-redovna-autobusna-linija-1999556",
+   "focus": {
+    "kind": "route",
+    "id": "228"
+   },
+   "facts": [
+    "route:228",
+    "seen"
+   ],
+   "mentions": {
+    "routes": [
+     "228"
+    ],
+    "places": [
+     "rebro"
+    ]
+   }
   },
   {
    "at": "uto 29. 9. 13:07",
    "outlet": "n1",
    "beat": "sud-privremeno",
    "title": "UŽIVO / Uskoro odluka Suda o privremenoj zabrani štrajka u ZET-u",
-   "link": "https://n1info.hr/vijesti/zet-zupanijski-sud-odluka-o-tuzbi/"
+   "link": "https://n1info.hr/vijesti/zet-zupanijski-sud-odluka-o-tuzbi/",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 13:28",
    "outlet": "vecernji",
    "beat": "jedan-tramvaj",
    "title": "FOTO Zagrepčani su i danas mogli računati na Kristinu: Evo kako izgleda vožnja 'sedamnaesticom' usred štrajka",
-   "link": "https://www.vecernji.hr/zagreb/foto-zagrepcani-su-i-danas-mogli-racunati-na-kristinu-evo-kako-izgleda-voznja-sedamnaesticom-usred-strajka-1999622"
+   "link": "https://www.vecernji.hr/zagreb/foto-zagrepcani-su-i-danas-mogli-racunati-na-kristinu-evo-kako-izgleda-voznja-sedamnaesticom-usred-strajka-1999622",
+   "focus": {
+    "kind": "route",
+    "id": "17"
+   },
+   "facts": [
+    "route:17",
+    "seen"
+   ],
+   "mentions": {
+    "routes": [
+     "17"
+    ]
+   }
   },
   {
    "at": "uto 29. 9. 13:54",
    "outlet": "jutarnji",
    "beat": "skole",
    "title": "Ravnatelji škola otkrivaju za Jutarnji što će biti s nastavom ako se štrajk nastavi",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-zagrebacke-skole-fleksibilnost-online-nastava-15751019"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/strajk-zet-zagrebacke-skole-fleksibilnost-online-nastava-15751019",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 14:27",
    "outlet": "vecernji",
    "beat": "linija-228",
    "title": "FOTO Zbog ove linije Tomašević je sindikate nazvao 'neodgovornima i socijalno neosjetljivima.' Danas ipak prometuje",
-   "link": "https://www.vecernji.hr/zagreb/foto-zbog-ove-linije-tomasevic-je-sindikate-nazvao-neodgovornima-i-socijalno-neosjetljivima-danas-ipak-prometuje-1999650"
+   "link": "https://www.vecernji.hr/zagreb/foto-zbog-ove-linije-tomasevic-je-sindikate-nazvao-neodgovornima-i-socijalno-neosjetljivima-danas-ipak-prometuje-1999650",
+   "focus": {
+    "kind": "route",
+    "id": "228"
+   },
+   "facts": [
+    "route:228",
+    "seen"
+   ],
+   "mentions": {
+    "routes": [
+     "228"
+    ],
+    "places": [
+     "rebro"
+    ]
+   }
   },
   {
    "at": "uto 29. 9. 15:23",
    "outlet": "n1",
    "beat": "sud-privremeno",
    "title": "Predsjednik ZET-ovog sindikata: Odluka suda potvrđuje da idemo pravim putem",
-   "link": "https://n1info.hr/vijesti/predsjednik-zet-ovog-sindikata-odluka-suda-potvrdjuje-da-idemo-pravim-putem/"
+   "link": "https://n1info.hr/vijesti/predsjednik-zet-ovog-sindikata-odluka-suda-potvrdjuje-da-idemo-pravim-putem/",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 16:24",
    "outlet": "vecernji",
    "beat": "sud-privremeno",
    "title": "Tomašević objasnio što točno Zagrepčani mogu očekivati od sutrašnje presude o zakonitosti štrajka",
-   "link": "https://www.vecernji.hr/zagreb/tomasevic-objasnio-sto-tocno-zagrepcani-mogu-ocekivati-od-sutrasnje-presude-o-zakonitosti-strajka-1999687"
+   "link": "https://www.vecernji.hr/zagreb/tomasevic-objasnio-sto-tocno-zagrepcani-mogu-ocekivati-od-sutrasnje-presude-o-zakonitosti-strajka-1999687",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 17:24",
    "outlet": "vecernji",
    "beat": "skole",
    "title": "Stižu li učenici u škole dok ZET štrajka? Grad otkrio koliko je bilo kašnjenja",
-   "link": "https://www.vecernji.hr/zagreb/stizu-li-ucenici-u-skole-dok-zet-strajka-grad-otkrio-koliko-je-bilo-kasnjenja-1999706"
+   "link": "https://www.vecernji.hr/zagreb/stizu-li-ucenici-u-skole-dok-zet-strajka-grad-otkrio-koliko-je-bilo-kasnjenja-1999706",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 18:10",
    "outlet": "jutarnji",
    "beat": "sud-privremeno",
    "title": "Stručnjak za radno pravo predviđa preokret oko štrajka",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/gotovac-socijalni-mir-presudan-spor-strajk-zet-cistoca-zagrebacki-holding-15751108"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/gotovac-socijalni-mir-presudan-spor-strajk-zet-cistoca-zagrebacki-holding-15751108",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 20:34",
    "outlet": "n1",
    "beat": "taksi",
    "title": "Autor stranice Idemo. za N1: \"Ovo je eksplozija solidarnosti!\"",
-   "link": "https://n1info.hr/vijesti/svemir-vranko-za-n1-ovo-je-eksplozija-solidarnosti/"
+   "link": "https://n1info.hr/vijesti/svemir-vranko-za-n1-ovo-je-eksplozija-solidarnosti/",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "uto 29. 9. 20:58",
    "outlet": "vecernji",
    "beat": "linija-228",
    "title": "Je li sutra kraj drame u Zagrebu? 'Liniju za Rebro dogovorili smo za pola sata. Tako se može riješiti sve'",
-   "link": "https://www.vecernji.hr/zagreb/je-li-sutra-kraj-drame-u-zagrebu-liniju-za-rebro-dogovorili-smo-za-pola-sata-tako-se-moze-rijesiti-sve-1999785"
+   "link": "https://www.vecernji.hr/zagreb/je-li-sutra-kraj-drame-u-zagrebu-liniju-za-rebro-dogovorili-smo-za-pola-sata-tako-se-moze-rijesiti-sve-1999785",
+   "focus": {
+    "kind": "route",
+    "id": "228"
+   },
+   "facts": [
+    "route:228",
+    "seen"
+   ],
+   "mentions": {
+    "routes": [
+     "228"
+    ],
+    "places": [
+     "rebro"
+    ]
+   }
   },
   {
    "at": "uto 29. 9. 21:40",
    "outlet": "jutarnji",
    "beat": "taksi",
    "title": "Bolt: Rezervacije vožnji su skočile 644 posto",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/bolt-rast-potraznje-rezervacija-zagreb-strajk-javni-prijevoz-15751140"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/bolt-rast-potraznje-rezervacija-zagreb-strajk-javni-prijevoz-15751140",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 06:27",
    "outlet": "n1",
    "beat": "treci-dan",
    "title": "Treći je dan štrajka, Sud danas donosi ključnu odluku!",
-   "link": "https://n1info.hr/vijesti/treci-je-dan-strajka-sud-danas-donosi-kljucnu-odluku/"
+   "link": "https://n1info.hr/vijesti/treci-je-dan-strajka-sud-danas-donosi-kljucnu-odluku/",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 07:36",
    "outlet": "n1",
    "beat": "jedan-tramvaj",
    "title": "Vozačica Kristina danas za volanom 12-ice",
-   "link": "https://n1info.hr/vijesti/vozacica-kristina-danas-za-volanom-12-ice/"
+   "link": "https://n1info.hr/vijesti/vozacica-kristina-danas-za-volanom-12-ice/",
+   "focus": {
+    "kind": "route",
+    "id": "12"
+   },
+   "facts": [
+    "route:12",
+    "seen"
+   ],
+   "mentions": {
+    "routes": [
+     "12"
+    ]
+   }
   },
   {
    "at": "sri 30. 9. 08:53",
    "outlet": "n1",
    "beat": "treci-dan",
    "title": "Ako Sud proglasi štrajk nezakonitim, hoće li tramvaji i kamioni Čistoće odmah na ulice?",
-   "link": "https://n1info.hr/vijesti/ako-sud-proglasi-strajk-nezakonitim-hoce-li-tramvaji-kamioni-cistoce-odmah-na-ulice/"
+   "link": "https://n1info.hr/vijesti/ako-sud-proglasi-strajk-nezakonitim-hoce-li-tramvaji-kamioni-cistoce-odmah-na-ulice/",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 10:20",
    "outlet": "n1",
    "beat": "presuda",
    "title": "USKORO UŽIVO / Sud odlučuje o zakonitosti štrajka u Zagrebačkom holdingu",
-   "link": "https://n1info.hr/vijesti/strajk-zagrebacki-holding-sud-odlucuje-o-zakonitosti-30-02-2026/"
+   "link": "https://n1info.hr/vijesti/strajk-zagrebacki-holding-sud-odlucuje-o-zakonitosti-30-02-2026/",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 11:04",
    "outlet": "jutarnji",
    "beat": "presuda",
    "title": "Sud je presudio da je štrajk u Holdingu nezakonit, ali agonija u Zagrebu bi mogla trajati još 20 dana!",
-   "link": "https://www.jutarnji.hr/vijesti/hrvatska/sud-je-presudio-da-je-strajk-u-holdingu-nezakonit-ali-agonija-u-zagrebu-bi-mogla-trajati-jos-20-dana-15751279"
+   "link": "https://www.jutarnji.hr/vijesti/hrvatska/sud-je-presudio-da-je-strajk-u-holdingu-nezakonit-ali-agonija-u-zagrebu-bi-mogla-trajati-jos-20-dana-15751279",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 12:23",
    "outlet": "jutarnji",
    "beat": "bajs",
    "title": "Nešto se neobično događa s Bajsom, korisnici ljutiti: ‘Što se događa?!‘",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/bajsevi-blokirani-aplikacija-pokrene-voznju-brave-se-ne-otkljucavaju-15751314"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/bajsevi-blokirani-aplikacija-pokrene-voznju-brave-se-ne-otkljucavaju-15751314",
+   "focus": {
+    "kind": "layer",
+    "layer": "bikes"
+   },
+   "facts": [
+    "bikes",
+    "bikesEmpty"
+   ],
+   "mentions": {
+    "tags": [
+     "bajs"
+    ]
+   }
   },
   {
    "at": "sri 30. 9. 12:47",
    "outlet": "vecernji",
    "beat": "presuda",
    "title": "Štrajk proglašen nezakonitim, ZET pozvao sindikate: 'Odmah ga obustavite'",
-   "link": "https://www.vecernji.hr/zagreb/strajk-proglasen-nezakonitim-zet-pozvao-sindikate-odmah-ga-obustavite-1999934"
+   "link": "https://www.vecernji.hr/zagreb/strajk-proglasen-nezakonitim-zet-pozvao-sindikate-odmah-ga-obustavite-1999934",
+   "focus": {
+    "kind": "none"
+   },
+   "facts": [
+    "state",
+    "seen",
+    "expected"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 13:28",
    "outlet": "vecernji",
    "beat": "skole",
    "title": "VIDEO Kakav prizor pred zagrebačkom školom! Više od 120 učenika zbog štrajka napravilo isto",
-   "link": "https://www.vecernji.hr/zagreb/video-kakav-prizor-pred-zagrebackom-skolom-vise-od-120-ucenika-zbog-strajka-napravilo-isto-1999898"
+   "link": "https://www.vecernji.hr/zagreb/video-kakav-prizor-pred-zagrebackom-skolom-vise-od-120-ucenika-zbog-strajka-napravilo-isto-1999898",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 14:35",
    "outlet": "n1",
    "beat": "povratak",
    "title": "VIDEO / Pogledajte kako se kamioni Čistoće vraćaju na zagrebačke ulice",
-   "link": "https://n1info.hr/vijesti/cistoca-gotov-strajk-kamioni-na-ulicama/"
+   "link": "https://n1info.hr/vijesti/cistoca-gotov-strajk-kamioni-na-ulicama/",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 17:54",
    "outlet": "n1",
    "beat": "povratak",
    "title": "USKORO UŽIVO / Hoće li sindikat ZET-a prekinuti štrajk?",
-   "link": "https://n1info.hr/vijesti/sindikat-zet-strajk-prekid-30092026/"
+   "link": "https://n1info.hr/vijesti/sindikat-zet-strajk-prekid-30092026/",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 18:28",
    "outlet": "vecernji",
    "beat": "povratak",
    "title": "Krenuli prvi busevi, pripremaju se i tramvaji 2, 5 i 17! Pogledajte na kojim trasama",
-   "link": "https://www.vecernji.hr/zagreb/krenuli-prvi-busevi-pripremaju-se-i-tramvaji-2-5-i-17-pogledajte-na-kojim-trasama-2000089"
+   "link": "https://www.vecernji.hr/zagreb/krenuli-prvi-busevi-pripremaju-se-i-tramvaji-2-5-i-17-pogledajte-na-kojim-trasama-2000089",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {
+    "routes": [
+     "2",
+     "5",
+     "17"
+    ]
+   }
   },
   {
    "at": "sri 30. 9. 18:58",
    "outlet": "vecernji",
    "beat": "povratak",
    "title": "Sindikalist ZET-a: Privremeno obustavljamo štrajk zbog ljudi",
-   "link": "https://www.vecernji.hr/zagreb/sindikalist-zet-a-privremeno-obustavljamo-strajk-zbog-ljudi-2000097"
+   "link": "https://www.vecernji.hr/zagreb/sindikalist-zet-a-privremeno-obustavljamo-strajk-zbog-ljudi-2000097",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 19:10",
    "outlet": "vecernji",
    "beat": "povratak",
    "title": "FOTO Zagreb ponovno u pokretu: Tramvaji se vratili na gradske ulice",
-   "link": "https://www.vecernji.hr/zagreb/foto-zagreb-ponovno-u-pokretu-tramvaji-se-vratili-na-gradske-ulice-2000101"
+   "link": "https://www.vecernji.hr/zagreb/foto-zagreb-ponovno-u-pokretu-tramvaji-se-vratili-na-gradske-ulice-2000101",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 20:05",
    "outlet": "n1",
    "beat": "povratak",
    "title": "Čelnik ZET-ova sindikata: Čovjek u životu radi pogreške, je li ovo bila pogreška, pokazat će vrijeme",
-   "link": "https://n1info.hr/vijesti/celnik-zet-ova-sindikata-covjek-u-zivotu-radi-pogreske-je-li-ovo-bila-pogreska-pokazat-ce-vrijeme/"
+   "link": "https://n1info.hr/vijesti/celnik-zet-ova-sindikata-covjek-u-zivotu-radi-pogreske-je-li-ovo-bila-pogreska-pokazat-ce-vrijeme/",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   },
   {
    "at": "sri 30. 9. 20:52",
    "outlet": "jutarnji",
    "beat": "guzve",
    "title": "Kako je zapravo izbjegnut kolaps: ‘Kamere su zabilježile frapantan podatak, a ponašanje vozača u Savskoj i nas je iznenadilo!‘",
-   "link": "https://www.jutarnji.hr/vijesti/zagreb/stajk-zet-a-bez-kolapsa-zagreb-bicikli-pjesacenje-adaptivni-promet-15751481"
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/stajk-zet-a-bez-kolapsa-zagreb-bicikli-pjesacenje-adaptivni-promet-15751481",
+   "focus": {
+    "kind": "place",
+    "id": "jelacic"
+   },
+   "facts": [
+    "seen",
+    "bikesEmpty"
+   ],
+   "mentions": {}
   },
   {
    "at": "čet 1. 10. 06:44",
    "outlet": "vecernji",
    "beat": "povratak",
    "title": "UŽIVO Štrajk je gotov: Tramvaji i autobusi voze redovno",
-   "link": "https://www.vecernji.hr/zagreb/uzivo-strajk-je-gotov-tramvaji-i-autobusi-voze-redovno-2000168"
+   "link": "https://www.vecernji.hr/zagreb/uzivo-strajk-je-gotov-tramvaji-i-autobusi-voze-redovno-2000168",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
+  },
+  {
+   "at": "čet 1. 10. 08:26",
+   "outlet": "vecernji",
+   "beat": "nakon",
+   "title": "FOTO Ovako izgleda prvo jutro nakon štrajka. Zagreb se vraća u normalu, tramvaji na tračnicama, Čistoća na ulicama",
+   "link": "https://www.vecernji.hr/zagreb/foto-ovako-izgleda-prvo-jutro-nakon-strajka-zagreb-se-vraca-u-normalu-tramvaji-na-tracnicama-cistoca-na-ulicama-2000185",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
+  },
+  {
+   "at": "čet 1. 10. 09:03",
+   "outlet": "n1",
+   "beat": "nakon",
+   "title": "I jutros se oglasio Tomašević: \"Pobjednika nema kada stariji sugrađani ne mogu javnim prijevozom do liječnika\"",
+   "link": "https://n1info.hr/vijesti/i-jutros-se-oglasio-tomasevic-pobjednika-nema-kada-stariji-sugradjani-ne-mogu-javnim-prijevozom-do-lijecnika/",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
+  },
+  {
+   "at": "čet 1. 10. 11:59",
+   "outlet": "n1",
+   "beat": "nakon",
+   "title": "ZET i sindikati sjedaju za stol, arbitraža o štrajku počinje danas",
+   "link": "https://n1info.hr/vijesti/zet-i-sindikati-sjedaju-za-stol-arbitraza-o-strajku-01-10-2026/",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
+  },
+  {
+   "at": "čet 1. 10. 14:00",
+   "outlet": "vecernji",
+   "beat": "nakon",
+   "title": "FOTO/VIDEO Zagrepčani tri dana bez tramvaja: 'Sat vremena sam hodala do bolnice'",
+   "link": "https://www.vecernji.hr/zagreb/foto-video-zagrepcani-tri-dana-bez-bez-tramvaja-isla-sam-pjesice-od-nove-vesi-do-merkura-2000264",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {
+    "tags": [
+     "bolnica"
+    ]
+   }
+  },
+  {
+   "at": "čet 1. 10. 16:30",
+   "outlet": "vecernji",
+   "beat": "nakon",
+   "title": "'Da je pala kiša, vidio bi kaosa': Zagrepčani sažimaju dojmove o danima bez ZET-a",
+   "link": "https://www.vecernji.hr/zagreb/da-je-pala-kisa-vidio-bi-kaosa-zagrepcani-sazimaju-dojmove-o-danima-bez-zet-a-2000328",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
+  },
+  {
+   "at": "čet 1. 10. 21:41",
+   "outlet": "jutarnji",
+   "beat": "nakon",
+   "title": "Završio prvi arbitražni sastanak u ZET-u. Jozić: ‘Nema dogovora‘",
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/arbitraza-zet-bez-dogovora-nuzni-poslovi-sljedeci-sastanci-15751832",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
+  },
+  {
+   "at": "čet 1. 10. 21:44",
+   "outlet": "jutarnji",
+   "beat": "nakon",
+   "title": "Putnici poštedjeli štrajkaše, ZET-ovci otvorili dušu: ‘Prvi dan smo napravili jednu veliku pogrešku‘",
+   "link": "https://www.jutarnji.hr/vijesti/zagreb/zagreb-nakon-strajka-povratak-tramvaja-bez-incidenta-15751834",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
+  },
+  {
+   "at": "pet 2. 10. 09:38",
+   "outlet": "n1",
+   "beat": "nakon",
+   "title": "N1 komentar: Arbitraža o nužnim poslovima u ZET-u",
+   "link": "https://n1info.hr/n1-komentar/n1-komentar-arbitraza-o-nuznim-poslovima-u-zet-u/",
+   "focus": {
+    "kind": "city"
+   },
+   "facts": [
+    "seen",
+    "expected",
+    "state"
+   ],
+   "mentions": {}
   }
  ]
 }
