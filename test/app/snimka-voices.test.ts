@@ -111,7 +111,7 @@ describe('buildVoices', () => {
   });
   it('without a noticeId: within 60 minutes and the same title, or the notice linked among the sources', () => {
     const notice = { id: 7, title: 'Promet ponovno u punom opsegu', text: null, link: 'https://www.zet.hr/obavijesti/7', pubSec: 1000, focus: { kind: 'none' as const }, facts: [], mentions: {} };
-    const base = { sources: [] as { label: string; url: string | null }[] };
+    const base = { sources: [] as { label: string; url: string }[] };
     expect(repeatedNotice({ ...base, atSec: 1000 + 3000, title: 'promet ponovno u punom opsegu ' }, [notice])?.id).toBe(7);
     expect(repeatedNotice({ ...base, atSec: 1000 + 3700, title: 'Promet ponovno u punom opsegu' }, [notice])).toBeNull();
     expect(repeatedNotice({ atSec: 1500, title: 'ZET: puni opseg', sources: [{ label: 'ZET', url: 'https://www.zet.hr/obavijesti/7' }] }, [notice])?.id).toBe(7);

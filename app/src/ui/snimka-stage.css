@@ -70,7 +70,7 @@
 
 /* One row of three chips that are the legend too: a mark, the name, the count (V3-11). */
 .sn-chips-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
-.sn-chip { display: inline-flex; align-items: center; gap: 0.4em; font-size: var(--type-secondary); padding-inline: 0.75rem; font-variant-numeric: tabular-nums; }
+.sn-chip { display: inline-flex; align-items: center; gap: 0.3em; font-size: var(--type-secondary); padding-inline: 0.75rem; font-variant-numeric: tabular-nums; }
 .sn-chip[aria-pressed='false'] .sn-chip-dot { opacity: 0.35; }
 .sn-chip[aria-pressed='false'] .sn-chip-count { visibility: hidden; }
 .sn-chip-dot { font-size: 0.9em; line-height: 1; }
@@ -185,7 +185,7 @@
   .sn-slot-timeline { order: 3; }
   .sn-stage-root[data-sn-bar-stuck] .sn-slot-timeline { position: sticky; inset-block-end: 0; z-index: 5; }
   .sn-slot-map .sn-map-box { block-size: 56vh; min-block-size: 16rem; }
-  .sn-slot-subtitle { inset-inline: var(--sp-1); inset-block-end: 1.5rem; }
+  .sn-slot-subtitle { inset-inline: var(--sp-1); inset-block-end: 2.75rem; }
   .sn-plate { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.35em; row-gap: 0; padding: var(--sp-1) var(--sp-3); inset-block-start: var(--sp-2); inset-inline-start: var(--sp-2); }
   .sn-plate-day, .sn-plate-sep { display: inline; font-size: var(--type-control); color: var(--tone-text-primary); }
   .sn-plate-time { font-size: var(--type-control); letter-spacing: 0; }

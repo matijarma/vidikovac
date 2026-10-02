@@ -204,7 +204,7 @@ export const mountStage: Mount = (ctx, root) => {
   for (const c of CHIPS) {
     const count = c.key === 'bikes' ? null : el(doc, 'span', { class: 'sn-chip-count', 'data-sn': `count-${c.key}` });
     const button = el(doc, 'button', { type: 'button', class: 'chip sn-chip', 'data-layer': c.key, 'aria-pressed': 'false' },
-      el(doc, 'span', { class: `sn-chip-dot sn-chip-dot-${c.key}`, 'aria-hidden': 'true', text: c.glyph }), el(doc, 'span', { class: 'sn-chip-name', text: c.name }), count);
+      el(doc, 'span', { class: `sn-chip-dot sn-chip-dot-${c.key}`, 'aria-hidden': 'true', text: c.glyph }), ' ', el(doc, 'span', { class: 'sn-chip-name', text: c.name }), count ? ' ' : null, count);
     if (c.key === 'compare') { button.setAttribute('aria-describedby', compareNoteId); button.title = SN.layers.compareAria; }
     if (c.key === 'bikes') button.title = SN.layers.bikesLegend;
     button.addEventListener('click', () => layers.set({ [c.key]: !layers.get()[c.key] }));

@@ -94,9 +94,9 @@ describe('mountStage (lightweight)', () => {
     const chips = [...root.querySelectorAll<HTMLButtonElement>('[data-sn="layers"] .sn-chip')];
     expect(chips.map((c) => c.dataset.layer)).toEqual(['vehicles', 'compare', 'bikes']);
     const seen = ctx.series.seen.all[Math.floor((MARKS.monday0745 - ctx.series.t0) / 60)]!;
-    expect(chips[0]!.textContent).toBe(`●Vozila${seen}`);
-    expect(chips[1]!.textContent).toBe('●Običan danbez podatka');
-    expect(chips[2]!.textContent).toBe('◐Bicikli');
+    expect(chips[0]!.textContent).toBe(`● Vozila ${seen}`);
+    expect(chips[1]!.textContent).toBe('● Običan dan bez podatka');
+    expect(chips[2]!.textContent).toBe('◐ Bicikli');
     for (const c of chips) expect(c.getAttribute('aria-pressed')).toBe('true');
     expect(root.textContent).not.toMatch(/Živa mreža|Zatvorene ulice|Karta prati snimku|Kaj ima\? izvodi/);
     expect(root.querySelector('.sn-chip-label, .sn-legend-words')).toBeNull();
