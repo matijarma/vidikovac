@@ -59,7 +59,7 @@ describe('/open/*', () => {
     const body = (await response.json()) as { '@type': string; '@id': string; 'dcat:dataset': unknown[] };
     expect(body['@type']).toBe('dcat:Catalog');
     expect(body['@id']).toBe('https://open-cat.test/open/catalog.json');
-    expect(body['dcat:dataset']).toHaveLength(4);
+    expect(body['dcat:dataset']).toHaveLength(5);
     expect(calls).toHaveLength(0);
   });
 

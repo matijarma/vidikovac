@@ -2,12 +2,23 @@ import { SELF, createExecutionContext, env, waitOnExecutionContext } from 'cloud
 import { beforeEach, describe, expect, it } from 'vitest';
 import { SNIMKA_API } from '../../shared/snimka';
 import type { Env } from '../../worker/env';
-import { SNIMKA_R2_PREFIX, handleSnimka, snimkaObjectPath } from '../../worker/routes/snimka';
+import { SNIMKA_R2_PREFIX, SNIMKA_R2_PREFIX_V1, handleSnimka, snimkaObjectPath } from '../../worker/routes/snimka';
 import { DATA_SECURITY_HEADERS } from '../../worker/security-headers';
 
 const testEnv = env as unknown as Env;
 
-const MANIFEST = JSON.stringify({ version: 1, title: 'Tri dana bez tramvaja' });
+const EXPORT_SERIES = 'exports/series.00112233445566ff.csv';
+const EXPORT_CLOSURES = 'exports/closures.8899aabbccddeeff.geojson';
+const EXPORT_EVENTS = 'exports/events.1122334455667788.json';
+const CSV = 't_local,t_epoch,seen\n2026-09-27T20:00:00+02:00,1790532000,12\n';
+const GEOJSON = JSON.stringify({ type: 'FeatureCollection', features: [] });
+const hashed = (path: string, format: string) => ({ name: path.split('/')[1]!.split('.')[0]!, format, path, bytes: 1, sha256: '0'.repeat(64) });
+const MANIFEST = JSON.stringify({
+  version: 2,
+  title: 'Tri dana bez tramvaja',
+  files: { exports: [hashed(EXPORT_SERIES, 'csv'), hashed(EXPORT_CLOSURES, 'geojson'), hashed(EXPORT_EVENTS, 'json')] },
+});
+const MANIFEST_V1 = JSON.stringify({ version: 1, title: 'Tri dana bez tramvaja' });
 const CHUNK_PATH = 'motion/396-20260928-0745.0123456789abcdef.json';
 const CHUNK = JSON.stringify({ v: 1, net: '396', t0: 1790574300, step: 10, n: 60, vehicles: [] });
 const IMAGE_PATH = 'captures/kiosk-0745.fedcba9876543210.webp';
@@ -23,6 +34,11 @@ async function seed(): Promise<void> {
   await bucket.put(SNIMKA_R2_PREFIX + 'manifest.json', MANIFEST);
   await bucket.put(SNIMKA_R2_PREFIX + CHUNK_PATH, CHUNK);
   await bucket.put(SNIMKA_R2_PREFIX + IMAGE_PATH, IMAGE);
+  await bucket.put(SNIMKA_R2_PREFIX + EXPORT_SERIES, CSV);
+  await bucket.put(SNIMKA_R2_PREFIX + EXPORT_CLOSURES, GEOJSON);
+  await bucket.put(SNIMKA_R2_PREFIX + EXPORT_EVENTS, '{"v":1}');
+  await bucket.put(SNIMKA_R2_PREFIX_V1 + 'manifest.json', MANIFEST_V1);
+  await bucket.put(SNIMKA_R2_PREFIX_V1 + CHUNK_PATH, CHUNK);
   // Neighbours of the prefix that the route must never reach.
   await bucket.put('archive/strike-2026-09/private/secret.json', '{"secret":true}');
   await bucket.put('zet-rt/2026/09/28/055000-1790574600.pb', 'raw frame');
@@ -88,8 +104,13 @@ beforeEach(seed);
 
 describe('snimkaObjectPath', () => {
   it('maps a dataset path under the public prefix and nowhere else', () => {
-    expect(SNIMKA_R2_PREFIX).toBe('archive/strike-2026-09/public/v1/');
+    expect(SNIMKA_R2_PREFIX).toBe('archive/strike-2026-09/public/v2/');
+    expect(SNIMKA_R2_PREFIX_V1).toBe('archive/strike-2026-09/public/v1/');
     expect(snimkaObjectPath('manifest.json')).toBe(`${SNIMKA_R2_PREFIX}manifest.json`);
+    expect(snimkaObjectPath('manifest.json', 1)).toBe(`${SNIMKA_R2_PREFIX_V1}manifest.json`);
+    expect(snimkaObjectPath('manifest.json', 2)).toBe(`${SNIMKA_R2_PREFIX}manifest.json`);
+    expect(snimkaObjectPath(EXPORT_SERIES)).toBe(`${SNIMKA_R2_PREFIX}${EXPORT_SERIES}`);
+    expect(snimkaObjectPath(EXPORT_CLOSURES)).toBe(`${SNIMKA_R2_PREFIX}${EXPORT_CLOSURES}`);
     expect(snimkaObjectPath(CHUNK_PATH)).toBe(`${SNIMKA_R2_PREFIX}${CHUNK_PATH}`);
     expect(snimkaObjectPath(IMAGE_PATH)).toBe(`${SNIMKA_R2_PREFIX}${IMAGE_PATH}`);
     expect(snimkaObjectPath('a/b/c/d.json')).not.toBeNull();
@@ -113,6 +134,9 @@ describe('snimkaObjectPath', () => {
     ['manifest', 'no extension'],
     ['manifest.json.gz', 'another extension'],
     ['manifest.png', 'an image type we do not store'],
+    ['manifest.txt', 'a text file'],
+    ['motion/396-20260928-0745.pb', 'a protobuf frame'],
+    ['exports/series.CSV', 'upper case csv'],
     ['a/b/c/d/e.json', 'five segments'],
     ['a%2fb.json', 'an escaped slash'],
     ['a%2e%2e%2fb.json', 'an escaped dot dot'],
@@ -130,7 +154,7 @@ describe('snimkaObjectPath', () => {
   });
 });
 
-describe('/api/snimka/v1/', () => {
+describe('/api/snimka/v2/', () => {
   it('serves the manifest unchanged, cached a minute in the browser and five at the edge', async () => {
     const { response } = await call('sn-manifest.test', `${SNIMKA_API}manifest.json`);
     expect(response!.status).toBe(200);
@@ -229,6 +253,9 @@ describe('/api/snimka/v1/', () => {
     ['a dot dot inside a name', 'a..b.json'],
     ['five segments', 'a/b/c/d/e.json'],
     ['an unknown extension', 'manifest.txt'],
+    ['a protobuf frame', 'motion/396-20260928-0745.pb'],
+    ['an alias with an unknown extension', 'exports/latest/series.txt'],
+    ['an alias with upper case', 'exports/latest/Series.csv'],
     ['no extension', 'manifest'],
     ['an empty path', ''],
     ['a trailing slash', 'motion/'],
@@ -254,9 +281,8 @@ describe('/api/snimka/v1/', () => {
     expect(await handleSnimka(new Request(folded), testEnv, ctx, folded)).toBeNull();
   });
 
-  it('declines every path that is not under /api/snimka/v1/', async () => {
-    // SNIMKA_API is /api/snimka/v2/ since the v2 contract; V6 reworks the route to serve both versions.
-    for (const path of ['/api/snimka/v3/manifest.json', '/api/snimka/manifest.json', '/api/snimka/v1', '/api/snimka', '/snimka/', '/api/statistika']) {
+  it('declines every path that is not under /api/snimka/v1/ or v2/', async () => {
+    for (const path of ['/api/snimka/v3/manifest.json', '/api/snimka/v0/manifest.json', '/api/snimka/v12/manifest.json', '/api/snimka/v2', '/api/snimka/v2x/manifest.json', '/api/snimka/manifest.json', '/api/snimka/v1', '/api/snimka', '/snimka/', '/api/statistika']) {
       const { response } = await call('sn-decline.test', path);
       expect(response, path).toBeNull();
     }
@@ -331,5 +357,133 @@ describe('/api/snimka/v1/', () => {
     const missing = await SELF.fetch(`https://sn-self.test${SNIMKA_API}series.bbbbbbbbbbbbbbbb.json`);
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ error: 'not-found' });
+  });
+});
+
+describe('/api/snimka/v1/ beside v2', () => {
+  it('maps the v1 prefix to its own keys and the v2 prefix to its own', async () => {
+    const v1 = await call('sn-v1.test', '/api/snimka/v1/manifest.json');
+    expect(v1.response!.status).toBe(200);
+    expect(await v1.response!.text()).toBe(MANIFEST_V1);
+    const v2 = await call('sn-v1.test', '/api/snimka/v2/manifest.json');
+    expect(await v2.response!.text()).toBe(MANIFEST);
+    // A v2-only object is not reachable through v1.
+    const absent = await call('sn-v1.test', `/api/snimka/v1/${EXPORT_SERIES}`);
+    expect(absent.response!.status).toBe(404);
+    const chunk = await call('sn-v1.test', `/api/snimka/v1/${CHUNK_PATH}`);
+    expect(chunk.response!.status).toBe(200);
+    expect(chunk.response!.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+  });
+
+  it('declines v3 and has no alias under v1', async () => {
+    expect((await call('sn-v3.test', '/api/snimka/v3/manifest.json')).response).toBeNull();
+    const counters: Counters = { limiter: 0, gets: 0, heads: 0 };
+    const { response } = await call('sn-v1-alias.test', '/api/snimka/v1/exports/latest/series.csv', { counters });
+    expect(response!.status).toBe(404);
+    expect(counters).toEqual({ limiter: 0, gets: 0, heads: 0 });
+  });
+});
+
+describe('/api/snimka/v2/ csv and geojson', () => {
+  it('serves a hashed CSV as immutable text/csv with an inline filename', async () => {
+    const { response } = await call('sn-csv.test', `${SNIMKA_API}${EXPORT_SERIES}`);
+    expect(response!.status).toBe(200);
+    expect(response!.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+    expect(response!.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(response!.headers.get('content-disposition')).toBe('inline; filename="series.00112233445566ff.csv"');
+    expectDataHeaders(response!);
+    expect(await response!.text()).toBe(CSV);
+  });
+
+  it('serves a hashed GeoJSON as immutable application/geo+json with an inline filename', async () => {
+    const { response } = await call('sn-geojson.test', `${SNIMKA_API}${EXPORT_CLOSURES}`);
+    expect(response!.status).toBe(200);
+    expect(response!.headers.get('content-type')).toBe('application/geo+json; charset=utf-8');
+    expect(response!.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(response!.headers.get('content-disposition')).toBe('inline; filename="closures.8899aabbccddeeff.geojson"');
+    expectDataHeaders(response!);
+    expect(await response!.text()).toBe(GEOJSON);
+  });
+
+  it('adds no content-disposition to JSON', async () => {
+    const { response } = await call('sn-json-cd.test', `${SNIMKA_API}${EXPORT_EVENTS}`);
+    expect(response!.status).toBe(200);
+    expect(response!.headers.get('content-disposition')).toBeNull();
+  });
+});
+
+describe('/api/snimka/v2/exports/latest/ aliases', () => {
+  it('answers 302 to the hashed path the manifest lists, with the manifest cache policy', async () => {
+    for (const [name, ext, path] of [
+      ['series', 'csv', EXPORT_SERIES],
+      ['closures', 'geojson', EXPORT_CLOSURES],
+      ['events', 'json', EXPORT_EVENTS],
+    ] as const) {
+      const { response } = await call(`sn-alias-${name}.test`, `${SNIMKA_API}exports/latest/${name}.${ext}`);
+      expect(response!.status, name).toBe(302);
+      expect(response!.headers.get('location')).toBe(`${SNIMKA_API}${path}`);
+      expect(response!.headers.get('cache-control')).toBe('public, max-age=60, s-maxage=300');
+      expectDataHeaders(response!);
+      expect(await response!.text()).toBe('');
+    }
+  });
+
+  it('reads the manifest once through the cache and spends budget only on a miss', async () => {
+    const first = await call('sn-alias-cache.test', `${SNIMKA_API}exports/latest/series.csv`);
+    expect(first.response!.status).toBe(302);
+    expect(first.counters).toEqual({ limiter: 1, gets: 1, heads: 0 });
+    const counters: Counters = { limiter: 0, gets: 0, heads: 0 };
+    const again = await call('sn-alias-cache.test', `${SNIMKA_API}exports/latest/closures.geojson`, { limiter: deny, bucket: null, counters });
+    expect(again.response!.status).toBe(302);
+    expect(again.response!.headers.get('location')).toBe(`${SNIMKA_API}${EXPORT_CLOSURES}`);
+    expect(counters).toEqual({ limiter: 0, gets: 0, heads: 0 });
+  });
+
+  it('answers 404 JSON, never cached, for an unknown name or a format the manifest lacks', async () => {
+    for (const rest of ['exports/latest/nothing.csv', 'exports/latest/series.json', 'exports/latest/series.geojson']) {
+      const { response } = await call('sn-alias-404.test', `${SNIMKA_API}${rest}`);
+      expect(response!.status, rest).toBe(404);
+      expect(response!.headers.get('cache-control')).toBe('no-store');
+      expect(await response!.json()).toEqual({ error: 'not-found' });
+      expectDataHeaders(response!);
+    }
+  });
+
+  it('answers 404 when the manifest is missing or unusable', async () => {
+    await testEnv.RECORDINGS!.delete(`${SNIMKA_R2_PREFIX}manifest.json`);
+    const missing = await call('sn-alias-nomanifest.test', `${SNIMKA_API}exports/latest/series.csv`);
+    expect(missing.response!.status).toBe(404);
+    expect(missing.response!.headers.get('cache-control')).toBe('no-store');
+    await testEnv.RECORDINGS!.put(`${SNIMKA_R2_PREFIX}manifest.json`, 'not json');
+    const broken = await call('sn-alias-brokenmanifest.test', `${SNIMKA_API}exports/latest/series.csv`);
+    expect(broken.response!.status).toBe(404);
+    await testEnv.RECORDINGS!.put(`${SNIMKA_R2_PREFIX}manifest.json`, JSON.stringify({ version: 2, files: { exports: [{ name: 'series', format: 'csv', path: '../private/secret.json' }] } }));
+    const hostile = await call('sn-alias-hostile.test', `${SNIMKA_API}exports/latest/series.csv`);
+    expect(hostile.response!.status).toBe(404);
+  });
+
+  it('answers HEAD with the 302 and no body', async () => {
+    const { response } = await call('sn-alias-head.test', `${SNIMKA_API}exports/latest/series.csv`, { method: 'HEAD' });
+    expect(response!.status).toBe(302);
+    expect(response!.headers.get('location')).toBe(`${SNIMKA_API}${EXPORT_SERIES}`);
+    expect(await response!.text()).toBe('');
+  });
+
+  it('answers 503 without the binding and 429 when the budget is spent, both uncached', async () => {
+    const none = await call('sn-alias-503.test', `${SNIMKA_API}exports/latest/series.csv`, { bucket: null });
+    expect(none.response!.status).toBe(503);
+    expect(none.response!.headers.get('cache-control')).toBe('no-store');
+    const limited = await call('sn-alias-429.test', `${SNIMKA_API}exports/latest/series.csv`, { limiter: deny });
+    expect(limited.response!.status).toBe(429);
+    expect(limited.response!.headers.get('retry-after')).toBe('60');
+  });
+
+  it('follows through the whole Worker: alias, then the CSV it names', async () => {
+    const alias = await SELF.fetch(`https://sn-alias-self.test${SNIMKA_API}exports/latest/series.csv`, { redirect: 'manual' });
+    expect(alias.status).toBe(302);
+    const target = await SELF.fetch(`https://sn-alias-self.test${alias.headers.get('location')}`);
+    expect(target.status).toBe(200);
+    expect(target.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+    expect(await target.text()).toBe(CSV);
   });
 });

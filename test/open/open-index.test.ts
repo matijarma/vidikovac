@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { OPEN_DATASETS } from '../../worker/open/catalog';
+import { ARCHIVE_DATASETS, OPEN_DATASETS } from '../../worker/open/catalog';
 import { renderOpenIndex, staticAttribution } from '../../worker/open/index-page';
 
 const ORIGIN = 'https://zagreb.aningfilm.hr';
@@ -45,6 +45,21 @@ describe('renderOpenIndex', () => {
     expect(html).toContain('svaku minutu');
     expect(html).toContain('svaki dan');
     expect((html.match(/Otvorena dozvola/g) ?? []).length).toBeGreaterThanOrEqual(OPEN_DATASETS.length);
+  });
+
+  it('shows the Arhiva card after the module cards: period, eight files, licence line, no brace', () => {
+    const archive = ARCHIVE_DATASETS[0]!;
+    const card = html.slice(html.indexOf('<article id="snimka-2026-09">'), html.indexOf('</article>', html.indexOf('<article id="snimka-2026-09">')));
+    expect(card).toContain('<h2>Tri dana bez tramvaja: izvedeni podaci iz snimke</h2>');
+    expect(card).toContain('Arhiva · 27. 9. 2026. u 20:00 do 2. 10. 2026. u 12:00');
+    expect(card).toContain('Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669');
+    expect(card).toContain('Otvorena dozvola');
+    expect(card.match(/<li>/g)).toHaveLength(8);
+    for (const x of archive.distributions) expect(card).toContain(`href="${x.path}"`);
+    expect(card).toContain('href="/api/snimka/v2/exports/latest/closures.geojson" type="application/geo+json"');
+    expect(html.indexOf('<article id="snimka-2026-09">')).toBeGreaterThan(html.lastIndexOf('<article id="ckan-geo">'));
+    expect(html.indexOf('<article id="snimka-2026-09">')).toBeLessThan(html.indexOf('Ponuda Gradu Zagrebu'));
+    expect(card).not.toMatch(/\{\w+\}|štrajk|[—–]| -- /i);
   });
 
   it('makes the republishing offer to Grad Zagreb and marks adaptations', () => {
