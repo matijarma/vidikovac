@@ -1,4 +1,4 @@
-// Stage `series` (lane S1): the minute series of both segments (brief section
+// Stage `series` (lanes S1, V1): the minute series of the three segments (brief section
 // 5, SeriesFile). What the replayed twin saw and judged comes from the frames
 // stage; the declared fleet is expectationAt per minute over the segment's
 // calendars; what production said comes from the recorder's teaser.jsonl;
@@ -14,9 +14,9 @@ import { stampSec } from './stage-bajs';
 import type { ClosuresMinutes } from './stage-closures';
 import type { MinutesWork } from './stage-frames';
 import { readWork, writeJsonObject, writeWork, type Paths } from './paths';
-import { loadSegmentExpect, type SegmentKey } from './segments';
+import { COMPARISON_OF, DAY_KEYS, loadSegmentExpect, type SegmentKey } from './segments';
 
-export interface SeriesRefs { series: HashedRef; comparisonSeries: HashedRef; serviceLiveFromSec: number }
+export interface SeriesRefs { series: HashedRef; comparisons: Record<string, HashedRef>; serviceLiveFromSec: number }
 
 const STATES = new Set(['normal', 'reduced', 'silent', 'unknown']);
 
@@ -69,11 +69,6 @@ export function dhmzHourly(dir: string, t0: number, hours: number): { tempC: Col
 }
 
 
-/** The v2 feed columns the v1 frames stage does not compute yet (frozen from headerAgeS, alerts and cancelledTrips from the feed): null, never 0, until V1's stage writes them. */
-function feedV2(feed: { headerAgeS: Col<number>; entities: Col<number>; rejectedFuture: Col<number>; hiddenDepot: Col<number>; hiddenParked: Col<number> }, n: number): SeriesFile['feed'] {
-  return { ...feed, frozen: new Array<null>(n).fill(null), alerts: new Array<null>(n).fill(null), cancelledTrips: new Array<null>(n).fill(null) };
-}
-
 async function buildSeries(paths: Paths, key: SegmentKey): Promise<SeriesFile> {
   const minutes = readWork<MinutesWork>(paths, `minutes-${key}.json`);
   const expect = await loadSegmentExpect(paths, key);
@@ -87,12 +82,13 @@ async function buildSeries(paths: Paths, key: SegmentKey): Promise<SeriesFile> {
     expected.bus[m] = e.blocks.bus;
   }
   const hours = n / 60;
-  if (key === 'day') {
+  if (key !== 'window') {
     return {
       v: 2, t0, step: 60, n,
-      seen: minutes.seen, expected, service: minutes.service as SeriesFile['service'], feed: feedV2(minutes.feed, n),
+      seen: minutes.seen, expected, service: minutes.service, feed: minutes.feed,
       published: null, bikes: null, closures: null,
-      hourly: { t0, n: hours, tempC: new Array(hours).fill(null), weather: new Array(hours).fill(null), newsPulse: null },
+      // DHMZ was recorded from 27 Sep: a comparison day's hours stay null unless a copy exists.
+      hourly: { t0, n: hours, ...dhmzHourly(join(paths.inputs, 'strike', 'context', 'dhmz-now'), t0, hours), newsPulse: null },
     };
   }
   const bikes = readWork<BikesMinutes>(paths, 'bikes-minutes.json');
@@ -101,7 +97,7 @@ async function buildSeries(paths: Paths, key: SegmentKey): Promise<SeriesFile> {
   if (bikes.t0 !== t0 || bikes.n !== n || closures.t0 !== t0 || closures.n !== n || pulse.t0 !== t0 || pulse.n !== hours) throw new Error('series: the window of an upstream stage differs; rerun bajs, closures and news');
   return {
     v: 2, t0, step: 60, n,
-    seen: minutes.seen, expected, service: minutes.service as SeriesFile['service'], feed: feedV2(minutes.feed, n),
+    seen: minutes.seen, expected, service: minutes.service, feed: minutes.feed,
     published: publishedSeries(join(paths.inputs, 'strike', 'teaser.jsonl'), t0, n),
     bikes: { total: bikes.total, empty: bikes.empty, reporting: bikes.reporting },
     closures: { active: closures.active, version: closures.version },
@@ -111,16 +107,21 @@ async function buildSeries(paths: Paths, key: SegmentKey): Promise<SeriesFile> {
 
 export async function stageSeries(paths: Paths, log: (line: string) => void): Promise<boolean> {
   const window = await buildSeries(paths, 'window');
-  const day = await buildSeries(paths, 'day');
   const live = window.published!.service.findIndex((s) => s !== null);
   if (live < 0) throw new Error('series: no minute of the window carries a published service state');
   const serviceLiveFromSec = SNIMKA_WINDOW.fromSec + live * 60;
   const series = writeJsonObject(paths, 'series/window', window);
-  const comparisonSeries = writeJsonObject(paths, 'series/day', day);
   writeWork(paths, 'series-window.json', window);
-  writeWork(paths, 'series-day.json', day);
-  writeWork(paths, 'series-refs.json', { series, comparisonSeries, serviceLiveFromSec } satisfies SeriesRefs);
+  const comparisons: Record<string, HashedRef> = {};
   const known = (col: Col<unknown>): number => col.filter((x) => x !== null).length;
-  log(`series: window ${window.n} minutes (seen ${known(window.seen.all)}, expected ${known(window.expected.all)}, published ${known(window.published!.vehicles)}, bikes ${known(window.bikes!.total)}, closures ${known(window.closures!.active)}, temperature ${known(window.hourly.tempC)} of ${window.hourly.n} hours); day ${day.n} minutes (seen ${known(day.seen.all)}); service published from ${new Date(serviceLiveFromSec * 1000).toISOString()}`);
+  const dayLines: string[] = [];
+  for (const key of DAY_KEYS) {
+    const day = await buildSeries(paths, key);
+    comparisons[COMPARISON_OF[key].id] = writeJsonObject(paths, `series/${key}`, day);
+    writeWork(paths, `series-${key}.json`, day);
+    dayLines.push(`${key} ${day.n} minutes (seen ${known(day.seen.all)})`);
+  }
+  writeWork(paths, 'series-refs.json', { series, comparisons, serviceLiveFromSec } satisfies SeriesRefs);
+  log(`series: window ${window.n} minutes (seen ${known(window.seen.all)}, expected ${known(window.expected.all)}, published ${known(window.published!.vehicles)}, bikes ${known(window.bikes!.total)}, closures ${known(window.closures!.active)}, temperature ${known(window.hourly.tempC)} of ${window.hourly.n} hours, frozen ${window.feed.frozen.filter((x) => x === 1).length} minutes); ${dayLines.join('; ')}; service published from ${new Date(serviceLiveFromSec * 1000).toISOString()}`);
   return true;
 }

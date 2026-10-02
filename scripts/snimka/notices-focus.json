@@ -1,0 +1,10 @@
+{
+ "note": "What each of ZET's strike notices points the instrument at (plan Appendix C). An entry may carry focus, facts and mentions; a missing field takes the default of scripts/snimka/focus-defaults.ts. Ids, routes and places are validated by the events stage.",
+ "items": [
+  { "id": 10164, "focus": { "kind": "none" } },
+  { "id": 10165, "focus": { "kind": "none" } },
+  { "id": 10166, "focus": { "kind": "route", "id": "228" }, "facts": ["route:228", "seen"], "mentions": { "routes": ["228"], "places": ["rebro"] } },
+  { "id": 10167, "focus": { "kind": "none" } },
+  { "id": 10168, "focus": { "kind": "city" } }
+ ]
+}

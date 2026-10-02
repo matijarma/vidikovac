@@ -2,21 +2,19 @@
 // said, from the observer's runs (strike/observe-*/rotation.jsonl, one reading
 // every 2 s): every tenth reading (one per 20 s), the rows of the "U blizini"
 // list de-duplicated into the run's dictionary, each header sentence given its
-// family. And the timetable board of stop 106_1 every 5 minutes, which the page
-// shows between runs. The observer masked the pairing code (and anything that
+// family. (The timetable boards moved to stage-boards.ts in v2.) The observer masked the pairing code (and anything that
 // looked like one) as "••••·••••" before writing; that is kept as recorded.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SNIMKA_WINDOW, type BoardSeries, type HashedRef, type ScreenIndex, type ScreenReading, type ScreenRow, type ScreenRun, type SentenceFamily, type SnimkaState } from '../../shared/snimka';
-import { stampSec } from './stage-bajs';
+import { SNIMKA_WINDOW, type HashedRef, type ScreenIndex, type ScreenReading, type ScreenRow, type ScreenRun, type SentenceFamily, type SnimkaState } from '../../shared/snimka';
 import { writeJsonObject, writeWork, type Paths } from './paths';
 
 export const KEEP_EVERY = 10;
 
 type RunKind = ScreenIndex['runs'][number]['kind'];
 export interface ScreenRunWork { id: string; dir: string; kind: RunKind; fromSec: number; toSec: number; readings: number; file: HashedRef; summary: ScreenIndex['runs'][number]['summary'] }
-export interface ScreenWork { runs: ScreenRunWork[]; board106: HashedRef }
+export interface ScreenWork { runs: ScreenRunWork[] }
 
 /** The kind of an observer run, from its folder name. */
 export function runKind(dir: string): RunKind {
@@ -140,33 +138,6 @@ export function summaryOf(run: ScreenRun): ScreenIndex['runs'][number]['summary'
   return { sentences, departureRows, liveRows };
 }
 
-interface BoardRaw { stopName?: string; status?: string; departures?: { routeId?: string; headsign?: string; at?: string }[] }
-
-export function boardSeries(dir: string, fromSec: number, toSec: number): BoardSeries {
-  const out: BoardSeries = { v: 2, stop: '106_1', name: 'Trg bana J. Jelačića', place: 'jelacic', samples: [] };
-  for (const stamp of readdirSync(dir).sort()) {
-    const at = stampSec(stamp);
-    const file = join(dir, stamp, '106_1.json');
-    if (at === null || at < fromSec || at >= toSec || !existsSync(file)) continue;
-    let board: BoardRaw;
-    try {
-      board = JSON.parse(readFileSync(file, 'utf8')) as BoardRaw;
-    } catch {
-      continue;
-    }
-    if (typeof board.stopName === 'string') out.name = board.stopName;
-    const next: [string, string, number][] = [];
-    for (const d of board.departures ?? []) {
-      const sec = d.at ? Math.floor(Date.parse(d.at) / 1000) : NaN;
-      if (!Number.isFinite(sec) || sec < at || typeof d.routeId !== 'string') continue;
-      next.push([d.routeId, String(d.headsign ?? ''), sec]);
-      if (next.length === 3) break;
-    }
-    out.samples.push({ at, status: String(board.status ?? 'unknown'), next });
-  }
-  return out;
-}
-
 export async function stageScreen(paths: Paths, log: (line: string) => void): Promise<boolean> {
   const root = join(paths.inputs, 'strike');
   const runs: ScreenRunWork[] = [];
@@ -187,11 +158,9 @@ export async function stageScreen(paths: Paths, log: (line: string) => void): Pr
     runs.push({ id, dir, kind: run.kind, fromSec: run.fromSec, toSec: run.toSec, readings: run.readings.length, file, summary: summaryOf(run) });
   }
   runs.sort((a, b) => a.fromSec - b.fromSec);
-  const board = boardSeries(join(root, 'boards'), SNIMKA_WINDOW.fromSec, SNIMKA_WINDOW.toSec);
-  const board106 = writeJsonObject(paths, 'screen/board-106_1', board);
-  writeWork(paths, 'screen-runs.json', { runs, board106 } satisfies ScreenWork);
+  writeWork(paths, 'screen-runs.json', { runs } satisfies ScreenWork);
   const families: Record<string, number> = {};
   for (const r of runs) for (const [f, c] of Object.entries(r.summary.sentences)) families[f] = (families[f] ?? 0) + (c ?? 0);
-  log(`screen: ${runs.length} runs (${runs.reduce((s, r) => s + r.readings, 0)} readings kept), board 106_1 ${board.samples.length} samples; families ${JSON.stringify(families)}`);
+  log(`screen: ${runs.length} runs (${runs.reduce((s, r) => s + r.readings, 0)} readings kept); families ${JSON.stringify(families)}`);
   return true;
 }
