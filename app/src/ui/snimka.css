@@ -10,8 +10,8 @@
 
 /* Ukratko, compact (decision S-9: the instrument stands in the first viewport at 1366×768, so #snimka starts under
    300 px). One line of title with its eyebrow, the two ledes as one block at the secondary size, and on the right the
-   forWhom line over the four question chips in two columns; one column under 60rem. The chips' behaviour is V5's
-   (report.ts, snimka-report.css); this only places them. */
+   forWhom line over the four question chips in two columns; one column under 60rem. The chips' behaviour and classes
+   are V5's (report.ts, snimka-report.css); this only places them, through their data-sn attributes. */
 .sn-hero.st-hero { padding-block: var(--sp-3); gap: var(--sp-2) var(--sp-6); grid-template-areas: 'head' 'ledes' 'whom' 'chips'; }
 .sn-hero-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-4); }
 .sn-hero .sn-hero-title { font-size: var(--type-display); line-height: 1.15; letter-spacing: -0.03em; }
@@ -20,10 +20,10 @@
 .sn-hero-ledes .sn-hero-lede { display: inline; margin: 0; }
 .sn-hero-ledes .sn-hero-lede:first-child { color: var(--tone-text-primary); }
 .sn-hero-whom { grid-area: whom; margin: 0; font-size: var(--type-secondary); line-height: 1.4; color: var(--tone-text-muted); }
-.sn-hero .sn-q-nav { grid-area: chips; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); align-content: start; }
-.sn-hero .sn-q-nav > *, .sn-hero .sn-q-item { display: flex; min-inline-size: 0; }
-.sn-hero .sn-q-chip { flex: 1 1 auto; inline-size: 100%; border-radius: var(--r-lg); padding-block: var(--sp-1); font-size: var(--type-control); }
-@media (min-width: 40rem) { .sn-hero .sn-q-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.sn-hero [data-sn='questions'] { grid-area: chips; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); align-content: start; }
+.sn-hero [data-sn='questions'] > * { display: flex; min-inline-size: 0; }
+.sn-hero [data-sn-q] { flex: 1 1 auto; inline-size: 100%; border-radius: var(--r-lg); padding-block: var(--sp-1); font-size: var(--type-control); }
+@media (min-width: 40rem) { .sn-hero [data-sn='questions'] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 60rem) {
   .sn-hero.st-hero { grid-template-columns: minmax(0, 44rem) minmax(0, 1fr); grid-template-areas: 'head whom' 'ledes chips'; align-items: start; }
   .sn-hero-ledes { max-inline-size: none; }
