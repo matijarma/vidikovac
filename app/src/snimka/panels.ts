@@ -1,8 +1,12 @@
-// The panel deck: faces that expand in place into their depth, one at a
-// time (plan section 3.2). Each panel is one list item keyed by its id: a
-// face (one real button with aria-expanded and aria-controls, at least
-// 44 px) and a depth (a labelled region, built lazily when it first opens
-// and torn down when it closes). The view store (ctx.view.panel) is the
+// The panel deck: three faces in one column that expand in place into their
+// depth, one at a time (decisions V3-14, V3-15). Each panel is one list item
+// keyed by its id: a face (one real button with aria-expanded and
+// aria-controls, at least 44 px, a chevron) and a depth (a region labelled by
+// a visually hidden h3, built lazily when it opens and torn down when it
+// closes). The open face stays the panel's header; the depth carries one
+// "Zatvori" button and ends with "Više u odjeljku „…”". No reordering, no
+// dimming: the list's order never changes and the closed faces keep their
+// glass. The opened panel scrolls into view (block: 'nearest'). The view store (ctx.view.panel) is the
 // source of truth: expand() writes it, the deck follows it, so the address,
 // the director and a feed item open a panel the same way a click does.
 // Per-frame values go through the faces' updaters by textContent only; a
@@ -85,12 +89,12 @@ export function createPanelDeck(root: HTMLElement, deps: PanelDeckDeps): PanelDe
       type: 'button', class: 'sn-panel-face', id: `sn-face-${id}`, 'data-sn-face': id,
       'aria-expanded': 'false', 'aria-controls': `sn-depth-${id}`,
     });
-    const heading = el(doc, 'h3', { class: 'sn-panel-heading', id: `sn-depth-h-${id}`, tabindex: '-1', text: spec.title });
-    const back = el(doc, 'button', { type: 'button', class: 'btn-ghost sn-panel-back', 'data-sn-back': id, text: SN.panel.back });
+    const heading = el(doc, 'h3', { class: 'visually-hidden sn-panel-heading', id: `sn-depth-h-${id}`, text: spec.title });
+    const back = el(doc, 'button', { type: 'button', class: 'btn-ghost sn-panel-close', 'data-sn-back': id, text: SN.panel.collapse });
     const body = el(doc, 'div', { class: 'sn-panel-body' });
     const deeper = el(doc, 'a', { class: 'sn-panel-deeper', href: DEEPER[id], text: fill(SN.panel.deeper, { section: DEEPER_NAME[DEEPER[id]] ?? SN.nav.strip }) });
     const depth = el(doc, 'section', { class: 'sn-panel-depth', id: `sn-depth-${id}`, role: 'region', 'aria-labelledby': heading.id, hidden: true },
-      el(doc, 'div', { class: 'sn-panel-bar' }, heading, back), body, el(doc, 'p', { class: 'sn-panel-foot' }, deeper));
+      heading, el(doc, 'div', { class: 'sn-panel-bar' }, back), body, el(doc, 'p', { class: 'sn-panel-foot' }, deeper));
     const item = el(doc, 'li', { class: 'sn-deck-item', 'data-key': id, 'data-panel': id }, face, depth);
     const update = spec.mountFace(face);
     // A face its spec left without words still has a name: the panel's title.
@@ -108,7 +112,7 @@ export function createPanelDeck(root: HTMLElement, deps: PanelDeckDeps): PanelDe
     for (const [id] of panels) {
       next.append(el(doc, 'li', {
         class: 'sn-deck-item', 'data-key': id, 'data-panel': id,
-        'data-expanded': open === id ? '' : undefined, 'data-dim': open !== null && open !== id ? '' : undefined,
+        'data-expanded': open === id ? '' : undefined,
       }, el(doc, 'div', { 'data-persist-for': `sn-face-${id}` }), el(doc, 'div', { 'data-persist-for': `sn-depth-${id}` })));
     }
     return next;
@@ -146,11 +150,27 @@ export function createPanelDeck(root: HTMLElement, deps: PanelDeckDeps): PanelDe
     const p = next ? panels.get(next)! : null;
     if (p) open(p);
     reconcile(list, shells(current));
-    // Focus follows a reader who is in the deck; a subject set from the map or the dossier opens the panel without pulling focus.
-    const inDeck = list.contains(doc.activeElement) || doc.activeElement === doc.body || doc.activeElement === null;
-    if (p && reason === 'user' && inDeck) p.heading.focus();
-    else if (!p && prev && (reason === 'user' || focusWasInside)) prev.face.focus();
+    // Focus stays with a reader who is in the deck: the open face is the panel's header (aria-expanded says it opened)
+    // and the depth follows it in the tab order; closing gives the focus back to the face. A subject set from the map
+    // or the dossier opens the panel without pulling focus.
+    if (!p && prev && (reason === 'user' || focusWasInside)) prev.face.focus();
+    if (p) reveal(p, reason);
     deps.onExpand?.(current, reason);
+  }
+
+  /** The opened panel in view: the nearest scroll on a reader's move; from the address only the swipe row moves (never the page). */
+  function reveal(p: Panel, reason: ViewReason | undefined): void {
+    if (reason === 'address') { alignRow(p.item); return; }
+    p.item.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: ctx.reducedMotion ? 'auto' : 'smooth' });
+  }
+
+  /** The phone's swipe row (stage.css .sn-deck-row): scrolled so `item` starts it, or to its start without one. */
+  function alignRow(item: HTMLElement | null): void {
+    const row = root.closest<HTMLElement>('.sn-deck-row');
+    if (!row || row.scrollWidth <= row.clientWidth) return;
+    if (!item) { row.scrollLeft = 0; return; }
+    const pad = parseFloat(doc.defaultView?.getComputedStyle(row).scrollPaddingInlineStart ?? '0') || 0;
+    row.scrollLeft = Math.max(0, item.getBoundingClientRect().left - row.getBoundingClientRect().left + row.scrollLeft - pad);
   }
 
   const onKey = (event: KeyboardEvent): void => {
@@ -192,6 +212,12 @@ export function createPanelDeck(root: HTMLElement, deps: PanelDeckDeps): PanelDe
   };
 
   apply(ctx.view.get().panel, 'address');
+  // The swipe row starts at its first card (R2: Chromium kept the mandatory snap on the feed mounted first and
+  // loaded the row at scrollLeft 2,373). Once now and once after the first layout, when the snap has settled.
+  const settle = (): void => { if (!destroyed) alignRow(current ? panels.get(current)!.item : null); };
+  settle();
+  const win = doc.defaultView;
+  if (win?.requestAnimationFrame) win.requestAnimationFrame(() => win.requestAnimationFrame(settle));
   return deck;
 }
 

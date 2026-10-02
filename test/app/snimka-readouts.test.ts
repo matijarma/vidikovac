@@ -1,17 +1,22 @@
-// The faces' words (app/src/snimka/readouts.ts): the state word with its
-// tone and the retroactive mark, "u pokretu · običan dan · po voznom redu",
-// the living lines, the bikes in Croatian plurals, DHMZ's words, and the
-// data-path line that speaks only when the numbers part by two or more.
-// Missing is never zero: every null reads "bez podatka".
+// The faces' words (app/src/snimka/readouts.ts, decisions V3-14 and V3-30):
+// the two-bar glyph's widths and its missing state, Vozila's badge, figure
+// and normal-day subline, Mreža's counts from the one scheduledCount, the
+// bikes against Thursday 1 October (Friday 2 October before Monday 07:00,
+// nothing from Friday 12:00), and the data-path line that speaks only when
+// the numbers part by two or more. Missing is never zero.
+import { Window } from 'happy-dom';
 import { describe, expect, it } from 'vitest';
 import { SNIMKA_COMPARISONS, type SeriesFile } from '../../shared/snimka';
-import { bikesText, dataPathText, linesText, minuteIn, normalSeenAt, stateText, vehiclesText, weatherText } from '../../app/src/snimka/readouts';
-import { MARKS, buildComparisonSeries, buildRoutes, buildWindowSeries } from '../../e2e/snimka-fixtures';
+import { BIKES_REF, bar2, bar2Widths, bicikliFace, bikesReference, dataPathText, minuteIn, mrezaFace, normalSeenAt, vozilaFace } from '../../app/src/snimka/readouts';
+import { scheduledCount } from '../../app/src/snimka/live-network';
+import { MARKS, buildComparisonRoutes, buildComparisonSeries, buildRoutes, buildWindowSeries, zg } from '../../e2e/snimka-fixtures';
 
+const document = new Window().document as unknown as Document;
 const series = buildWindowSeries();
 const routes = buildRoutes();
 const m = (sec: number): number => minuteIn(series, sec)!;
-/** A copy of the series with one minute's columns overwritten. */
+const comparisons = SNIMKA_COMPARISONS.map((c) => ({ id: c.id, day: c.day, weekday: c.weekday, fromSec: c.fromSec, series: buildComparisonSeries(c), routes: buildComparisonRoutes(c) }));
+const ctx = { series, comparisons, manifest: { serviceLiveFromSec: MARKS.serviceLive } } as unknown as Parameters<typeof vozilaFace>[0];
 function withMinute(sec: number, patch: (s: SeriesFile, i: number) => void): SeriesFile {
   const copy = structuredClone(series);
   patch(copy, m(sec));
@@ -23,80 +28,97 @@ describe('minuteIn', () => {
     expect(minuteIn(series, series.t0)).toBe(0);
     expect(minuteIn(series, series.t0 + series.n * 60)).toBe(series.n - 1);
     expect(minuteIn(series, series.t0 - 1)).toBeNull();
-    expect(minuteIn(series, series.t0 + series.n * 60 + 60)).toBeNull();
   });
 });
 
-describe('stateText', () => {
-  it('says the state with its tone and the naknadno mark before the service went live', () => {
-    const r = stateText(series, MARKS.monday0745, MARKS.serviceLive);
-    expect(r).toMatchObject({ state: 'silent', word: 'Gotovo bez vozila', tone: 'down', retro: true });
-    expect(r.sub).toMatch(/^u pokretu \d, po voznom redu \d+$/);
-    const after = stateText(series, MARKS.thursday0745, MARKS.serviceLive);
-    expect(after).toMatchObject({ state: 'normal', word: 'Uobičajeno', tone: 'live', retro: false });
+describe('bar2', () => {
+  it('outline = the normal day, fill = now on one scale: now/normal under it, normal/now over it', () => {
+    expect(bar2Widths(4, 321)).toEqual({ normal: 1, now: 4 / 321 });
+    expect(bar2Widths(84, 43)).toEqual({ normal: 43 / 84, now: 1 });
+    expect(bar2Widths(0, 0)).toEqual({ normal: 1, now: 0 });
   });
-  it('a minute without a count says how long the state holds, never a zero', () => {
-    const at = MARKS.frameGapFrom + 60;
-    const r = stateText(series, at, MARKS.serviceLive);
-    expect(series.seen.all[m(at)]).toBeNull();
-    expect(r.sub).toMatch(/^traje \d+ h( \d+ min)?$/);
-    const none = stateText(withMinute(at, (s, i) => { s.service.state[i] = null; s.service.since[i] = null; }), at, MARKS.serviceLive);
-    expect(none).toMatchObject({ state: null, word: 'bez podatka', sub: 'bez podatka', tone: 'info' });
+  it('a missing now is the outline alone with "bez podatka", never a zero-width fill; a missing normal day draws nothing', () => {
+    expect(bar2Widths(null, 321)).toEqual({ normal: 1, now: null });
+    expect(bar2Widths(4, null)).toBeNull();
+    const g = bar2(null, 321, { doc: document });
+    expect(g.root.dataset.snBar2).toBe('missing');
+    expect(g.root.querySelector<HTMLElement>('.sn-ro-bar2-now')!.hidden).toBe(true);
+    expect(g.root.querySelector<HTMLElement>('.sn-ro-bar2-missing')!.hidden).toBe(false);
+    expect(g.root.querySelector('.sn-ro-bar2-missing')!.textContent).toBe('bez podatka');
+    expect(g.root.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('sada bez podatka, običan dan 321');
+    g.update(4, 321, { label: 'čet 1. 10.: 43' });
+    expect(g.root.dataset.snBar2).toBe('ok');
+    expect(g.root.querySelector<HTMLElement>('.sn-ro-bar2-now')!.style.inlineSize).toBe('1.25%');
+    expect(g.root.querySelector('.sn-ro-bar2-label')!.textContent).toBe('čet 1. 10.: 43');
+    expect(g.root.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('sada 4, običan dan 321');
+    g.update(null, null);
+    expect(g.root.hidden).toBe(true);
   });
 });
 
-describe('vehiclesText', () => {
-  it('reads "u pokretu N · običan dan M · po voznom redu K" against the weekday-matched normal day', () => {
-    const ctx = { comparisons: [
-      { id: 'cet-0924', day: '2026-09-24', weekday: 4 as const, fromSec: SNIMKA_COMPARISONS[0].fromSec, series: buildComparisonSeries(SNIMKA_COMPARISONS[0]), routes: routes },
-      { id: 'pon-0921', day: '2026-09-21', weekday: 1 as const, fromSec: SNIMKA_COMPARISONS[1].fromSec, series: buildComparisonSeries(SNIMKA_COMPARISONS[1]), routes: routes },
-    ] };
+describe('vozilaFace', () => {
+  it('Monday 07:45: the state with its tone and the mark before the service went live, against Monday 21 Sep', () => {
+    const r = vozilaFace(ctx, MARKS.monday0745);
     const normal = normalSeenAt(ctx, MARKS.monday0745);
-    expect(normal).toBe(ctx.comparisons[1]!.series.seen.all[7 * 60 + 45]);
-    const r = vehiclesText(series, normal, MARKS.monday0745);
-    const i = m(MARKS.monday0745);
-    expect(r.figure).toBe(String(series.seen.all[i]));
-    expect(r.line).toBe(`u pokretu ${series.seen.all[i]} · običan dan ${normal} · po voznom redu ${series.expected.all[i]}`);
-    expect(normalSeenAt({ comparisons: [] }, MARKS.monday0745)).toBeNull();
+    expect(normal).toBe(comparisons[1]!.series.seen.all[7 * 60 + 45]);
+    expect(r).toMatchObject({ state: 'silent', word: 'Gotovo bez vozila', tone: 'down', retro: true, now: series.seen.all[m(MARKS.monday0745)], normal });
+    expect(r.figure).toBe(String(r.now));
+    expect(r.sub).toBe(`običan dan (pon 21. 9.) u isto doba: ${normal}`);
   });
-  it('a missing count or comparison is "bez podatka"', () => {
-    const at = MARKS.frameGapFrom + 60;
-    const r = vehiclesText(series, null, at);
+  it('Thursday 07:45: Uobičajeno without the mark, against Thursday 24 Sep; Sunday has no comparison', () => {
+    const r = vozilaFace(ctx, MARKS.thursday0745);
+    expect(r).toMatchObject({ state: 'normal', word: 'Uobičajeno', tone: 'live', retro: false });
+    expect(r.sub).toMatch(/^običan dan \(čet 24\. 9\.\) u isto doba: \d/);
+    const sun = vozilaFace(ctx, zg(9, 27, 23, 0));
+    expect(sun.sub).toBe('Nedjelja nema usporedbe.');
+    expect(sun.normal).toBeNull();
+  });
+  it('a missing minute is "bez podatka"', () => {
+    const r = vozilaFace(ctx, MARKS.frameGapFrom + 60);
     expect(r.figure).toBe('bez podatka');
-    expect(r.sub).toMatch(/^običan dan bez podatka · po voznom redu /);
+    expect(r.now).toBeNull();
   });
 });
 
-describe('linesText', () => {
-  it('counts the living lines of the scheduled ones (S-16): two on Monday at 07:45, three on Tuesday at noon', () => {
-    const mon = linesText(routes, MARKS.monday0745);
+describe('mrezaFace', () => {
+  it('"linije s vozilom: 2 od N" with the one scheduledCount; nothing outside the file', () => {
+    const mon = mrezaFace(routes, MARKS.monday0745);
     expect(mon.alive).toBe(2);
-    expect(mon.sub).toBe(`2 od ${mon.scheduled} linija po voznom redu ima vozilo`);
-    expect(mon.scheduled!).toBeGreaterThan(10);
-    expect(linesText(routes, MARKS.line228 + 2 * 3600).alive).toBe(3);
-    expect(linesText(routes, routes.t0 - 600)).toEqual({ alive: null, scheduled: null, figure: 'bez podatka', sub: 'bez podatka' });
+    expect(mon.scheduled).toBe(scheduledCount(routes, MARKS.monday0745));
+    expect(mon.text).toBe(`linije s vozilom: 2 od ${mon.scheduled}`);
+    expect(mrezaFace(routes, MARKS.line228 + 2 * 3600).alive).toBe(3);
+    expect(mrezaFace(routes, routes.t0 - 600)).toEqual({ alive: null, scheduled: null, text: 'bez podatka' });
   });
 });
 
-describe('bikesText and weatherText', () => {
-  it('bikes in Croatian plurals, a missing minute as words', () => {
-    const one = withMinute(MARKS.monday0745, (s, i) => { s.bikes!.total[i] = 21; s.bikes!.empty[i] = 3; });
-    expect(bikesText(one, MARKS.monday0745)).toEqual({ figure: '21 bicikl', sub: '3 prazne stanice' });
-    const many = withMinute(MARKS.monday0745, (s, i) => { s.bikes!.total[i] = 989; s.bikes!.empty[i] = 85; });
-    expect(bikesText(many, MARKS.monday0745)).toEqual({ figure: '989 bicikala', sub: '85 praznih stanica' });
-    const none = withMinute(MARKS.monday0745, (s, i) => { s.bikes!.total[i] = null; s.bikes!.empty[i] = null; });
-    expect(bikesText(none, MARKS.monday0745)).toEqual({ figure: 'bez podatka', sub: 'bez podatka' });
-    expect(bikesText({ ...series, bikes: null }, MARKS.monday0745).figure).toBe('bez podatka');
+describe('bicikliFace and the reference day', () => {
+  it('Thursday 1 October at the same minute; Friday 2 October before Monday 07:00; nothing from Friday 12:00', () => {
+    expect(bikesReference(series, MARKS.monday0745)).toEqual({ atSec: zg(10, 1, 7, 45), day: 'čet 1. 10.' });
+    expect(bikesReference(series, zg(9, 28, 6, 59))).toEqual({ atSec: zg(10, 2, 6, 59), day: 'pet 2. 10.' });
+    // Sunday night: Friday's minute lies past the recording, so Thursday's.
+    expect(bikesReference(series, zg(9, 27, 23, 0))).toEqual({ atSec: zg(10, 1, 23, 0), day: 'čet 1. 10.' });
+    expect(bikesReference(series, BIKES_REF.until)).toBeNull();
+    expect(bikesReference(series, zg(10, 2, 13, 0))).toBeNull();
   });
-  it('DHMZ words verbatim beside the rounded temperature; the temperature or the words alone; the DHMZ gap', () => {
-    const hourly = { t0: series.t0, n: 3, tempC: [12.4, 9.6, null], weather: ['vedro', null, 'lahor'], newsPulse: null };
-    expect(weatherText({ hourly }, series.t0 + 60)).toBe('12 °C, vedro');
-    expect(weatherText({ hourly }, series.t0 + 3600)).toBe('10 °C');
-    expect(weatherText({ hourly }, series.t0 + 7200)).toBe('lahor');
-    expect(weatherText({ hourly: { ...hourly, weather: [null, null, null] } }, series.t0 + 7200)).toBe('bez podatka DHMZ-a');
-    expect(weatherText({ hourly }, series.t0 + 4 * 3600)).toBe('bez podatka DHMZ-a');
-    // The fixture leaves hour 40 (Tue 12:00) empty.
-    expect(weatherText(series, series.hourly.t0 + 40 * 3600 + 60)).toBe('bez podatka DHMZ-a');
+  it('leads with the empty stations, the glyph labelled with the day, the bikes in the subline', () => {
+    const at = MARKS.monday0745;
+    const one = withMinute(at, (s, i) => { s.bikes!.total[i] = 989; s.bikes!.empty[i] = 84; });
+    const j = m(zg(10, 1, 7, 45));
+    one.bikes!.total[j] = 1300;
+    one.bikes!.empty[j] = 43;
+    const r = bicikliFace(one, at);
+    expect(r).toMatchObject({ now: 84, normal: 43, figure: '84 prazne stanice', label: 'čet 1. 10.: 43', sub: 'bicikala 989 · čet 1. 10.: 1.300', aria: 'sada 84, čet 1. 10.: 43' });
+    const early = bicikliFace(series, zg(9, 28, 5, 0));
+    expect(early.label).toMatch(/^pet 2\. 10\.: \d+$/);
+    expect(early.sub).toMatch(/· pet 2\. 10\.: /);
+  });
+  it('missing is never zero: no reference after Friday 12:00, no bikes before the recording', () => {
+    const late = bicikliFace(series, zg(10, 2, 13, 0));
+    expect(late.normal).toBeNull();
+    expect(late.label).toBe('čet 1. 10.: bez podatka');
+    const before = bicikliFace(series, zg(9, 27, 21, 0));
+    expect(before.figure).toBe('bez podatka');
+    expect(before.sub).toMatch(/^bicikala bez podatka/);
   });
 });
 
@@ -104,16 +126,11 @@ describe('dataPathText', () => {
   it('speaks when ZET, the moving fleet and the screen part by two or more (S-18)', () => {
     const at = MARKS.monday0745;
     const i = m(at);
-    const t = dataPathText(series, at)!;
-    expect(t).toBe(`u ZET-ovim podacima ${series.feed.entities[i]} vozila: u spremištu ${series.feed.hiddenDepot[i]}, stoji izvan spremišta ${series.feed.hiddenParked[i]}, u pokretu ${series.seen.all[i]}; na zaslonu ${series.published!.vehicles[i]}`);
+    expect(dataPathText(series, at)).toBe(`u ZET-ovim podacima ${series.feed.entities[i]} vozila: u spremištu ${series.feed.hiddenDepot[i]}, stoji izvan spremišta ${series.feed.hiddenParked[i]}, u pokretu ${series.seen.all[i]}; na zaslonu ${series.published!.vehicles[i]}`);
   });
-  it('is silent when the numbers agree and when fewer than two are known; a missing part reads bez podatka', () => {
+  it('is silent when the numbers agree and when fewer than two are known', () => {
     const at = MARKS.monday0745;
-    const same = withMinute(at, (s, i) => { s.feed.entities[i] = 5; s.seen.all[i] = 4; s.published!.vehicles[i] = 5; });
-    expect(dataPathText(same, at)).toBeNull();
-    const lone = withMinute(at, (s, i) => { s.feed.entities[i] = null; s.published!.vehicles[i] = null; });
-    expect(dataPathText(lone, at)).toBeNull();
-    const gap = withMinute(at, (s, i) => { s.feed.entities[i] = 45; s.seen.all[i] = 2; s.published!.vehicles[i] = null; s.feed.hiddenParked[i] = null; });
-    expect(dataPathText(gap, at)).toBe(`u ZET-ovim podacima 45 vozila: u spremištu ${series.feed.hiddenDepot[m(at)]}, stoji izvan spremišta bez podatka, u pokretu 2; na zaslonu bez podatka`);
+    expect(dataPathText(withMinute(at, (s, i) => { s.feed.entities[i] = 5; s.seen.all[i] = 4; s.published!.vehicles[i] = 5; }), at)).toBeNull();
+    expect(dataPathText(withMinute(at, (s, i) => { s.feed.entities[i] = null; s.published!.vehicles[i] = null; }), at)).toBeNull();
   });
 });

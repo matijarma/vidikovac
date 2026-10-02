@@ -11,10 +11,9 @@ import { decodeNetwork, mainShapes, type Network } from '../../../shared/motion/
 import { ZAGREB_OFFSET_S } from '../../../shared/snimka';
 import { comparisonFor, type SnimkaContext } from './context';
 import type { MountMinimaps, Subject } from './contracts';
-import { aliveStates, routeSlotAt, scheduledCount, liveCounts, type AliveState, type RouteStates } from './live-network';
+import { networkCounts, routeSlotAt, type AliveState, type RouteStates } from './live-network';
 import { zagrebDay } from './format';
 import { SN, fill } from './strings';
-import { comparisonDayLabel } from './subject';
 
 /** Ramer-Douglas-Peucker tolerance in metres: 20,711 main-shape points come down to about 6,900 (plan section 3.3). */
 export const RDP_TOLERANCE_M = 25;
@@ -99,14 +98,18 @@ export const mountMinimaps: MountMinimaps = (ctx, host, opts) => {
   root.className = 'sn-mm';
   root.dataset.snMinimaps = 'loading';
 
+  // On a face (large false) the twins sit inside the face's button: phrasing elements only, the drawing hidden
+  // from assistive technology and the captions' words (day and counts) part of the button's name. In a depth
+  // they are figures whose drawing is an image named by its caption.
   function side(cls: string): Side {
-    const figure = doc.createElement('figure');
+    const figure = doc.createElement(opts.large ? 'figure' : 'span');
     figure.className = `sn-mm-side ${cls}`;
     const svg = doc.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('class', 'sn-mm-svg');
-    svg.setAttribute('role', 'img');
+    if (opts.large) svg.setAttribute('role', 'img');
+    else { svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false'); }
     svg.setAttribute('viewBox', '0 0 1 1');
-    const caption = doc.createElement('figcaption');
+    const caption = doc.createElement(opts.large ? 'figcaption' : 'span');
     caption.className = 'sn-mm-caption';
     const name = doc.createElement('span');
     name.className = 'sn-mm-name';
@@ -117,9 +120,11 @@ export const mountMinimaps: MountMinimaps = (ctx, host, opts) => {
     root.append(figure);
     return { svg, name, count, paths: new Map(), lastSlot: -2, lastFile: null };
   }
+  root.classList.toggle('sn-mm-large', opts.large);
   const nowSide = side('sn-mm-now');
   const normalSide = side('sn-mm-normal');
   nowSide.name.textContent = fill(SN.twins.now, { day: zagrebDay(ctx.manifest.window.fromSec * 1000) });
+  // The one legend of the twins (the depth shows it once; a face has none).
   if (opts.large) {
     const legend = doc.createElement('ul');
     legend.className = 'sn-mm-legend';
@@ -172,12 +177,12 @@ export const mountMinimaps: MountMinimaps = (ctx, host, opts) => {
     const nowSlot = routeSlotAt(ctx.routes, atSec);
     if (nowSlot !== nowSide.lastSlot) {
       nowSide.lastSlot = nowSlot;
-      const states = aliveStates(ctx.routes, atSec);
-      apply(nowSide, states);
-      const counts = liveCounts(states);
+      const counts = networkCounts(ctx.routes, atSec);
+      apply(nowSide, counts?.states ?? new Map());
       nowSide.name.textContent = fill(SN.twins.now, { day: zagrebDay(t) });
-      nowSide.count.textContent = fill(SN.twins.count, { alive: counts.alive, scheduled: Math.max(scheduledCount(ctx.routes, atSec), counts.alive) });
-      nowSide.svg.dataset.snMmAlive = String(counts.alive);
+      nowSide.count.textContent = counts ? fill(SN.twins.count, { alive: counts.alive, scheduled: counts.scheduled }) : SN.facts.none;
+      nowSide.svg.dataset.snMmAlive = counts ? String(counts.alive) : 'none';
+      if (opts.large) nowSide.svg.setAttribute('aria-label', `${nowSide.name.textContent}: ${nowSide.count.textContent}`);
     }
     const c = comparisonFor(ctx, atSec);
     const tod = (((Math.floor(atSec) + ZAGREB_OFFSET_S) % 86_400) + 86_400) % 86_400;
@@ -186,16 +191,15 @@ export const mountMinimaps: MountMinimaps = (ctx, host, opts) => {
     if (cSlot !== normalSide.lastSlot || c.routes !== normalSide.lastFile) {
       normalSide.lastSlot = cSlot;
       normalSide.lastFile = c.routes;
-      const states = aliveStates(c.routes, cAt);
-      apply(normalSide, states);
-      const counts = liveCounts(states);
-      normalSide.name.textContent = fill(SN.twins.normal, { day: comparisonDayLabel(c) });
-      normalSide.count.textContent = fill(SN.twins.count, { alive: counts.alive, scheduled: Math.max(scheduledCount(c.routes, cAt), counts.alive) });
-      normalSide.svg.dataset.snMmAlive = String(counts.alive);
-      normalSide.svg.setAttribute('aria-label', `${SN.twins.title}: ${normalSide.name.textContent}`);
+      const counts = networkCounts(c.routes, cAt);
+      apply(normalSide, counts?.states ?? new Map());
+      normalSide.name.textContent = fill(SN.twins.normal, { day: zagrebDay(cAt * 1000) });
+      normalSide.count.textContent = counts ? fill(SN.twins.count, { alive: counts.alive, scheduled: counts.scheduled }) : SN.facts.none;
+      normalSide.svg.dataset.snMmAlive = counts ? String(counts.alive) : 'none';
+      if (opts.large) normalSide.svg.setAttribute('aria-label', `${normalSide.name.textContent}: ${normalSide.count.textContent}`);
     }
   }
-  nowSide.svg.setAttribute('aria-label', `${SN.twins.title}: ${nowSide.name.textContent}`);
+  if (opts.large) nowSide.svg.setAttribute('aria-label', nowSide.name.textContent ?? '');
 
   void ctx.data.get(ctx.manifest.networks['396'], decodeNetwork).then((net) => {
     if (disposed) return;

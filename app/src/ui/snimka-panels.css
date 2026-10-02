@@ -1,5 +1,6 @@
-/* snimka-panels.css: the panel deck of the instrument (faces, the expansion grammar, depth charts, the spot pulse), the heatmap
-   "Sve linije, svaki sat" and the timeline bar. Owner: lane V3; class prefixes sn-deck-, sn-panel-, sn-tl-, sn-ro-, sn-hm-,
+/* snimka-panels.css: the panel deck of the instrument (v3: three faces with the two-bar glyph sn-ro-bar2, the expansion
+   grammar, depth charts, the station dot maps, the spot pulse), the heatmap "Sve linije, svaki sat" and the timeline bar.
+   Owner: lane V3 (the deck: W2 of v3); class prefixes sn-deck-, sn-panel-, sn-tl-, sn-ro-, sn-hm-,
    sn-present-. Glass panels on color-mix(in oklab, var(--tone-glass-bg) 84%, transparent) with a hairline glass stroke and a
    blur where supported; radii 14/18; every value in tabular numerals; motion 140/180/220 ms; nothing moves under reduced
    motion. The heatmap ramp is five steps from --tone-surface-3 to --tone-action-brand, mixed in OKLab at 32, 49, 66, 83 and
@@ -7,90 +8,108 @@
    in both themes: light #97b4e0 #769cd9 #5584d1 #336bc8 #0751bf (2.06:1 on #fbfcfe), dark #4c6689 #5a79a5 #678dc2 #76a1e0
    #84b5ff (2.67:1 on #192430, 2.26:1 on the glass #23313f). */
 
-/* ---- the deck --------------------------------------------------------------------------------------------- */
-.sn-deck { --sn-deck-glass: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: row dense; gap: var(--sp-2); font-variant-numeric: tabular-nums; }
-.sn-deck-item { position: relative; min-inline-size: 0; border-radius: var(--r-lg); background: var(--sn-deck-glass); border: 1px solid var(--tone-glass-stroke); transition: opacity var(--dur-base) var(--ease); }
+/* ---- the deck (v3: three panels in one column, V3-14 and V3-15) ---------------------------------------------- */
+.sn-deck { --sn-deck-glass: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); font-variant-numeric: tabular-nums; }
+.sn-deck-item { position: relative; min-inline-size: 0; border-radius: var(--r-lg); background: var(--sn-deck-glass); border: 1px solid var(--tone-glass-stroke); scroll-margin-block: var(--sp-2); }
 @supports (backdrop-filter: blur(8px)) { .sn-deck-item { backdrop-filter: blur(8px); } }
-.sn-deck-item[data-panel='poglavlja'] { grid-column: 1 / -1; }
-.sn-deck-item[data-expanded] { grid-column: 1 / -1; grid-row: span 3; border-color: var(--tone-stroke-strong); animation: sn-panel-settle var(--dur-base) var(--ease-enter); }
-/* Beside an open panel the others recede by their glass, never by their words' contrast (they keep ticking and stay readable). */
-.sn-deck-item[data-dim] { background: color-mix(in oklab, var(--tone-glass-bg) 40%, transparent); border-color: transparent; }
-@keyframes sn-panel-settle { from { opacity: 0.4; } to { opacity: 1; } }
+.sn-deck-item[data-expanded] { border-color: var(--tone-stroke-strong); animation: sn-panel-settle var(--dur-base) var(--ease-enter); }
+@keyframes sn-panel-settle { from { opacity: 0.6; } to { opacity: 1; } }
 
-/* A face: one button, the panel's name, one figure, one subline. */
-.sn-panel-face { display: grid; align-content: start; gap: 0.125rem; inline-size: 100%; min-block-size: var(--target); padding: var(--sp-2) var(--sp-3); border: 0; border-radius: inherit; background: transparent; color: var(--tone-text-primary); font: inherit; text-align: start; cursor: pointer; touch-action: manipulation; }
+/* A face: one button; the name with the chevron, one figure, the two-bar glyph, one subline. Open, it is the panel's header. */
+.sn-panel-face { display: grid; align-content: start; gap: var(--sp-1); inline-size: 100%; min-block-size: var(--target); padding: var(--sp-2) var(--sp-3); border: 0; border-radius: inherit; background: transparent; color: var(--tone-text-primary); font: inherit; text-align: start; cursor: pointer; touch-action: manipulation; }
 .sn-panel-face:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; }
 @media (hover: hover) { .sn-panel-face:hover { background: color-mix(in oklab, var(--tone-surface-2) 60%, transparent); } }
 .sn-deck-item[data-expanded] .sn-panel-face { border-end-start-radius: 0; border-end-end-radius: 0; border-block-end: 1px solid var(--tone-stroke); }
+.sn-ro-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-inline-size: 0; }
 .sn-panel-name { font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
-.sn-panel-fig { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1); font-size: var(--type-tile-m); font-weight: var(--weight-bold); line-height: 1.2; font-variant-numeric: tabular-nums; }
-.sn-panel-num { font-size: var(--type-tile-l); letter-spacing: -0.02em; }
-.sn-panel-unit { font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
-.sn-panel-sub { font-size: var(--type-meta); color: var(--tone-text-muted); line-height: 1.35; font-variant-numeric: tabular-nums; }
-.sn-panel-badge { font-size: var(--type-secondary); }
-.sn-panel-retro { font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-text-muted); border: 1px dashed var(--tone-stroke-strong); border-radius: var(--r-xs); padding: 0.05rem 0.35rem; }
-.sn-panel-minis { display: block; min-block-size: 3.5rem; }
-.sn-panel-fig[data-spot], .sn-panel-face[data-spot] { border-radius: var(--r-sm); box-shadow: 0 0 0 2px var(--tone-action-brand); transition: box-shadow var(--dur-fast) var(--ease); }
+.sn-panel-chevron { margin-inline-start: auto; inline-size: 0.5rem; block-size: 0.5rem; border-inline-end: 2px solid var(--tone-text-muted); border-block-end: 2px solid var(--tone-text-muted); rotate: 45deg; translate: 0 -0.15rem; transition: rotate var(--dur-fast) var(--ease); }
+.sn-deck-item[data-expanded] .sn-panel-chevron { rotate: 225deg; translate: 0 0.1rem; }
+.sn-ro-badge { font-size: var(--type-meta); }
+.sn-ro-retro { font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-ro-fig { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1); font-size: var(--type-tile-m); font-weight: var(--weight-bold); line-height: 1.15; font-variant-numeric: tabular-nums; }
+.sn-ro-num { font-size: var(--type-tile-l); letter-spacing: -0.02em; }
+.sn-ro-unit { font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
+.sn-ro-sub { font-size: var(--type-meta); color: var(--tone-text-muted); line-height: 1.35; font-variant-numeric: tabular-nums; }
+.sn-ro-twins { display: block; min-inline-size: 0; }
+.sn-ro-fig[data-spot], .sn-ro-twins[data-spot] { border-radius: var(--r-sm); box-shadow: 0 0 0 2px var(--tone-action-brand); transition: box-shadow var(--dur-fast) var(--ease); }
 
-/* A depth: a region with its heading, a back button, the body, the way deeper. */
-.sn-panel-depth { display: grid; gap: var(--sp-3); padding: var(--sp-3); min-inline-size: 0; }
-.sn-panel-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
-.sn-panel-heading { margin: 0; font-size: var(--type-head); letter-spacing: -0.01em; }
-.sn-panel-heading:focus { outline: none; }
-.sn-panel-heading:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 2px; }
-.sn-panel-back { font-size: var(--type-control); }
+/* The two-bar glyph: the outline is the normal day, the fill is now, one scale; a missing now draws no fill and says so. */
+.sn-ro-bar2 { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-inline-size: 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-ro-bar2[hidden] { display: none; }
+.sn-ro-bar2-track { position: relative; flex: 1 1 8rem; block-size: 0.75rem; min-inline-size: 6rem; }
+.sn-ro-bar2-normal { position: absolute; inset-block: 0; inset-inline-start: 0; border: 1.5px solid var(--tone-text-muted); border-radius: 3px; box-sizing: border-box; }
+.sn-ro-bar2-now { position: absolute; inset-block: 0.1875rem; inset-inline-start: 0; border-radius: 2px; background: var(--tone-text-primary); }
+.sn-panel-face[data-sn-face='bicikli'] .sn-ro-bar2-now { background: var(--tone-bike); }
+.sn-ro-bar2-now[hidden] { display: none; }
+.sn-ro-bar2-label, .sn-ro-bar2-missing { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* A depth: a region labelled by a hidden h3, one Zatvori button, the body, "Više u odjeljku". */
+.sn-panel-depth { display: grid; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3) var(--sp-3); min-inline-size: 0; }
+.sn-panel-bar { display: flex; justify-content: flex-end; }
+.sn-panel-close { font-size: var(--type-control); }
 .sn-panel-body { display: grid; gap: var(--sp-2); min-inline-size: 0; }
 .sn-panel-foot { margin: 0; font-size: var(--type-control); }
 .sn-panel-deeper { display: inline-flex; align-items: center; min-block-size: var(--target); color: var(--tone-text-brand); font-weight: var(--weight-bold); }
 .sn-panel-subhead { margin: var(--sp-2) 0 0; font-size: var(--type-secondary); font-weight: var(--weight-bold); color: var(--tone-text-muted); }
+.sn-panel-subject { color: var(--tone-text-primary); font-variant-numeric: tabular-nums; }
 .sn-panel-caption, .sn-panel-note, .sn-panel-now, .sn-panel-datapath { margin: 0; font-size: var(--type-secondary); line-height: 1.5; }
 .sn-panel-note, .sn-panel-caption { color: var(--tone-text-muted); }
 .sn-panel-now, .sn-panel-datapath { font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
-.sn-panel-rules { margin: 0; padding-inline-start: 1.1rem; display: grid; gap: var(--sp-1); font-size: var(--type-secondary); line-height: 1.5; }
 .sn-panel-clear { justify-self: start; font-size: var(--type-control); }
 .sn-panel-legend { font-size: var(--type-meta); }
 
-/* The depths' plots: curves in a viewBox of samples, hairline borders, the day lines, the scale, one cursor. */
-.sn-panel-plot { --sn-seen: var(--tone-action-brand); --sn-normal: var(--tone-text-muted); --sn-expected: color-mix(in oklab, var(--tone-text-muted) 22%, transparent); position: relative; block-size: 4rem; border-block: 1px solid var(--tone-stroke); overflow: clip visible; }
-.sn-panel-plot-tall { block-size: 7rem; }
-.sn-panel-plot-band { block-size: 1.75rem; border-block: 0; }
+/* The depths' plots: curves in a viewBox of samples, hairline borders, the day lines, the scale, one cursor, the tint behind. */
+.sn-panel-plot { --sn-seen: var(--tone-action-brand); --sn-normal: var(--tone-text-muted); position: relative; block-size: 4.5rem; border-block: 1px solid var(--tone-stroke); overflow: clip visible; }
+.sn-panel-plot-tall { block-size: 8rem; }
 .sn-panel-curves { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; overflow: visible; }
 .sn-panel-curves path { fill: none; stroke-width: 2px; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .sn-panel-line-seen { stroke: var(--sn-seen); }
 .sn-panel-line-normal { stroke: var(--sn-normal); stroke-dasharray: 4 3; }
-.sn-panel-curves .sn-panel-area-expected { fill: var(--sn-expected); stroke: none; }
-.sn-panel-line-bike { stroke: var(--tone-bike); }
-.sn-panel-curves .sn-panel-area-bike { fill: color-mix(in oklab, var(--tone-bike) 20%, transparent); stroke: none; }
 .sn-panel-line-temp { stroke: var(--tone-weather); }
+.sn-panel-tint { position: absolute; inset: 0; opacity: 0.22; pointer-events: none; }
+.sn-panel-seg { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: calc(var(--w) * 100%); }
+.sn-panel-state-normal { background: var(--tone-state-success); }
+.sn-panel-state-reduced { background: var(--tone-state-warning); }
+.sn-panel-state-silent { background: var(--tone-state-danger); }
+.sn-panel-state-unknown { background: var(--tone-surface-3); }
 .sn-panel-dayline { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: 1px; background: var(--tone-stroke); pointer-events: none; }
 .sn-panel-scale { position: absolute; inset-block-start: 0.125rem; inset-inline-end: 0.25rem; font-size: var(--type-meta); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
-.sn-panel-scale-low { inset-block: auto 0.125rem; }
 .sn-panel-word { position: absolute; inset-block-end: 0.25rem; inset-inline-start: calc(var(--x) * 100%); max-inline-size: 8rem; font-size: var(--type-meta); color: var(--tone-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .sn-panel-cursor { position: absolute; z-index: 2; inset-block: -0.25rem; inset-inline-start: 0; inline-size: 100%; pointer-events: none; will-change: transform; }
 .sn-panel-cursor::before { content: ''; position: absolute; inset-block: 0; inset-inline-start: -1px; inline-size: 2px; background: var(--tone-text-primary); }
+.sn-panel-tip { position: absolute; z-index: 3; inset-block-start: calc(100% + 0.25rem); inset-inline-start: clamp(0%, calc(var(--x, 0) * 100% - 8rem), calc(100% - 16rem)); inline-size: max-content; max-inline-size: 16rem; padding: 0.25rem 0.5rem; border-radius: var(--r-sm); background: var(--tone-surface-1); border: 1px solid var(--tone-stroke-strong); box-shadow: var(--tone-shadow-soft); font-size: var(--type-meta); font-variant-numeric: tabular-nums; pointer-events: none; }
 .sn-panel-key { display: inline-block; inline-size: 0.875rem; block-size: 0.875rem; border-radius: 3px; background: var(--tone-stroke-strong); }
 .sn-panel-key-seen { block-size: 0.2rem; background: var(--tone-action-brand); }
-.sn-panel-key-expected { background: color-mix(in oklab, var(--tone-text-muted) 22%, transparent); }
 .sn-panel-key-normal { block-size: 0; border-block-start: 2px dashed var(--tone-text-muted); background: none; }
-.sn-panel-key-alive { block-size: 0.3rem; background: var(--tone-action-brand); }
-.sn-panel-key-dead { block-size: 0.2rem; background: var(--tone-text-subtle); }
-.sn-panel-key-quiet { block-size: 1px; background: var(--tone-stroke-strong); }
+.sn-panel-key-tint { opacity: 0.45; }
+.sn-panel-key-dot { border-radius: 50%; }
 
-/* The state band of the Stanje depth: a word and a shape per state in the legend, never colour alone. */
-.sn-panel-band { position: absolute; inset: 0; border-radius: 3px; background: var(--tone-surface-2); overflow: hidden; }
-.sn-panel-seg { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: calc(var(--w) * 100%); }
-.sn-panel-state-normal { background: color-mix(in oklab, var(--tone-state-success) 45%, var(--tone-surface-1)); }
-.sn-panel-state-reduced { background: color-mix(in oklab, var(--tone-state-warning) 75%, var(--tone-surface-1)); }
-.sn-panel-state-silent { background: var(--tone-state-danger); }
-.sn-panel-state-unknown { background: var(--tone-surface-3); }
-.sn-panel-state-none { background: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1px, transparent 1px 4px); }
+/* Mreža: the lines with a vehicle as chips against the normal day; each sets the route subject. */
+.sn-panel-minis-large { min-block-size: 10rem; }
+.sn-panel-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.sn-panel-chip { min-block-size: var(--target); font-variant-numeric: tabular-nums; }
+.sn-panel-subject-host { display: grid; gap: var(--sp-2); min-inline-size: 0; }
+.sn-panel-subject-host:empty { display: none; }
 
-/* The stations of the Bicikli depth, emptiest first; each a button that makes it the subject. */
+/* Bicikli: twin station dot maps (filled = bikes there, hollow = empty, grey = not renting, nothing = missing). */
+.sn-panel-dotmaps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+.sn-panel-dotmap { margin: 0; min-inline-size: 0; }
+.sn-panel-dots { display: block; inline-size: 100%; block-size: auto; aspect-ratio: 1 / 1; border-radius: var(--r-md); background: var(--tone-surface-2); }
+.sn-panel-dots-caption { margin-block-start: var(--sp-1); font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-panel-dot { stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.sn-panel-dot-full { fill: var(--tone-bike); stroke: var(--tone-bike); }
+.sn-panel-dot-empty { fill: var(--tone-surface-1); stroke: var(--tone-text-muted); }
+.sn-panel-dot-off { fill: var(--tone-stroke-strong); stroke: none; }
+.sn-panel-dot-none { display: none; }
+.sn-panel-key.sn-panel-dot-full { background: var(--tone-bike); }
+.sn-panel-key.sn-panel-dot-empty { background: var(--tone-surface-1); box-shadow: inset 0 0 0 1.5px var(--tone-text-muted); }
+
+/* The stations empty now that were not on Thursday; each a button that makes it the subject. */
 .sn-panel-stations { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--tone-stroke); border-block: 1px solid var(--tone-stroke); }
+.sn-panel-stations > .sn-panel-note { padding: var(--sp-2); background: var(--tone-surface-1); }
 .sn-panel-station { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); inline-size: 100%; min-block-size: var(--target); padding: 0 var(--sp-2); border: 0; background: var(--tone-surface-1); color: var(--tone-text-primary); font: inherit; font-size: var(--type-secondary); text-align: start; cursor: pointer; }
 .sn-panel-station[aria-pressed='true'] { font-weight: var(--weight-bold); box-shadow: inset 3px 0 0 var(--tone-bike); }
 .sn-panel-station-n { font-variant-numeric: tabular-nums; color: var(--tone-text-muted); white-space: nowrap; }
-.sn-panel-minis-large { min-block-size: 10rem; }
 
 /* Lanes the shell adds to Tijek's ZET panel: vehicles in the depots, future stamps as 1 px ticks. */
 .sn-panel-lane { position: absolute; inset-inline: 0; block-size: 0.75rem; border-radius: 2px; background: var(--tone-surface-2); }
@@ -197,8 +216,13 @@
 }
 /* A phone: the deck's panels join the swipe row (stage.css), the speed is a native select, the day labels shorten. */
 @media (max-width: 40rem) {
+  /* The deck's cards join the swipe row (stage.css): Mreža first, then Vozila and Bicikli, the feed after them; ~78vw
+     with a peek of the next; each card as tall as its content (never stretched to the feed's height). */
   .sn-deck { display: contents; }
-  .sn-deck-item, .sn-deck-item[data-expanded] { flex: 0 0 86vw; max-block-size: 70vh; overflow-y: auto; scroll-snap-align: start; grid-row: auto; }
+  .sn-deck-item, .sn-deck-item[data-expanded] { flex: 0 0 78vw; align-self: start; max-block-size: 70vh; overflow-y: auto; scroll-snap-align: start; }
+  .sn-deck-item[data-panel='mreza'] { order: -3; }
+  .sn-deck-item[data-panel='vozila'] { order: -2; }
+  .sn-deck-item[data-panel='bicikli'] { order: -1; }
   .sn-tl { border-radius: var(--r-lg) var(--r-lg) 0 0; padding: var(--sp-2); gap: var(--sp-1) var(--sp-2); }
   .sn-tl-speed { display: none; }
   .sn-tl-pick { display: block; }
@@ -216,11 +240,12 @@
 
 @media (prefers-reduced-motion: reduce) {
   .sn-deck-item, .sn-deck-item[data-expanded] { transition: none; animation: none; }
-  .sn-panel-fig[data-spot], .sn-panel-face[data-spot] { box-shadow: none; transition: none; }
+  .sn-panel-chevron { transition: none; }
+  .sn-ro-fig[data-spot], .sn-ro-twins[data-spot] { box-shadow: none; transition: none; }
 }
 @media (forced-colors: active) {
-  .sn-hm-svg rect, .sn-hm-key, .sn-panel-seg, .sn-tl-seg-state, .sn-panel-key { forced-color-adjust: none; }
+  .sn-hm-svg rect, .sn-hm-key, .sn-panel-seg, .sn-tl-seg-state, .sn-panel-key, .sn-ro-bar2-track { forced-color-adjust: none; }
 }
 @media print {
-  .sn-tl, .sn-panel-back { display: none; }
+  .sn-tl, .sn-panel-close { display: none; }
 }

@@ -116,28 +116,38 @@ describe('mountMinimaps', () => {
     expect(root.querySelector('.sn-mm-now .sn-mm-name')!.textContent).toBe(zagrebDay(monday0745 * 1000));
     expect(root.querySelector('.sn-mm-now .sn-mm-count')!.textContent).toBe('linije s vozilom: 1 od 2');
     // Monday against Monday 21 Sep (S-12): 6 alive, 228 dead there too.
-    expect(root.querySelector('.sn-mm-normal .sn-mm-name')!.textContent).toBe('ponedjeljak 21. rujna, isto doba');
+    expect(root.querySelector('.sn-mm-normal .sn-mm-name')!.textContent).toBe('pon 21. 9., isto doba');
     expect(classesOf(normal, '6')).toEqual(['sn-mm-alive']);
     expect(classesOf(normal, '228')).toEqual(['sn-mm-dead']);
     expect(root.querySelector('.sn-mm-legend')).toBeNull();
+    // On a face the twins are phrasing content inside the button: spans, the drawing hidden, the captions spoken.
+    expect(root.querySelector('figure, figcaption')).toBeNull();
+    expect(now.getAttribute('aria-hidden')).toBe('true');
+    expect(now.hasAttribute('role')).toBe(false);
     // Tuesday: the window has nothing alive; the comparison is Thursday with both alive.
     f.frame(tuesday0745);
     expect(classesOf(now, '6')).toEqual(['sn-mm-dead']);
     expect(root.querySelector('.sn-mm-now .sn-mm-count')!.textContent).toBe('linije s vozilom: 0 od 2');
-    expect(root.querySelector('.sn-mm-normal .sn-mm-name')!.textContent).toBe('četvrtak 24. rujna, isto doba');
+    expect(root.querySelector('.sn-mm-normal .sn-mm-name')!.textContent).toBe('čet 24. 9., isto doba');
+    expect(root.querySelector('.sn-mm-normal .sn-mm-count')!.textContent).toBe('linije s vozilom: 2 od 2');
     expect(classesOf(normal, '228')).toEqual(['sn-mm-alive']);
     expect(normal.getAttribute('data-sn-mm-alive')).toBe('2');
     unmount();
     expect(host.querySelector('.sn-mm')).toBeNull();
     expect(f.subscribers.size).toBe(0);
   });
-  it('a route subject outlines that route on both sides; large adds the three-word legend', async () => {
+  it('a route subject outlines that route on both sides; large adds the one three-word legend and names each drawing by its caption', async () => {
     const f = fakeContext(monday0745);
     const host = document.createElement('div');
     const unmount = mountMinimaps(f.ctx, host, { large: true });
     await flush();
     const root = host.querySelector('.sn-mm')!;
+    expect(root.querySelectorAll('.sn-mm-legend')).toHaveLength(1);
     expect([...root.querySelectorAll('.sn-mm-legend li')].map((li) => li.textContent)).toEqual(['linija s vozilom', 'po voznom redu, bez vozila', 'izvan voznog reda']);
+    expect(root.querySelectorAll('figure')).toHaveLength(2);
+    expect(root.querySelector('.sn-mm-now svg')!.getAttribute('role')).toBe('img');
+    expect(root.querySelector('.sn-mm-now svg')!.getAttribute('aria-label')).toBe(`${zagrebDay(monday0745 * 1000)}: linije s vozilom: 1 od 2`);
+    expect(root.querySelector('.sn-mm-normal svg')!.getAttribute('aria-label')).toBe('pon 21. 9., isto doba: linije s vozilom: 1 od 2');
     f.view.set({ subject: { kind: 'route', id: '228' } }, 'user');
     expect(root.getAttribute('data-sn-mm-subject')).toBe('228');
     for (const side of ['now', 'normal']) expect(classesOf(root.querySelector(`.sn-mm-${side} svg`)!, '228')).toContain('sn-mm-subject');
