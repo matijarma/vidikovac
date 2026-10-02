@@ -243,6 +243,8 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
   let lastRender = -Infinity;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let jumped = true;
+  /** The instant of the latest frame that waited for the cadence. */
+  let latest = 0;
   let destroyed = false;
   const wall = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -290,10 +292,11 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
     // A forward step of passive play waits for the cadence; anything else (a seek, the subject, new data) draws now.
     const passive = !jumped && key === shownSubject && items === shownItems && count > shownCount;
     if (passive && wall() - lastRender < FEED_CADENCE_MS) {
+      latest = atSec;
       if (timer === null) {
         timer = setTimeout(() => {
           timer = null;
-          if (!destroyed) render(Math.floor(ctx.clock.now() / 1000));
+          if (!destroyed) render(latest);
         }, FEED_CADENCE_MS - (wall() - lastRender));
       }
       return;

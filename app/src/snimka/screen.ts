@@ -104,7 +104,7 @@ const QUARTET_DAY: Partial<Record<number, QuartetKey>> = { 1: 'mon', 2: 'tue', 3
 export interface QuartetSlot { key: QuartetKey; atSec: number; run: IndexRun | null }
 
 /** The mornings at 07:45 inside the window (Monday to Friday), each with the slot run nearest it within twenty minutes. */
-export function quartet(index: Pick<ScreenIndex, 'runs'>, fromSec: number, toSec: number): QuartetSlot[] {
+export function quartet(index: ScreenIndex, fromSec: number, toSec: number): QuartetSlot[] {
   const out: QuartetSlot[] = [];
   for (let day = midnightOf(fromSec); day < toSec; day += 86_400) {
     const atSec = day + MORNING_S;
@@ -196,8 +196,8 @@ export function boardHtml(name: string, view: BoardView): string {
 }
 
 /** Which source the subtitle uses at an instant: the record where a run is shown, else today's rules. */
-export function screenSourceAt(index: Pick<ScreenIndex, 'runs'> | null, tSec: number): ScreenSource {
-  return index && runShownAt(index as ScreenIndex, tSec) ? 'observed' : 'replayed';
+export function screenSourceAt(index: ScreenIndex | null, tSec: number): ScreenSource {
+  return index && runShownAt(index, tSec) ? 'observed' : 'replayed';
 }
 export type ScreenSource = 'observed' | 'replayed';
 

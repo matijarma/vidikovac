@@ -62,3 +62,158 @@ describe('currentMarker', () => {
     expect(currentMarker(events, 1)).toBeNull();
   });
 });
+
+// ---- the feed's pure half (v2) ----------------------------------------------------------------
+import { SNIMKA_WINDOW, type VoiceFile } from '../../shared/snimka';
+import { buildEvents, buildNews, buildNotices, buildVoiceDay, buildWindowSeries, MARKS, zg } from '../../e2e/snimka-fixtures';
+import {
+  buildVoices, companionVoices, COMPANION_GAP_S, feedMarkers, focusSubject, foldedUpTo, foldPress, mentionsSubject, stateBand, voicesUpTo, type VoiceItem,
+} from '../../app/src/snimka/voices';
+
+const fixtureFiles = { notices: buildNotices(), news: buildNews(), events: buildEvents().events };
+const press = (id: string, atSec: number, beat: string | null, extra: Partial<VoiceItem> = {}): VoiceItem => ({
+  id, atSec, kind: 'press', title: id, text: null, link: `https://n1info.hr/${id}`, source: { label: 'N1', url: 'https://n1info.hr/' }, focus: { kind: 'none' }, facts: [], mentions: {}, beat, ...extra,
+});
+
+describe('buildVoices', () => {
+  const items = buildVoices(fixtureFiles);
+  it('every notice, headline and event in time order, each with its kind', () => {
+    for (let i = 1; i < items.length; i++) expect(items[i]!.atSec).toBeGreaterThanOrEqual(items[i - 1]!.atSec);
+    const kinds = new Map(items.map((i) => [i.id, i.kind]));
+    expect(kinds.get('notice:10164')).toBe('zet');
+    expect(kinds.get('news:v1')).toBe('press');
+    expect(kinds.get('event:sud')).toBe('court');
+    expect(kinds.get('event:prvo-jutro')).toBe('event');
+    // A notice published before the window is still a voice (it is what ZET said the day before).
+    expect(items[0]!.id).toBe('notice:10164');
+  });
+  it('a chapter that repeats a notice of the same minute speaks once, as the notice', () => {
+    expect(items.some((i) => i.id === 'event:linija-228')).toBe(false);
+    expect(items.find((i) => i.id === 'notice:10166')?.focus).toEqual({ kind: 'route', id: '228' });
+    expect(items.length).toBe(fixtureFiles.notices.items.length + fixtureFiles.news.items.length + fixtureFiles.events.length - 1);
+  });
+  it('titles stay verbatim; a headline links its article and names its outlet', () => {
+    const v1 = items.find((i) => i.id === 'news:v1')!;
+    expect(v1.title).toBe('ZET uveo autobusnu liniju do Rebra');
+    expect(v1.link).toBe('https://www.vecernji.hr/zagreb/primjer-2');
+    expect(v1.source).toEqual({ label: 'Večernji list', url: 'https://www.vecernji.hr/' });
+    expect(v1.beat).toBe('linija-228');
+  });
+  it('the subject of an item is its line, station or stop; a city, a place or a layer is none', () => {
+    expect(focusSubject({ focus: { kind: 'route', id: '228' } })).toEqual({ kind: 'route', id: '228' });
+    expect(focusSubject({ focus: { kind: 'station', id: 'bajs-3' } })).toEqual({ kind: 'station', id: 'bajs-3' });
+    expect(focusSubject({ focus: { kind: 'stop', id: '109_1' } })).toEqual({ kind: 'stop', id: '109_1' });
+    expect(focusSubject({ focus: { kind: 'city' } })).toBeNull();
+    expect(focusSubject({ focus: { kind: 'place', id: 'jelacic' } })).toBeNull();
+    expect(focusSubject({ focus: { kind: 'layer', layer: 'bikes' } })).toBeNull();
+    expect(mentionsSubject({ focus: { kind: 'none' }, mentions: { routes: ['228'] } }, { kind: 'route', id: '228' })).toBe(true);
+    expect(mentionsSubject({ focus: { kind: 'none' }, mentions: { routes: ['17'] } }, { kind: 'route', id: '228' })).toBe(false);
+  });
+});
+
+describe('foldPress', () => {
+  const H = 3600;
+  const list = [press('a', 0, 'bajs'), press('b', 1 * H, 'bajs'), press('c', 2.9 * H, 'bajs'), press('d', 3 * H, 'bajs'), press('e', 1 * H, 'taksi'), press('f', 1.5 * H, null), press('g', 1.6 * H, null)];
+  const folded = foldPress(list);
+  it('keeps one headline per beat per three hours and folds the rest under it', () => {
+    expect(folded.map((i) => i.id)).toEqual(['a', 'e', 'f', 'g', 'd']);
+    const a = folded.find((i) => i.id === 'a')!;
+    expect(a.folded!.map((i) => i.id)).toEqual(['b', 'c']);
+    // Three hours after the first, a new head.
+    expect(folded.find((i) => i.id === 'd')!.folded).toEqual([]);
+    // A headline without a beat is never folded.
+    expect(folded.filter((i) => i.beat === null).map((i) => i.id)).toEqual(['f', 'g']);
+  });
+  it('the fold under a head grows with the clock and leaves the input alone', () => {
+    const a = folded.find((i) => i.id === 'a')!;
+    expect(foldedUpTo(a, 0)).toEqual([]);
+    expect(foldedUpTo(a, 1 * H).map((i) => i.id)).toEqual(['b']);
+    expect(foldedUpTo(a, 3 * H).map((i) => i.id)).toEqual(['b', 'c']);
+    expect(list[0]!.folded).toBeUndefined();
+  });
+});
+
+describe('voicesUpTo', () => {
+  const many = Array.from({ length: 20 }, (_, i) => press(`p${i}`, i * 60, null, i % 4 === 0 ? { mentions: { routes: ['228'] } } : {}));
+  it('newest first, cut at fourteen, the rest older; nothing after the clock', () => {
+    const at = voicesUpTo(many, 19 * 60);
+    expect(at.visible.length).toBe(14);
+    expect(at.visible[0]!.id).toBe('p19');
+    expect(at.visible[13]!.id).toBe('p6');
+    expect(at.older.map((i) => i.id)).toEqual(['p5', 'p4', 'p3', 'p2', 'p1', 'p0']);
+    expect(at.olderCount).toBe(6);
+    expect(at.hiddenCount).toBe(0);
+    expect(voicesUpTo(many, 5 * 60 - 1).visible.map((i) => i.id)).toEqual(['p4', 'p3', 'p2', 'p1', 'p0']);
+    expect(voicesUpTo(many, -1).visible).toEqual([]);
+  });
+  it('a subject keeps only what speaks of it and counts what it left out', () => {
+    const at = voicesUpTo(many, 19 * 60, { subject: { kind: 'route', id: '228' } });
+    expect(at.visible.map((i) => i.id)).toEqual(['p16', 'p12', 'p8', 'p4', 'p0']);
+    expect(at.hiddenCount).toBe(15);
+    expect(at.olderCount).toBe(0);
+  });
+  it('on the fixture: the 228 subject keeps the notice and the headline about the line', () => {
+    const at = voicesUpTo(foldPress(buildVoices(fixtureFiles)), SNIMKA_WINDOW.toSec, { subject: { kind: 'route', id: '228' } });
+    expect(at.visible.map((i) => i.id)).toEqual(['news:v1', 'notice:10166']);
+  });
+});
+
+describe('companionVoices', () => {
+  const mon = buildVoiceDay('mon');
+  const thu = buildVoiceDay('thu');
+  it('speaks when the lead fact turns to a family not heard for two hours, at most once an hour', () => {
+    const voices = companionVoices([thu, mon]);
+    // Monday's first minute (07:30) is new; its bikes sentence at 07:32 is new too but within the hour; Thursday 07:30 is new again.
+    expect(voices.map((v) => v.atSec)).toEqual([zg(9, 28, 7, 30), zg(10, 1, 7, 30)]);
+    expect(voices[0]!.title).toBe('U pokretu su 2 vozila, po voznom redu oko 230.');
+    expect(voices[1]!.kind).toBe('companion');
+    for (let i = 1; i < voices.length; i++) expect(voices[i]!.atSec - voices[i - 1]!.atSec).toBeGreaterThanOrEqual(COMPANION_GAP_S);
+  });
+  it('the first live departure after hours of the timetable is a voice of its own', () => {
+    const day = (t0: number, minutes: [number, number][]): VoiceFile => ({
+      v: 2, place: '106_1', day: 'd', t0, step: 60, n: 600,
+      facts: [{ id: 'service:zet', kind: 'service', wording: 'silent', text: 'U pokretu su 3 vozila.' }, { id: 'dep:6', kind: 'departure', wording: 'live', text: 'Tramvaj 6 polazi za 4 min.' }],
+      rows: [], sentences: ['U pokretu su 3 vozila.', 'Tramvaj 6 polazi za 4 min.'],
+      minutes: Array.from({ length: 600 }, (_, m) => {
+        const which = minutes.find(([from]) => m >= from) ? minutes.filter(([from]) => m >= from).at(-1)![1] : 0;
+        return { at: t0 + m * 60, f: [which], r: [], lead: which, state: 'silent' as const, voice: 'all' as const, seen: 3, expected: 200, note: null };
+      }),
+    });
+    const evening = zg(9, 30, 12, 0);
+    const voices = companionVoices([day(evening, [[0, 0], [370, 1]])]);
+    expect(voices.map((v) => v.atSec)).toEqual([evening, evening + 370 * 60]);
+    expect(voices[1]!.title).toBe('Tramvaj 6 polazi za 4 min.');
+    // Back and forth within two hours is not news: the service sentence returning after a few minutes says nothing.
+    const flicker = companionVoices([day(evening, [[0, 0], [370, 1], [375, 0], [380, 1]])]);
+    expect(flicker.length).toBe(2);
+  });
+});
+
+describe('feedMarkers and stateBand', () => {
+  it('chapters, notices with the court and ZET\'s own markers, and the press thinned to the first headline per beat', () => {
+    const events = fixtureFiles.events;
+    const items = buildVoices(fixtureFiles);
+    const markers = feedMarkers(items, events);
+    const lane = (l: string) => markers.filter((m) => m.lane === l).map((m) => m.id);
+    expect(lane('chapter')).toEqual(events.filter((e) => e.chapter && e.id !== 'linija-228' && e.kind !== 'court').map((e) => `event:${e.id}`));
+    expect(lane('notice')).toEqual(expect.arrayContaining(['notice:10164', 'notice:10166', 'event:sud', 'event:feed-stoji-pon', 'event:vozni-red-396']));
+    expect(lane('press')).toEqual(['news:j1', 'news:j2', 'news:v1', 'news:n1', 'news:n2']);
+    const thinned = feedMarkers([press('a', 0, 'bajs'), press('b', 10, 'bajs'), press('c', 20, null), press('d', 30, null)]);
+    expect(thinned.map((m) => m.id)).toEqual(['a', 'c', 'd']);
+    for (const m of markers) expect(m.title.length).toBeGreaterThan(0);
+  });
+  it('the state band: consecutive runs of the judged state with the machine\'s since, none where it held', () => {
+    const series = buildWindowSeries();
+    const band = stateBand(series);
+    expect(band[0]!.from).toBe(series.t0);
+    expect(band.at(-1)!.to).toBe(series.t0 + series.n * 60);
+    for (let i = 1; i < band.length; i++) {
+      expect(band[i]!.from).toBe(band[i - 1]!.to);
+      expect(band[i]!.cls).not.toBe(band[i - 1]!.cls);
+    }
+    const monday = band.find((r) => r.from <= MARKS.monday0745 && MARKS.monday0745 < r.to)!;
+    expect(monday.cls).toBe('silent');
+    const thursday = band.find((r) => r.from <= MARKS.thursday0745 && MARKS.thursday0745 < r.to)!;
+    expect(thursday.cls).toBe('normal');
+  });
+});
