@@ -31,7 +31,6 @@
 .sn-ro-unit { font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
 .sn-ro-sub { font-size: var(--type-meta); color: var(--tone-text-muted); line-height: 1.35; font-variant-numeric: tabular-nums; }
 .sn-ro-twins { display: block; min-inline-size: 0; }
-.sn-ro-twins .sn-mm-svg { block-size: 8.75rem; inline-size: 100%; }
 .sn-ro-fig[data-spot], .sn-ro-twins[data-spot] { border-radius: var(--r-sm); box-shadow: 0 0 0 2px var(--tone-action-brand); transition: box-shadow var(--dur-fast) var(--ease); }
 
 /* The two-bar glyph: the outline is the normal day, the fill is now, one scale; a missing now draws no fill and says so. */
@@ -224,7 +223,6 @@
   .sn-deck-item[data-panel='mreza'] { order: -3; }
   .sn-deck-item[data-panel='vozila'] { order: -2; }
   .sn-deck-item[data-panel='bicikli'] { order: -1; }
-  .sn-ro-twins .sn-mm-svg { block-size: 6.5rem; }
   .sn-tl { border-radius: var(--r-lg) var(--r-lg) 0 0; padding: var(--sp-2); gap: var(--sp-1) var(--sp-2); }
   .sn-tl-speed { display: none; }
   .sn-tl-pick { display: block; }

@@ -67,84 +67,19 @@ test.describe('/snimka/ instrument', () => {
     await expect(plateDay(page)).toHaveText('ned 27. 9.');
   });
 
-  test('a shared link opens paused at its minute; the Stanje face says the state with its retroactive mark', async ({ page }) => {
+  test('a shared link opens paused at its minute; the Vozila face says the state with its retroactive mark', async ({ page }) => {
     await open(page, '/snimka/?t=2026-09-29T06:30');
     await expect(plateTime(page)).toHaveText('06:30');
     await expect(play(page)).toHaveText('Pokreni');
     await expect(status(page)).toHaveText('Zaustavljeno: uto 29. 9. u 06:30.');
     await page.waitForTimeout(1200);
     await expect(plateTime(page)).toHaveText('06:30');
-    await expect(face(page, 'stanje').locator('[data-sn="state-word"]')).toHaveText('Gotovo bez vozila');
-    await expect(face(page, 'stanje').locator('[data-sn="retro"]')).toBeVisible();
-    await expect(face(page, 'vozila')).toContainText(/u pokretu/);
-    await expect(face(page, 'vozila')).toContainText(/običan dan \d+ · po voznom redu \d+/);
+    await expect(face(page, 'vozila').locator('[data-sn="state-word"]')).toHaveText('Gotovo bez vozila');
+    await expect(face(page, 'vozila').locator('[data-sn="retro"]')).toBeVisible();
     // After the service went live the mark leaves.
     await open(page, '/snimka/?t=2026-10-01T07:45');
-    await expect(face(page, 'stanje').locator('[data-sn="state-word"]')).toHaveText('Uobičajeno');
-    await expect(face(page, 'stanje').locator('[data-sn="retro"]')).toBeHidden();
-  });
-
-  test('the deck has seven faces; Enter opens Stanje in place, Escape closes it and gives the focus back', async ({ page }) => {
-    await open(page, '/snimka/?t=2026-09-28T07:45');
-    await expect(page.locator('.sn-panel-face')).toHaveCount(7);
-    await expect(page.locator('.sn-panel-face').first()).toHaveAttribute('aria-expanded', 'false');
-    await face(page, 'stanje').focus();
-    await page.keyboard.press('Enter');
-    await expect(root(page)).toHaveAttribute('data-sn-expanded', 'stanje');
-    await expect(face(page, 'stanje')).toHaveAttribute('aria-expanded', 'true');
-    const depth = page.locator('#sn-depth-stanje');
-    await expect(depth).toBeVisible();
-    await expect(depth).toHaveAttribute('role', 'region');
-    await expect(page.locator('#sn-depth-h-stanje')).toBeFocused();
-    await expect(depth.locator('.sn-panel-rules li')).toHaveCount(5);
-    await expect(depth.locator('a.sn-panel-deeper')).toHaveText('Dalje u dosjeu');
-    await expect(page.locator('.sn-deck-item[data-dim]')).toHaveCount(6);
-    await expect(page).toHaveURL(/panel=stanje/);
-    await page.keyboard.press('Escape');
-    await expect(root(page)).toHaveAttribute('data-sn-expanded', 'none');
-    await expect(depth).toBeHidden();
-    await expect(face(page, 'stanje')).toBeFocused();
-    await expect(page).not.toHaveURL(/panel=/);
-  });
-
-  test('?panel=vozila opens the Vozila depth with its tram and bus plots', async ({ page }) => {
-    await open(page, '/snimka/?t=2026-09-28T07:45&panel=vozila');
-    await expect(root(page)).toHaveAttribute('data-sn-expanded', 'vozila');
-    const depth = page.locator('#sn-depth-vozila');
-    await expect(depth).toBeVisible();
-    await expect(depth.locator('.sn-panel-plot')).toHaveCount(3);
-    await expect(depth.locator('.sn-panel-subhead')).toHaveText(['Tramvaji', 'Autobusi']);
-  });
-
-  test('the Linije depth draws the heatmap; a line row makes it the subject with its own curve', async ({ page }) => {
-    await open(page, '/snimka/?t=2026-09-29T12:00&panel=linije');
-    const depth = page.locator('#sn-depth-linije');
-    await expect(depth.locator('[data-sn-heatmap]')).toBeVisible();
-    // 19 trams, the three strike buses, the aggregate of the other ten.
-    await expect(depth.locator('[data-sn-heatmap]')).toHaveAttribute('data-sn-heatmap', '23');
-    await expect(depth.locator('.sn-hm-row[data-route="228"]')).toHaveText('228');
-    await expect(depth.locator('.sn-hm-name').last()).toHaveText('Ostale autobusne linije (10), zajedno');
-    // Decision S-22: the row label is the button, 24 px tall (the one exception to 44 px), with a visible focus ring.
-    const rowButton = depth.locator('.sn-hm-row[data-route="228"]');
-    const rowBox = (await rowButton.boundingBox())!;
-    expect(rowBox.height, 'a heatmap row is at least 24 px tall').toBeGreaterThanOrEqual(24);
-    expect(rowBox.width, 'a heatmap row is at least 24 px wide').toBeGreaterThanOrEqual(24);
-    await depth.locator('.sn-hm-row').first().focus();
-    await page.keyboard.press('Tab');
-    const ring = await page.evaluate(() => {
-      const el = document.activeElement as HTMLElement | null;
-      const cs = el ? getComputedStyle(el) : null;
-      return el?.classList.contains('sn-hm-row') && cs ? { style: cs.outlineStyle, width: parseFloat(cs.outlineWidth) } : null;
-    });
-    expect(ring, 'Tab moves to the next row button').not.toBeNull();
-    expect(ring!.style, 'the focused row shows its ring').not.toBe('none');
-    expect(ring!.width).toBeGreaterThanOrEqual(2);
-    await rowButton.click();
-    await expect(page).toHaveURL(/linija=228/);
-    await expect(depth.locator('[data-sn="subject-now"]')).toHaveText(/^u pokretu sada \d+, po voznom redu \d+$/);
-    await depth.getByRole('button', { name: 'Ukloni temu' }).click();
-    await expect(page).not.toHaveURL(/linija=/);
-    await expect(depth.locator('[data-sn-heatmap]')).toBeVisible();
+    await expect(face(page, 'vozila').locator('[data-sn="state-word"]')).toHaveText('Uobičajeno');
+    await expect(face(page, 'vozila').locator('[data-sn="retro"]')).toBeHidden();
   });
 
   test('the instrument stands in the first viewport at 1366×768: #snimka starts under 300 px (decision S-9)', async ({ page }) => {
@@ -297,7 +232,7 @@ test.describe('/snimka/ instrument', () => {
       expect(await row.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
       const firstItem = page.locator('.sn-deck-item').first();
       const itemBox = (await firstItem.boundingBox())!;
-      expect(Math.round(itemBox.width)).toBe(Math.round(width * 0.86));
+      expect(Math.round(itemBox.width)).toBe(Math.round(width * 0.78));
       expect(await firstItem.evaluate((el) => getComputedStyle(el).scrollSnapAlign)).toMatch(/start/);
       await expect(page.locator('.sn-tl-speed')).toBeHidden();
       await expect(page.locator('[data-sn="speed-select"]')).toBeVisible();
@@ -316,13 +251,117 @@ test.describe('/snimka/ instrument', () => {
       expect(await horizontalOverflow(page)).toBe(0);
     });
   }
+});
 
-  for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+// The deck of v3 (decisions V3-14, V3-15): three faces against the normal day, the grammar, the phone row, axe.
+test.describe('Deck', () => {
+  test('three faces, each against a normal day: the Vozila badge and glyph, the Mreža counts, the empty stations against Thursday', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45');
+    await expect(page.locator('.sn-panel-face')).toHaveCount(3);
+    await expect(page.locator('.sn-deck-item')).toHaveCount(3);
+    for (const id of ['vozila', 'mreza', 'bicikli']) await expect(face(page, id).locator('.sn-panel-chevron')).toHaveCount(1);
+    const vozila = face(page, 'vozila');
+    await expect(vozila.locator('[data-sn="state-word"]')).toHaveText('Gotovo bez vozila');
+    await expect(vozila.locator('[data-sn="retro"]')).toHaveText('izračunano naknadno');
+    await expect(vozila.locator('.sn-ro-fig')).toHaveText(/^\d+ u pokretu$/);
+    await expect(vozila.locator('.sn-ro-sub')).toHaveText(/^običan dan \(pon 21\. 9\.\) u isto doba: \d+$/);
+    await expect(vozila.locator('[data-sn-bar2]')).toHaveAttribute('data-sn-bar2', 'ok');
+    await expect(vozila.locator('.sn-ro-bar2-track')).toHaveAttribute('aria-label', /^sada \d+, običan dan \d+$/);
+    const mreza = face(page, 'mreza');
+    await expect(mreza.locator('.sn-mm')).toHaveAttribute('data-sn-minimaps', 'ready');
+    await expect(mreza.locator('.sn-mm-now .sn-mm-count')).toHaveText(/^linije s vozilom: 2 od \d+$/);
+    await expect(mreza.locator('.sn-mm-normal .sn-mm-name')).toHaveText('pon 21. 9., isto doba');
+    await expect(mreza).toHaveAccessibleName(/linije s vozilom: 2 od \d+.*pon 21\. 9\., isto doba linije s vozilom: \d+ od \d+/);
+    const bicikli = face(page, 'bicikli');
+    await expect(bicikli.locator('.sn-ro-fig')).toHaveText(/^\d+ (prazna stanica|prazne stanice|praznih stanica)$/);
+    await expect(bicikli.locator('.sn-ro-bar2-label')).toHaveText(/^čet 1\. 10\.: \d+$/);
+    await expect(bicikli.locator('.sn-ro-sub')).toHaveText(/^bicikala [\d.]+ · čet 1\. 10\.: [\d.]+$/);
+  });
+
+  test('Enter on Vozila expands it in place without reordering; Zatvori closes and gives the focus back', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45');
+    const order = async (): Promise<string[]> => page.locator('.sn-deck-item').evaluateAll((items) => items.map((li) => (li as HTMLElement).dataset.key ?? ''));
+    const before = await order();
+    const tops = async (): Promise<number[]> => page.locator('.sn-panel-face').evaluateAll((faces) => faces.map((f) => f.getBoundingClientRect().top));
+    await face(page, 'vozila').focus();
+    await page.keyboard.press('Enter');
+    await expect(root(page)).toHaveAttribute('data-sn-expanded', 'vozila');
+    await expect(face(page, 'vozila')).toHaveAttribute('aria-expanded', 'true');
+    await expect(face(page, 'vozila')).toBeFocused();
+    expect(await order()).toEqual(before);
+    const t = await tops();
+    expect(t).toEqual([...t].sort((a, b) => a - b));
+    const depth = page.locator('#sn-depth-vozila');
+    await expect(depth).toBeVisible();
+    await expect(depth).toHaveAttribute('role', 'region');
+    await expect(depth.locator('.sn-panel-plot')).toHaveCount(1);
+    await expect(depth.locator('[data-sn="vozila-now"]')).toHaveText(/^u pokretu \d+, po voznom redu \d+$/);
+    await expect(depth.locator('a.sn-panel-deeper')).toHaveText('Više u odjeljku „Tijek”');
+    await expect(page.locator('[data-dim]')).toHaveCount(0);
+    await expect(page).toHaveURL(/panel=vozila/);
+    await depth.getByRole('button', { name: 'Zatvori' }).click();
+    await expect(root(page)).toHaveAttribute('data-sn-expanded', 'none');
+    await expect(depth).toBeHidden();
+    await expect(face(page, 'vozila')).toBeFocused();
+    await expect(page).not.toHaveURL(/panel=/);
+    // Escape closes too.
+    await page.keyboard.press('Enter');
+    await expect(root(page)).toHaveAttribute('data-sn-expanded', 'vozila');
+    await page.keyboard.press('Escape');
+    await expect(root(page)).toHaveAttribute('data-sn-expanded', 'none');
+  });
+
+  test('?panel=mreza opens expanded: large twins with one legend, the lines with a vehicle as chips that set the subject', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45&panel=mreza');
+    await expect(root(page)).toHaveAttribute('data-sn-expanded', 'mreza');
+    const depth = page.locator('#sn-depth-mreza');
+    await expect(depth).toBeVisible();
+    await expect(depth.locator('.sn-mm')).toHaveAttribute('data-sn-minimaps', 'ready');
+    await expect(depth.locator('.sn-mm-legend')).toHaveCount(1);
+    const chips = depth.locator('[data-sn="line-chips"] button');
+    await expect(chips).toHaveCount(2);
+    await expect(chips.first()).toHaveText(/^\S+ \d+ · običan dan (\d+|bez podatka)$/);
+    await chips.first().click();
+    await expect(page).toHaveURL(/linija=/);
+    await expect(chips.first()).toHaveAttribute('aria-pressed', 'true');
+    await expect(depth.locator('[data-sn="subject-now"]')).toHaveText(/^Linija \S+: sada \d+ vozila, običan dan (\d+|bez podatka) u isto doba$/);
+    await expect(depth.locator('a.sn-panel-deeper')).toHaveText('Više u odjeljku „Tijek”');
+    await depth.getByRole('button', { name: 'Ukloni odabir' }).click();
+    await expect(page).not.toHaveURL(/linija=/);
+  });
+
+  test('?panel=bicikli opens the twin station maps and the stations empty now that were not on Thursday', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45&panel=bicikli');
+    const depth = page.locator('#sn-depth-bicikli');
+    await expect(depth.locator('.sn-panel-dots')).toHaveCount(2);
+    await expect(depth.locator('.sn-panel-dotmap-now svg')).toHaveAttribute('data-sn-dots', /^\d+\/\d+$/);
+    await expect(depth.locator('.sn-panel-dotmap-ref figcaption')).toHaveText('čet 1. 10., isto doba');
+    await expect(depth.locator('#sn-ro-stations-h')).toHaveText('Prazne sada, a u četvrtak 1. 10. nisu bile');
+    await expect(depth.getByText('Sva tri dana suho, od 8 do 25 °C (DHMZ, Maksimir).')).toBeVisible();
+  });
+
+  test('on a phone the swipe row starts at scrollLeft 0 with Mreža first, and nothing scrolls sideways', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45', fixture, { width: 390, height: 844 });
+    const row = page.locator('.sn-deck-row');
+    await page.waitForTimeout(300);
+    expect(await row.evaluate((el) => el.scrollLeft)).toBe(0);
+    const first = await page.locator('.sn-deck-item').evaluateAll((items) => {
+      const sorted = [...items].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+      return (sorted[0] as HTMLElement).dataset.key;
+    });
+    expect(first).toBe('mreza');
+    const box = (await page.locator('.sn-deck-item[data-key="mreza"]').boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    expect(await horizontalOverflow(page)).toBe(0);
+  });
+
+  for (const [viewport, panel] of [[{ width: 1366, height: 768 }, 'bicikli'], [{ width: 390, height: 844 }, 'mreza']] as const) {
     for (const scheme of ['light', 'dark'] as const) {
-      test(`axe @${viewport.width} (${scheme}) with the Linije panel open: no serious or critical violations`, async ({ page }) => {
+      test(`axe @${viewport.width} (${scheme}) with the ${panel} panel expanded: no serious or critical violations`, async ({ page }) => {
         await page.emulateMedia({ colorScheme: scheme });
-        await open(page, '/snimka/?t=2026-09-29T12:00&panel=linije', fixture, viewport);
-        await expect(page.locator('#sn-depth-linije [data-sn-heatmap]')).toBeVisible();
+        await open(page, `/snimka/?t=2026-09-28T07:45&panel=${panel}`, fixture, viewport);
+        await expect(page.locator(`#sn-depth-${panel}`)).toBeVisible();
         await page.waitForLoadState('networkidle');
         const results = await analyzeAtRest(page, () => new AxeBuilder({ page }).include('[data-sn-mount="stage"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze());
         const blocking = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');

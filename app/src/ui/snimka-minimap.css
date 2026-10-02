@@ -1,4 +1,4 @@
-/* The two SVG minimaps of /snimka/ (app/src/snimka/minimap.ts, lane V2): "sada" and the normal day side by side,
+/* The two SVG minimaps of /snimka/ (app/src/snimka/minimap.ts, lane V2; v3 W2: one legend, the face size): now and the normal day side by side,
    the alive, dead and quiet lines of the network as classes on one <path> per route. Imported by minimap.ts, so
    the sheet rides the map graph with it, never the entry. Prefix sn-mm-* only. Both themes through the tokens. */
 .sn-mm {
@@ -71,6 +71,13 @@
 .sn-mm-swatch[data-state="alive"] { border-top-color: var(--tone-action-brand); }
 .sn-mm-swatch[data-state="dead"] { border-top-color: var(--tone-text-muted); }
 .sn-mm-swatch[data-state="quiet"] { border-top-width: 1px; }
+/* On a deck face (no sn-mm-large): two twins across the face, each ~140 px tall, the captions under them. */
+.sn-mm:not(.sn-mm-large) .sn-mm-svg { height: 8.75rem; }
+.sn-mm:not(.sn-mm-large) .sn-mm-side { display: block; }
+.sn-mm:not(.sn-mm-large) .sn-mm-caption { display: block; }
+@media (max-width: 40rem) {
+  .sn-mm:not(.sn-mm-large) .sn-mm-svg { height: 6.5rem; }
+}
 @media (max-width: 24rem) {
-  .sn-mm { grid-template-columns: 1fr; }
+  .sn-mm-large { grid-template-columns: 1fr; }
 }
