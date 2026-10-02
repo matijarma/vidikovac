@@ -180,3 +180,58 @@
   .sn-cursor, .sn-hover { display: none; }
   .sn-strip-frame { break-inside: avoid; }
 }
+
+/* ---- Ukratko: the four question chips (lane V5) ------------------------------------ */
+.sn-q-nav { margin-block-start: var(--sp-4); }
+.sn-q-item { position: relative; display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.sn-q-chip { min-block-size: var(--target); text-align: start; white-space: normal; }
+/* The link to the answering section: out of sight until focused, then a real, visible target. */
+.sn-q-to { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.sn-q-to:focus { position: static; inline-size: auto; block-size: auto; clip-path: none; display: inline-flex; align-items: center; min-block-size: var(--target); padding-inline: var(--sp-2); border-radius: var(--r-sm); background: var(--tone-surface-1); }
+
+/* ---- Brojke: the five tiles wrap on a narrow screen ---------------------------------- */
+.sn-numbers .st-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+
+/* ---- Zamjene (lane V5) ------------------------------------------------------------- */
+.sn-alt-grid { align-items: start; }
+.sn-alt-table td.sn-alt-num, .sn-alt-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sn-alt-show { min-block-size: var(--target); white-space: nowrap; }
+.sn-alt-table tbody th { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.sn-alt-days { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.sn-alt-days li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-2); padding-block: var(--sp-1); border-block-end: 1px solid var(--tone-stroke); }
+.sn-alt-day { color: var(--tone-text-muted); }
+.sn-alt-cols .st-cols { grid-template-rows: auto 6rem auto; }
+.sn-alt-source { margin: 0; }
+.sn-alt-press { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+.sn-alt-beat h4 { margin: 0 0 var(--sp-2); font-size: var(--type-control); }
+.sn-alt-links { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
+.sn-alt-links li { display: grid; gap: 0.15rem; }
+.sn-alt-link { display: inline-block; padding-block: 0.6rem; line-height: 1.4; overflow-wrap: anywhere; }
+.sn-alt-meta { font-size: var(--type-meta); color: var(--tone-text-muted); }
+
+/* ---- Otvoreni podaci (lane V5) ------------------------------------------------------- */
+.sn-open-body { display: grid; gap: var(--sp-5); }
+.sn-open-signals th[scope='row'] { font-weight: var(--weight-medium); }
+.sn-open-signals td, .sn-open-signals th { overflow-wrap: anywhere; }
+.sn-open-cols { display: grid; gap: var(--sp-5); }
+@media (min-width: 64rem) { .sn-open-cols { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); } }
+.sn-open-h { margin: 0 0 var(--sp-2); font-size: var(--type-head); }
+.sn-open-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
+.sn-open-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 var(--sp-3); border-block-end: 1px solid var(--tone-stroke); }
+.sn-open-file { display: inline-flex; align-items: center; min-block-size: var(--target); font-weight: var(--weight-medium); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.sn-open-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); font-size: var(--type-meta); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
+.sn-open-latest { display: inline-flex; align-items: center; min-block-size: var(--target); }
+.sn-open-licence, .sn-open-excluded { color: var(--tone-text-muted); font-size: var(--type-control); }
+.sn-open-notes > p { margin-block: 0 var(--sp-3); }
+.sn-open-notes .st-link { display: inline-flex; align-items: center; min-block-size: var(--target); }
+
+/* ---- I danas (lane V5) ------------------------------------------------------------- */
+.sn-live { margin-block-start: var(--sp-6); }
+.sn-live-card { display: grid; gap: var(--sp-2); max-inline-size: 44rem; padding: clamp(1rem, 2.5vw, 1.5rem); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-lg); background: var(--tone-surface-1); }
+.sn-live-kicker { margin: 0; font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-text-brand); }
+.sn-live-title { margin: 0; font-size: var(--type-head); }
+.sn-live-lede, .sn-live-now p { margin: 0; }
+.sn-live-line { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.sn-live-age { font-size: var(--type-control); color: var(--tone-text-muted); }
+.sn-live-skeleton { display: block; min-block-size: 1.5rem; }
+.sn-live-links { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-2) 0 0; }
