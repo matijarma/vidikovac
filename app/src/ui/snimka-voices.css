@@ -1,4 +1,4 @@
-/* snimka-voices.css: the voices feed, the agenda, the subtitle band, the fact chips and the Zaslon section's source control. Owner: lane V4; class prefixes sn-feed-, sn-agenda-, sn-sub-, sn-fact-, sn-screen- (new classes only; .sn-screen-grid is the report sheet's). Colours carry the tone only as a bar or a dot, never as text, so every text keeps the token contrast in both themes. */
+/* snimka-voices.css: the voices feed, the agenda, the subtitle band and the fact chips. Owner: lane V4; class prefixes sn-feed-, sn-agenda-, sn-sub-, sn-fact- (the Zaslon section's sn-screen- rules live in snimka-report.css since v3). Colours carry the tone only as a bar or a dot, never as text, so every text keeps the token contrast in both themes. */
 
 /* ---- the feed -------------------------------------------------------------------- */
 .sn-feed { display: grid; gap: var(--sp-3); min-inline-size: 0; }
@@ -76,15 +76,3 @@
 .sn-agenda-title { font-weight: var(--weight-semi); }
 .sn-agenda-text { margin: 0; padding-inline: var(--sp-2); font-size: var(--type-secondary); color: var(--tone-text-secondary); line-height: 1.45; }
 .sn-agenda-chips { padding-inline: var(--sp-2); }
-
-/* ---- Zaslon: the source control and today's sentence of each morning --------------- */
-.sn-screen-source { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-block-end: var(--sp-3); }
-.sn-screen-source-label { font-size: var(--type-secondary); color: var(--tone-text-secondary); }
-.sn-screen-source-option { min-block-size: 44px; padding: 0 var(--sp-4); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-pill); background: var(--tone-surface-1); color: var(--tone-text-primary); font: inherit; font-size: var(--type-control); cursor: pointer; }
-.sn-screen-source-option[aria-pressed='true'] { background: var(--tone-action-brand); border-color: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
-.sn-screen-note { margin: 0 0 var(--sp-3); max-inline-size: 60ch; font-size: var(--type-secondary); color: var(--tone-text-secondary); line-height: 1.5; }
-.sn-screen-note[hidden] { display: none; }
-.sn-screen-replayed { margin: var(--sp-2) 0 0; font-size: var(--type-secondary); line-height: 1.45; }
-.sn-screen-replayed-kicker { color: var(--tone-text-secondary); font-weight: var(--weight-semi); }
-.sn-screen-replayed[data-state='none'] .sn-screen-replayed-text { color: var(--tone-text-muted); }
-.sn-screen-replayed-skeleton { display: inline-block; inline-size: 10rem; block-size: 0.9em; vertical-align: middle; }
