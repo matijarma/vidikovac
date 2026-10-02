@@ -1,9 +1,9 @@
 // The subject of the instrument (a route, a BAJS station or a stop): from the
 // map's own selection, to a label the panels and the feed print, to the
 // focus the camera flies to (plan section 3.5). Pure; on the entry graph.
-import type { Focus } from '../../../shared/snimka';
+import type { Focus, PlacesFile, RoutesFile } from '../../../shared/snimka';
 import type { MapSelection } from '../map/city-map';
-import type { LoadedComparison, SnimkaContext } from './context';
+import type { LoadedComparison } from './context';
 import type { Subject } from './contracts';
 import { SN, fill } from './strings';
 
@@ -32,7 +32,7 @@ export interface SubjectNames { station?(id: string): string | null; stop?(id: s
 
 /** The subject as the panels say it: "Linija 228", "Stanica Trg bana J. Jelačića", "Stajalište Glavni kolodvor"; a
  *  name nobody can resolve falls back to the id, never to an empty label. */
-export function subjectLabel(ctx: Pick<SnimkaContext, 'routes' | 'places'>, subject: Subject, names: SubjectNames = {}): string {
+export function subjectLabel(ctx: { routes: Pick<RoutesFile, 'routes'>; places: Pick<PlacesFile, 'places'> }, subject: Subject, names: SubjectNames = {}): string {
   if (subject.kind === 'route') {
     const short = ctx.routes.routes.find((r) => r.id === subject.id)?.shortName ?? subject.id;
     return fill(SN.subject.line, { short });
