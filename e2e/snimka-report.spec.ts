@@ -13,7 +13,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import type { SeriesFile } from '../shared/snimka';
-import { emptiedFirst, MONDAY_FIVE_S } from '../app/src/snimka/alternatives';
+import { emptyHoursVsThu } from '../app/src/snimka/alternatives';
+import { heroTiles } from '../app/src/snimka/reckoning';
+import { seekTime } from '../app/src/snimka/strip';
 import { buildBajs, buildSnimkaFixture, buildStations, buildWindowSeries, routeSnimka, stubTeaserDown, stubTeaserNormal, type SnimkaFixture } from './snimka-fixtures';
 
 /** The fixture as served; `noAlerts` empties ZET's alerts and cancellations columns (the tile must then be left out). */
@@ -68,36 +70,6 @@ test.describe('/snimka/ dossier', () => {
     expect(Math.abs(top)).toBeLessThan(200);
   });
 
-  test('Brojke has five tiles, and four when the series has no alerts column', async ({ page }) => {
-    await page.setViewportSize({ width: 1366, height: 900 });
-    await open(page);
-    await expect(page.locator('[data-sn="kpis"]')).not.toHaveAttribute('aria-busy', /.*/);
-    await expect(page.locator('[data-sn="kpis"] .st-kpi')).toHaveCount(5);
-    await expect(page.locator('[data-sn="kpi-silent"] .st-kpi-value')).toHaveText('65');
-    await expect(page.locator('[data-sn="kpi-peak"] .st-kpi-sub')).toHaveText(/^pon 21\. 9\., običan dan u isto doba: \d+$/);
-    await expect(page.locator('[data-sn="kpi-alerts"] .st-kpi-label')).toHaveText('upozorenja u ZET-ovim podacima');
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-    await open(page, '?t=2026-09-28T07:45&brzina=600', { noAlerts: true });
-    await expect(page.locator('[data-sn="kpis"] .st-kpi')).toHaveCount(4);
-    await expect(page.locator('[data-sn="kpi-alerts"]')).toHaveCount(0);
-  });
-
-  test('Zamjene: the stations that emptied first, and "Pokaži na karti" seeks and sets the station', async ({ page }) => {
-    await page.setViewportSize({ width: 1366, height: 900 });
-    await open(page);
-    const expected = emptiedFirst(buildBajs(buildWindowSeries()), buildStations(), MONDAY_FIVE_S);
-    await page.locator('#zamjene').scrollIntoViewIfNeeded();
-    const rows = page.locator('#zamjene-bajs tbody tr');
-    await expect(rows).toHaveCount(Math.min(10, expected.length));
-    await rows.first().locator('button').click();
-    const first = expected[0]!;
-    const minute = new Date((first.emptySec + 7200) * 1000).toISOString().slice(0, 16);
-    await expect.poll(() => tParam(page)).toBe(minute);
-    await expect(page).toHaveURL(new RegExp(`[?&]stanica=${first.id}(&|$)`));
-    await expect(page.locator('#zamjene-228 .st-col')).toHaveCount(48);
-    for (const a of await page.locator('#zamjene-mediji a').all()) await expect(a).toHaveAttribute('rel', 'noopener noreferrer');
-  });
-
   test('the downloads list the nine files of the manifest with their sizes and stable links', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await open(page);
@@ -135,20 +107,6 @@ test.describe('/snimka/ dossier', () => {
     await expect(card.locator('[data-sn="live-now"]')).toHaveText('Trenutačno stanje nije dostupno.');
   });
 
-  test('Što se vidjelo carries nine cards, each with its method line', async ({ page }) => {
-    await page.setViewportSize({ width: 1366, height: 900 });
-    await open(page);
-    const cards = page.locator('[data-sn-mount="reckoning"] .st-card');
-    await expect(cards).toHaveCount(9);
-    await expect(page.locator('[data-card="sentences"]')).not.toHaveAttribute('aria-busy', /.*/);
-    for (let i = 0; i < 9; i++) {
-      await expect(cards.nth(i).locator('h3')).not.toHaveText('');
-      await expect(cards.nth(i).locator('.st-method')).not.toHaveText('');
-    }
-    await expect(page.locator('[data-card="lines"] h3')).toHaveText('Linije s vozilom u pokretu');
-    await expect(page.locator('[data-card="alerts"] h3')).toHaveText('Što je ZET rekao u podacima');
-  });
-
   test('no sideways scroll at 360 px', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     await open(page);
@@ -173,4 +131,116 @@ test.describe('/snimka/ dossier', () => {
       });
     }
   }
+});
+
+// ---- lane W4a (v3): Što snimka pokazuje and Tijek --------------------------------------------------------------
+
+const minuteOf = (sec: number): string => new Date((sec + 7200) * 1000).toISOString().slice(0, 16);
+const stageTop = (page: Page): Promise<number> => page.locator('[data-sn-stage]').evaluate((el) => el.getBoundingClientRect().top);
+
+test.describe('Pokazuje', () => {
+  test('three tiles; a tile pauses, seeks to its moment and brings the instrument in under the sticky nav', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await open(page);
+    await expect(page.locator('[data-sn="kpis"]')).not.toHaveAttribute('aria-busy', /.*/);
+    const tiles = page.locator('#pokazuje [data-sn="kpis"] .st-kpi');
+    await expect(tiles).toHaveCount(3);
+    await expect(page.locator('[data-sn="kpi-peak"], [data-sn="kpi-alerts"]')).toHaveCount(0);
+    const expected = heroTiles(buildWindowSeries());
+    await expect(page.locator('#pokazuje .sn-kpi-button')).toHaveCount(3);
+    await expect(page.locator('[data-sn="kpi-silent"] .st-kpi-value')).toHaveText(expected[0]!.value);
+    await expect(page.locator('[data-sn="kpi-bikes"] .st-kpi-sub')).toHaveText(expected[1]!.sub!);
+    for (const [i, key] of (['silent', 'bikes', 'return'] as const).entries()) {
+      await page.locator('#pokazuje').scrollIntoViewIfNeeded();
+      await page.locator(`[data-sn="kpi-${key}"] .sn-kpi-button`).click();
+      await expect.poll(() => tParam(page)).toBe(minuteOf(expected[i]!.atSec!));
+      await expect.poll(() => stageTop(page)).toBeGreaterThanOrEqual(61);
+      expect(await stageTop(page)).toBeLessThan(200);
+    }
+    // Paused: the address keeps its minute.
+    await page.waitForTimeout(1500);
+    expect(tParam(page)).toBe(minuteOf(expected[2]!.atSec!));
+  });
+
+  test('six cards, each with its method line', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await open(page);
+    const cards = page.locator('[data-sn-mount="reckoning"] .st-card');
+    await expect(cards).toHaveCount(6);
+    await expect(cards.locator('h3')).toHaveText(['Tri dana gotovo bez vozila', 'Pet jutara u 07:45', 'Što je vozilo', 'Broj koji nije bio točan', 'Što je ZET javio u podacima', 'Povratak']);
+    for (let i = 0; i < 6; i++) await expect(cards.nth(i).locator('.st-method')).not.toHaveText('');
+    await expect(page.locator('[data-card="zet"] .sn-card-lines li').first()).toHaveText(/: 0 upozorenja i 0 otkazanih vožnji$/);
+  });
+
+  test('the block: a ranked table, "Pokaži na karti" seeks and sets the station; line 228; six press links', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await open(page);
+    const expected = emptyHoursVsThu(buildBajs(buildWindowSeries()), buildStations());
+    await page.locator('#zamjene-bajs').scrollIntoViewIfNeeded();
+    const rows = page.locator('#zamjene-bajs tbody tr');
+    await expect(rows).toHaveCount(Math.min(10, expected.length));
+    await expect(page.locator('#zamjene-bajs thead th')).toHaveCount(4);
+    await rows.first().locator('.sn-alt-show').click();
+    await expect.poll(() => tParam(page)).toBe(minuteOf(expected[0]!.atSec));
+    await expect(page).toHaveURL(new RegExp(`[?&]stanica=${expected[0]!.id}(&|$)`));
+    await expect.poll(() => stageTop(page)).toBeGreaterThanOrEqual(61);
+    await expect(page.locator('#zamjene-228 path')).toHaveCount(2);
+    await expect(page.locator('#zamjene-vlak')).toHaveCount(0);
+    const links = page.locator('#zamjene-mediji a');
+    expect(await links.count()).toBeLessThanOrEqual(6);
+    for (const a of await links.all()) await expect(a).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  test('on a phone: the name is the button and nothing in the section is clipped', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await open(page);
+    await page.locator('#zamjene-bajs').scrollIntoViewIfNeeded();
+    await expect(page.locator('#zamjene-bajs [aria-busy]')).toHaveCount(0);
+    await expect(page.locator('#zamjene-bajs tbody tr').first().locator('.sn-alt-name-button')).toBeVisible();
+    await expect(page.locator('#zamjene-bajs tbody tr').first().locator('.sn-alt-show')).toBeHidden();
+    for (const mount of ['brojke', 'reckoning', 'alternatives']) {
+      const [sw, cw] = await page.locator(`[data-sn-mount="${mount}"]`).evaluate((el) => [el.scrollWidth, el.clientWidth]);
+      expect(sw, mount).toBeLessThanOrEqual(cw);
+    }
+  });
+});
+
+test.describe('Tijek', () => {
+  test('three charts; a click on the fleet chart pauses and seeks', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await open(page);
+    const strip = page.locator('[data-sn-mount="strip"]');
+    await expect(strip.locator('.sn-panel')).toHaveCount(3);
+    await expect(strip.locator('.sn-panel h3')).toHaveText(['Vozila u pokretu', 'Prazne stanice BAJS-a', 'Sve linije, svaki sat']);
+    await expect(strip.locator('[data-sn-heatmap]')).toHaveCount(1);
+    await expect(strip.locator('.sn-panel > .st-table')).toHaveCount(2);
+    const plot = strip.locator('[data-plot="fleet"]');
+    await plot.scrollIntoViewIfNeeded();
+    const box = (await plot.boundingBox())!;
+    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
+    const fraction = 0.5;
+    const target = seekTime(fraction, Date.UTC(2026, 8, 27, 18, 0), Date.UTC(2026, 9, 2, 10, 0));
+    await expect.poll(() => tParam(page)).not.toBe('2026-09-28T07:45');
+    const t = tParam(page)!;
+    const got = Date.parse(`${t}:00Z`) - 7_200_000;
+    expect(Math.abs(got - target)).toBeLessThanOrEqual(15 * 60_000);
+    await expect(strip.locator('.sn-strip-readout')).toContainText('u pokretu');
+  });
+
+  test('no horizontal overflow at 360, and the heatmap fits the phone width', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await open(page);
+    await page.locator('#zamjene-bajs').scrollIntoViewIfNeeded();
+    await expect(page.locator('#zamjene-bajs [aria-busy]')).toHaveCount(0);
+    await page.locator('#tijek').scrollIntoViewIfNeeded();
+    expect(await horizontalOverflow(page)).toBe(0);
+    const [sw, cw] = await page.locator('[data-sn-mount="strip"]').evaluate((el) => [el.scrollWidth, el.clientWidth]);
+    expect(sw).toBeLessThanOrEqual(cw);
+    const fit = await page.locator('[data-sn-heatmap] .sn-hm-scroll').first().evaluate((el) => [el.scrollWidth, el.clientWidth]);
+    expect(fit[0]).toBeLessThanOrEqual(fit[1]!);
+    // 16 px rows on a phone; the row labels are text (the table twin carries the rows as targets).
+    const rowH = await page.locator('[data-sn-heatmap] .sn-hm-label').first().evaluate((el) => el.getBoundingClientRect().height);
+    expect(Math.round(rowH)).toBe(16);
+    await expect(page.locator('[data-sn-heatmap] .sn-hm-row').first()).toBeHidden();
+  });
 });

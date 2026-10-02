@@ -206,6 +206,10 @@
 /* ---- The block "Čime se moglo umjesto tramvaja" (lane W4a, v3) ------------------------------ */
 .sn-alternatives-block { display: grid; gap: var(--sp-3); margin-block-start: clamp(2rem, 4vw, 3rem); min-inline-size: 0; }
 .sn-alt-grid { align-items: start; min-inline-size: 0; }
+/* The cards' own grid takes its track from the widest child unless it is told otherwise (R6's .st-card bug, fixed for
+   every page in statistika.css by lane W4b; here for the dossier's cards whichever lands first). */
+.sn-alt-grid > .st-card, .sn-card-grid > .st-card { grid-template-columns: minmax(0, 1fr); min-inline-size: 0; }
+.sn-alt-table thead th { white-space: normal; }
 .sn-alt-table table { inline-size: 100%; }
 .sn-alt-table td.sn-alt-num, .sn-alt-num { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: end; }
 .sn-alt-show { min-block-size: var(--target); white-space: nowrap; }
