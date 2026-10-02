@@ -42,7 +42,7 @@ describe('directorStep', () => {
   });
   it('a new cue flies to its focus and pulses its spot; the move is recorded', () => {
     const r = directorStep(INITIAL_DIRECTOR_STATE, input({ cue: cue('line', { kind: 'route', id: '228' }) }));
-    expect(r.commands).toEqual([{ kind: 'fly', focus: { kind: 'route', id: '228' } }, { kind: 'spot', id: 'linije' }]);
+    expect(r.commands).toEqual([{ kind: 'fly', focus: { kind: 'route', id: '228' } }, { kind: 'spot', id: 'mreza' }]);
     expect(r.state).toEqual({ lastCueId: 'line', lastMoveAt: 100_000, held: false });
   });
   it('waits DWELL_MS after a move, then takes the newest cue', () => {
@@ -57,7 +57,7 @@ describe('directorStep', () => {
   });
   it('a none cue only pulses and a layer cue switches its layer; neither counts as a camera move', () => {
     const none = directorStep({ lastCueId: 'a', lastMoveAt: 100_000, held: false }, input({ now: 100_100, cue: cue('court', { kind: 'none' }) }));
-    expect(none.commands).toEqual([{ kind: 'spot', id: 'stanje' }]);
+    expect(none.commands).toEqual([{ kind: 'spot', id: 'vozila' }]);
     expect(none.state.lastMoveAt).toBe(100_000);
     const layer = directorStep(none.state, input({ now: 100_200, cue: cue('bikes', { kind: 'layer', layer: 'bikes' }) }));
     expect(layer.commands).toEqual([{ kind: 'layer', layer: 'bikes' }, { kind: 'spot', id: 'bicikli' }]);
@@ -91,18 +91,18 @@ describe('directorStep', () => {
 describe('cueAt and spotFor', () => {
   const ctx = { events, news };
   it('the newest event or headline at or before the instant, the later of the two, with the event\'s own spot or the focus\'s', () => {
-    expect(cueAt(ctx, 10 * H + 5)).toMatchObject({ id: 'event:city', spot: 'stanje' });
-    expect(cueAt(ctx, 11 * H + 5)).toMatchObject({ id: 'event:line', spot: 'linije' });
-    expect(cueAt(ctx, 11 * H + 1800)).toMatchObject({ id: 'news:j1', focus: { kind: 'place', id: 'jelacic' }, spot: 'stanje' });
-    expect(cueAt(ctx, 12 * H)).toMatchObject({ id: 'event:court', spot: 'stanje' });
+    expect(cueAt(ctx, 10 * H + 5)).toMatchObject({ id: 'event:city', spot: 'vozila' });
+    expect(cueAt(ctx, 11 * H + 5)).toMatchObject({ id: 'event:line', spot: 'mreza' });
+    expect(cueAt(ctx, 11 * H + 1800)).toMatchObject({ id: 'news:j1', focus: { kind: 'place', id: 'jelacic' }, spot: 'vozila' });
+    expect(cueAt(ctx, 12 * H)).toMatchObject({ id: 'event:court', spot: 'vozila' }); // the event's v2 spot 'stanje' points at Vozila
     expect(cueAt(ctx, 13 * H)).toMatchObject({ id: 'event:bikes', spot: 'bicikli' });
     expect(cueAt(ctx, 9 * H)).toBeNull();
   });
-  it('spotFor: a line to Linije, a station to Bicikli, a layer to its panel, the rest to Stanje', () => {
+  it('spotFor: a line to Mreža, a station to Bicikli, a layer to its panel, the rest to Vozila', () => {
     expect(spotFor({ kind: 'station', id: 'x' })).toBe('bicikli');
     expect(spotFor({ kind: 'layer', layer: 'live' })).toBe('mreza');
-    expect(spotFor({ kind: 'layer', layer: 'closures' })).toBe('stanje');
-    expect(spotFor({ kind: 'stop', id: '109_1' })).toBe('stanje');
+    expect(spotFor({ kind: 'layer', layer: 'closures' })).toBe('vozila');
+    expect(spotFor({ kind: 'stop', id: '109_1' })).toBe('vozila');
   });
 });
 
@@ -154,13 +154,13 @@ describe('bindDirector', () => {
     expect(map.flyTo).not.toHaveBeenCalled();
     f.frame(11 * H + 1);
     expect(map.flyTo).toHaveBeenCalledWith({ kind: 'route', id: '228' }, { reason: 'director' });
-    expect(spot).toHaveBeenCalledWith('linije');
+    expect(spot).toHaveBeenCalledWith('mreza');
     wall += DWELL_MS;
     f.frame(11 * H + 1800);
     expect(map.flyTo).toHaveBeenLastCalledWith({ kind: 'place', id: 'jelacic' }, { reason: 'director' });
     expect(f.clock.seek).not.toHaveBeenCalled();
     expect(f.clock.setSpeed).not.toHaveBeenCalled();
-    expect(f.layers.get()).toEqual({ vehicles: true, compare: true, bikes: true, closures: true, live: true, follow: true });
+    expect(f.layers.get()).toEqual({ vehicles: true, compare: true, bikes: true, follow: true });
     unbind();
     wall += DWELL_MS;
     f.frame(12 * H + 1);
@@ -217,7 +217,7 @@ describe('bindDirector', () => {
     const unbind = bindDirector(f.ctx, map, { spot: second });
     f.frame(11 * H + 1);
     expect(first).not.toHaveBeenCalled();
-    expect(second).toHaveBeenCalledWith('linije');
+    expect(second).toHaveBeenCalledWith('mreza');
     expect(map.flyTo).toHaveBeenCalledTimes(1);
     unbind();
   });

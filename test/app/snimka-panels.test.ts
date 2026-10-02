@@ -13,7 +13,7 @@ import type { PanelId, PanelSpec } from '../../app/src/snimka/contracts';
 import { createPanelDeck, escapeClosesPanel, SPOT_MS } from '../../app/src/snimka/panels';
 import { reconcile } from '../../app/src/ui/dom/reconcile';
 
-const IDS: PanelId[] = ['stanje', 'vozila', 'linije', 'mreza', 'bicikli', 'vrijeme', 'poglavlja'];
+const IDS: PanelId[] = ['vozila', 'mreza', 'bicikli'];
 
 function setup(o: { panel?: PanelId | null; reducedMotion?: boolean } = {}) {
   const view = createViewStore({ panel: o.panel ?? null });
@@ -62,21 +62,21 @@ describe('createPanelDeck', () => {
       expect(depth.getAttribute('aria-labelledby')).toBe(depth.querySelector('h3')!.id);
       expect(depth.hidden).toBe(true);
     }
-    expect(document.querySelectorAll('.sn-deck-item[data-key]')).toHaveLength(7);
+    expect(document.querySelectorAll('.sn-deck-item[data-key]')).toHaveLength(3);
   });
   it('opens one panel at a time; the others dim and keep ticking; the view store holds the panel', () => {
     const { deck, view, ticks, depths, onExpand } = setup();
-    face('stanje').click();
-    expect(view.get().panel).toBe('stanje');
-    expect(deck.expanded()).toBe('stanje');
-    expect(item('stanje').hasAttribute('data-expanded')).toBe(true);
-    expect(document.querySelectorAll('.sn-deck-item[data-dim]')).toHaveLength(6);
-    expect(depths.stanje).toEqual({ built: 1, torn: 0 });
+    face('mreza').click();
+    expect(view.get().panel).toBe('mreza');
+    expect(deck.expanded()).toBe('mreza');
+    expect(item('mreza').hasAttribute('data-expanded')).toBe(true);
+    expect(document.querySelectorAll('.sn-deck-item[data-dim]')).toHaveLength(2);
+    expect(depths.mreza).toEqual({ built: 1, torn: 0 });
     face('vozila').click();
     expect(deck.expanded()).toBe('vozila');
-    expect(depths.stanje).toEqual({ built: 1, torn: 1 });
+    expect(depths.mreza).toEqual({ built: 1, torn: 1 });
     expect(document.querySelectorAll('.sn-deck-item[data-expanded]')).toHaveLength(1);
-    expect(document.querySelector<HTMLElement>('#sn-depth-stanje')!.hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>('#sn-depth-mreza')!.hidden).toBe(true);
     deck.update(1000);
     expect(Object.keys(ticks).sort()).toEqual([...IDS].sort());
     expect(onExpand).toHaveBeenLastCalledWith('vozila', 'user');
@@ -87,23 +87,23 @@ describe('createPanelDeck', () => {
   });
   it('moves the focus to the depth heading and back to the face on close; Escape closes', () => {
     setup();
-    face('linije').focus();
-    face('linije').click();
-    expect(document.activeElement).toBe(document.getElementById('sn-depth-h-linije'));
+    face('mreza').focus();
+    face('mreza').click();
+    expect(document.activeElement).toBe(document.getElementById('sn-depth-h-mreza'));
     document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    expect(document.activeElement).toBe(face('linije'));
-    expect(face('linije').getAttribute('aria-expanded')).toBe('false');
-    face('linije').click();
-    document.querySelector<HTMLButtonElement>('[data-sn-back="linije"]')!.click();
-    expect(document.activeElement).toBe(face('linije'));
+    expect(document.activeElement).toBe(face('mreza'));
+    expect(face('mreza').getAttribute('aria-expanded')).toBe('false');
+    face('mreza').click();
+    document.querySelector<HTMLButtonElement>('[data-sn-back="mreza"]')!.click();
+    expect(document.activeElement).toBe(face('mreza'));
   });
   it('follows the view store without pulling focus: an address or a director opens a panel too', () => {
     const { deck, view } = setup({ panel: 'bicikli' });
     expect(deck.expanded()).toBe('bicikli');
     expect(document.activeElement).toBe(document.body);
-    view.set({ panel: 'vrijeme' }, 'director');
-    expect(deck.expanded()).toBe('vrijeme');
-    expect(document.activeElement).not.toBe(document.getElementById('sn-depth-h-vrijeme'));
+    view.set({ panel: 'vozila' }, 'director');
+    expect(deck.expanded()).toBe('vozila');
+    expect(document.activeElement).not.toBe(document.getElementById('sn-depth-h-vozila'));
     const stage = document.createElement('div');
     const ev = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
     stage.dispatchEvent(ev);
@@ -116,8 +116,8 @@ describe('createPanelDeck', () => {
     const faces = IDS.map((id) => face(id));
     const depthNodes = IDS.map((id) => document.getElementById(`sn-depth-${id}`));
     face('mreza').click();
-    face('stanje').click();
-    face('stanje').click();
+    face('vozila').click();
+    face('vozila').click();
     expect(IDS.map((id) => face(id))).toEqual(faces);
     expect(IDS.map((id) => document.getElementById(`sn-depth-${id}`))).toEqual(depthNodes);
     // The stage: a map host marked data-persist is moved into place by reconcile, never rebuilt.
@@ -152,9 +152,9 @@ describe('createPanelDeck', () => {
     const ctx = { view, doc: document, reducedMotion: false } as unknown as SnimkaContext;
     const host = document.createElement('div');
     document.body.replaceChildren(host);
-    const deck = createPanelDeck(host, { ctx, specs: [{ id: 'poglavlja', title: 'Poglavlja', mountFace: () => () => {}, mountDepth: () => torn }] });
-    expect(face('poglavlja').textContent).toBe('Poglavlja');
-    deck.expand('poglavlja');
+    const deck = createPanelDeck(host, { ctx, specs: [{ id: 'mreza', title: 'Mreža', mountFace: () => () => {}, mountDepth: () => torn }] });
+    expect(face('mreza').textContent).toBe('Mreža');
+    deck.expand('mreza');
     deck.destroy();
     expect(torn).toHaveBeenCalledTimes(1);
     expect(host.querySelector('.sn-deck')).toBeNull();
@@ -164,11 +164,11 @@ describe('createPanelDeck', () => {
 describe('the panel key in the address', () => {
   it('round-trips every panel and writes nothing for a closed deck', () => {
     for (const panel of IDS) {
-      const url = writeAddress({ t: Date.UTC(2026, 8, 28, 5, 45), speed: 600, compare: true, panel, subject: null, live: true, following: true }, () => {}, { pathname: '/snimka/', search: '', hash: '' });
+      const url = writeAddress({ t: Date.UTC(2026, 8, 28, 5, 45), speed: 600, compare: true, panel, subject: null, following: true }, () => {}, { pathname: '/snimka/', search: '', hash: '' });
       expect(url).toContain(`panel=${panel}`);
       expect(readAddress(url.slice(url.indexOf('?'))).panel).toBe(panel);
     }
-    const closed = writeAddress({ t: Date.UTC(2026, 8, 28, 5, 45), speed: 600, compare: true, panel: null, subject: null, live: true, following: true }, () => {}, { pathname: '/snimka/', search: '', hash: '' });
+    const closed = writeAddress({ t: Date.UTC(2026, 8, 28, 5, 45), speed: 600, compare: true, panel: null, subject: null, following: true }, () => {}, { pathname: '/snimka/', search: '', hash: '' });
     expect(closed).not.toContain('panel=');
     expect(readAddress('?panel=nepoznato').panel).toBeNull();
   });

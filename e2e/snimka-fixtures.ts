@@ -72,6 +72,11 @@ export const MARKS = {
   wednesday0745: zg(9, 30, 7, 45),
   court: zg(9, 30, 11, 13),
   returnFrom: zg(9, 30, 18, 16),
+  /** ZET's notice 10168: the full service again (the event repeats the notice: noticeId). */
+  puniOpseg: zg(9, 30, 18, 20),
+  /** The BAJS anomaly probe: Monday 09:00 against Thursday 1 October 09:00 (V3-9). */
+  monday0900: zg(9, 28, 9, 0),
+  thursday0900: zg(10, 1, 9, 0),
   reducedAt: zg(9, 30, 19, 5),
   normalAt: zg(9, 30, 20, 20),
   recorderGapFrom: zg(9, 30, 22, 41),
@@ -397,33 +402,34 @@ const ZET = (id: number): { label: string; url: string } => ({ label: `ZET, obav
 const PRESS = { label: 'Jutarnji list', url: 'https://www.jutarnji.hr/' };
 const CITY: Focus = { kind: 'city' };
 const NONE: Focus = { kind: 'none' };
-const JELACIC: Focus = { kind: 'place', id: 'jelacic', name: 'Trg bana J. Jelačića', lonLat: [15.97726, 45.81286], zoom: 13.2 };
 const STATE_FACTS: FactKey[] = ['state', 'seen', 'expected'];
 
 export function buildEvents(): EventsFile {
-  type Extra = Partial<Pick<SnimkaEvent, 'derived' | 'text' | 'facts' | 'mentions' | 'dwellS' | 'spot' | 'chapter'>>;
+  type Extra = Partial<Pick<SnimkaEvent, 'derived' | 'text' | 'facts' | 'mentions' | 'dwellS' | 'spot' | 'chapter' | 'noticeId' | 'internal'>>;
   const event = (id: string, atSec: number, kind: SnimkaEvent['kind'], title: string, sources: SnimkaEvent['sources'], focus: Focus, extra: Extra = {}): SnimkaEvent => ({
     id, atSec, kind, title, text: extra.text ?? null, sources, derived: extra.derived ?? false, chapter: extra.chapter ?? true,
     focus, facts: extra.facts ?? STATE_FACTS, mentions: extra.mentions ?? {}, ...(extra.dwellS !== undefined ? { dwellS: extra.dwellS } : {}), ...(extra.spot ? { spot: extra.spot } : {}),
+    ...(extra.noticeId !== undefined ? { noticeId: extra.noticeId } : {}), ...(extra.internal ? { internal: true } : {}),
   });
   const events: SnimkaEvent[] = [
     event('vecer-prije', MARKS.windowStart, 'recording', 'Večer prije', [], CITY),
     event('spremista', MARKS.depots, 'service', 'Vozila se povlače u spremišta', [], { kind: 'place', id: 'spremiste-dubrava', name: 'Spremište Dubrava', lonLat: [16.03995, 45.82043], zoom: 14 }, { derived: true, text: 'Manje od dvadeset vozila u pokretu.', dwellS: 6, spot: 'vozila', facts: ['seen', 'expected'] }),
     event('pocetak', MARKS.strikeStart, 'zet', 'Početak štrajka', [ZET(10164), PRESS], NONE, { spot: 'stanje' }),
     event('feed-stoji-pon', MARKS.feedStojiPon, 'zet', 'ZET-ovi podaci se ne mijenjaju: prvi put', [], NONE, { derived: true, chapter: false, facts: ['feed', 'seen'] }),
-    event('prvo-jutro', MARKS.monday0745, 'recording', 'Prvo jutro', [], JELACIC, { spot: 'zaslon', facts: ['seen', 'expected', 'state', 'bikesEmpty'] }),
+    event('prvo-jutro', MARKS.monday0745, 'recording', 'Prvo jutro', [], CITY, { spot: 'zaslon', facts: ['seen', 'expected', 'state', 'bikesEmpty'] }),
     event('vozni-red-396', MARKS.vozniRed396, 'zet', 'ZET objavljuje novi vozni red (000396)', [{ label: 'ZET, GTFS', url: 'https://www.zet.hr/gtfs-scheduled/latest' }], NONE, { chapter: false, text: 'Aplikacija je vozni red zamijenila pri sljedećoj izgradnji.', facts: ['expected'] }),
     event('bez-vozila', MARKS.feedEmptyFrom, 'zet', 'ZET šalje podatke bez ijednog vozila', [], NONE, { derived: true, facts: ['feed', 'seen'] }),
     event('zamrznuto', MARKS.feedFrozenFrom, 'zet', 'ZET-ovi podaci se ne mijenjaju', [], NONE, { derived: true, facts: ['feed', 'seen'] }),
-    event('linija-228', MARKS.line228, 'zet', 'Autobusna linija 228 do Rebra', [ZET(10166)], { kind: 'route', id: '228' }, { spot: 'linije', facts: ['route:228', 'seen'], mentions: { routes: ['228'], places: ['rebro'] } }),
-    event('stanje-usluge', MARKS.serviceLive, 'recording', 'Aplikacija dobiva stanje usluge', [], NONE, { spot: 'stanje' }),
-    event('trece-jutro', MARKS.wednesday0745, 'recording', 'Treće jutro', [], JELACIC, { spot: 'zaslon' }),
+    event('linija-228', MARKS.line228, 'zet', 'Autobusna linija 228 do Rebra', [ZET(10166)], { kind: 'route', id: '228' }, { spot: 'linije', noticeId: 10166, facts: ['route:228', 'seen'], mentions: { routes: ['228'], places: ['rebro'] } }),
+    event('stanje-usluge', MARKS.serviceLive, 'recording', 'Aplikacija dobiva stanje usluge', [], NONE, { spot: 'stanje', internal: true }),
+    event('trece-jutro', MARKS.wednesday0745, 'recording', 'Treće jutro', [], CITY, { spot: 'zaslon' }),
     event('sud', MARKS.court, 'court', 'Sud: štrajk u ZET-u nije zakonit', [PRESS, ZET(10167)], NONE, { spot: 'stanje' }),
     event('povratak', MARKS.returnFrom, 'return', 'Vozila se vraćaju', [], CITY, { derived: true, spot: 'vozila' }),
+    event('puni-opseg', MARKS.puniOpseg, 'return', 'ZET: promet ponovno u punom opsegu', [ZET(10168)], CITY, { chapter: false, noticeId: 10168, facts: ['seen', 'expected'] }),
     event('uobicajeno', MARKS.normalAt, 'service', 'Uobičajeno stanje', [], CITY, { derived: true, spot: 'stanje' }),
-    event('zapisivaci', MARKS.recorderGapFrom, 'recording', 'Zapisivači su stali na trinaest minuta', [], NONE, { chapter: false, text: 'Objavljeni brojevi nedostaju od 22:41 do 22:54; snimka ZET-ovih podataka je potpuna.', facts: ['seen'] }),
-    event('cetvrto-jutro', MARKS.thursday0745, 'recording', 'Prvo uobičajeno jutro', [], JELACIC, { spot: 'zaslon' }),
-    event('drugo-uobicajeno-jutro', MARKS.friday0745, 'recording', 'Drugo uobičajeno jutro', [], JELACIC, { spot: 'zaslon' }),
+    event('zapisivaci', MARKS.recorderGapFrom, 'recording', 'Zapisivači su stali na trinaest minuta', [], NONE, { chapter: false, internal: true, text: 'Objavljeni brojevi nedostaju od 22:41 do 22:54; snimka ZET-ovih podataka je potpuna.', facts: ['seen'] }),
+    event('cetvrto-jutro', MARKS.thursday0745, 'recording', 'Prvo uobičajeno jutro', [], CITY, { spot: 'zaslon' }),
+    event('drugo-uobicajeno-jutro', MARKS.friday0745, 'recording', 'Drugo uobičajeno jutro', [], CITY, { spot: 'zaslon' }),
     event('kraj-snimke', MARKS.windowEnd, 'recording', 'Kraj snimke', [], CITY, { chapter: false, facts: ['seen', 'expected'] }),
   ];
   return { v: 1, events };
@@ -435,6 +441,7 @@ export function buildNotices(): NoticesFile {
     items: [
       { id: 10164, title: 'Obavijest o prometu tramvaja i autobusa od ponedjeljka 28. rujna', text: null, link: 'https://www.zet.hr/obavijesti/10164', pubSec: zg(9, 27, 16, 27), focus: NONE, facts: STATE_FACTS, mentions: {} },
       { id: 10166, title: 'Autobusna linija 228 do Rebra', text: 'Od 10 sati vozi autobusna linija 228 između Kaptola i Rebra.', link: 'https://www.zet.hr/obavijesti/10166', pubSec: MARKS.line228, focus: { kind: 'route', id: '228' }, facts: ['route:228', 'seen'], mentions: { routes: ['228'], places: ['rebro'] } },
+      { id: 10168, title: 'Promet tramvaja i autobusa ponovno u punom opsegu', text: null, link: 'https://www.zet.hr/obavijesti/10168', pubSec: MARKS.puniOpseg, focus: CITY, facts: STATE_FACTS, mentions: {} },
     ],
   };
 }
@@ -596,6 +603,14 @@ export function buildBajs(series: SeriesFile) {
       if (si === 6) { row[j] = BAJS_NOT_RENTING; continue; }
       const mean = total / STATIONS;
       row[j] = Math.max(0, Math.min(250, Math.round(mean * (0.4 + 1.2 * r()) - (si % 9 === 0 ? mean * 0.9 : 0))));
+      // The anomaly probe (V3-9), after the draw so the other cells keep their values: Stanica 2 (capacity 20) holds 2
+      // on Monday 08:00 to 10:00 and 15 on Thursday 1 October at the same minutes (65 points emptier, never empty);
+      // Stanica 3 holds 10 at both, so it has no rim.
+      const at = SNIMKA_WINDOW.fromSec + j * BAJS_STEP_S;
+      const near = (mark: number): boolean => Math.abs(at - mark) <= 3600;
+      if (si === 1 && near(MARKS.monday0900)) row[j] = 2;
+      else if (si === 1 && near(MARKS.thursday0900)) row[j] = 15;
+      else if (si === 2 && (near(MARKS.monday0900) || near(MARKS.thursday0900))) row[j] = 10;
     }
     return row;
   });

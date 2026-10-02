@@ -143,9 +143,9 @@ describe('the capture beside the miniature', () => {
   });
   it('names the day and the time in its alt and caption', () => {
     const html = captureHtml('/api/snimka/v1/captures/x.webp', MON, null);
-    expect(html).toContain('alt="Snimka zaslona, pon 28. 9. u 07:45"');
+    expect(html).toContain('alt="Izgled zaslona, pon 28. 9. u 07:45"');
     expect(html).toContain('type="image/webp"');
-    expect(html).toContain('<figcaption>Snimka zaslona, pon 28. 9. u 07:45</figcaption>');
+    expect(html).toContain('<figcaption>Izgled zaslona, pon 28. 9. u 07:45</figcaption>');
     // Eager at low priority: a lazy picture below the fold was never fetched on 1 October.
     expect(html).toContain('loading="eager"');
     expect(html).toContain('fetchpriority="low"');
@@ -197,7 +197,7 @@ describe('replayedHtml', () => {
     const minute = VOICE_MON.minutes[465]!;
     const html = replayedHtml('Trg bana J. Jelačića', { file: VOICE_MON, minute, i: 465 });
     expect(html).toContain('data-kicker="replayed"');
-    expect(html).toContain('<span class="sn-mini-kicker">Današnja pravila</span> <span class="sn-mini-text">U pokretu su 2 vozila, po voznom redu oko 230.</span>');
+    expect(html).toContain('<span class="sn-mini-kicker">izračun</span> <span class="sn-mini-text">U pokretu su 2 vozila, po voznom redu oko 230.</span>');
     expect(html).toContain('<span class="line" data-kind="tram" data-size="s">6</span>');
     expect(html).toContain('07:52');
     expect(html).toContain('Spomenik banu Josipu Jelačiću');
@@ -259,7 +259,7 @@ describe('mountScreen', () => {
     expect(mini.firstElementChild).not.toBe(node);
     expect(mini.textContent).toContain('Rečenica 1.');
     // The capture and the quartet: four mornings, each with its picture or the word for none.
-    expect(root.querySelector('.sn-capture img')?.getAttribute('alt')).toBe('Snimka zaslona, pon 28. 9. u 07:45');
+    expect(root.querySelector('.sn-capture img')?.getAttribute('alt')).toBe('Izgled zaslona, pon 28. 9. u 07:45');
     const items = root.querySelectorAll('.sn-quartet-item');
     expect(items.length).toBe(5);
     expect([...root.querySelectorAll('.sn-quartet-item img')].every((img) => (img.getAttribute('alt') ?? '').length > 0)).toBe(true);
@@ -273,7 +273,7 @@ describe('mountScreen', () => {
     root.querySelector<HTMLButtonElement>('[data-source="observed"]')!.click();
     expect(mini.dataset.view).toBe('none');
     expect(mini.textContent).toContain('U voznom redu nema sljedećih polazaka.');
-    expect(root.querySelector('.sn-capture')?.textContent).toContain('Za ovo doba nema snimke zaslona.');
+    expect(root.querySelector('.sn-capture')?.textContent).toContain('Za ovo doba nema izgleda zaslona.');
     off();
   });
   it('at 07:45 sharp the miniature shows the run\'s first reading with its own time, not the board', async () => {
@@ -388,7 +388,7 @@ describe('the source control and the five mornings', () => {
         expect(img.getAttribute('fetchpriority')).toBe('low');
       }
       expect(items[4]!.querySelector('img')).toBeNull();
-      expect(items[0]!.querySelector('.sn-screen-replayed')!.textContent).toBe('Zaslon bi rekao U pokretu su 2 vozila, po voznom redu oko 230.');
+      expect(items[0]!.querySelector('.sn-screen-replayed')!.textContent).toBe('Po današnjim pravilima pisalo bi U pokretu su 2 vozila, po voznom redu oko 230.');
       // A morning whose day has no voice file says so in words.
       expect(items[1]!.querySelector('.sn-screen-replayed-text')!.textContent).toBe('Za ovu minutu nema izračunane rečenice.');
       off();

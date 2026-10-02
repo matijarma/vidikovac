@@ -36,8 +36,8 @@ describe('subjectLabel and focusOf', () => {
     expect(subjectLabel(ctx, { kind: 'stop', id: '109_1' })).toBe('Stajalište Glavni kolodvor');
     expect(subjectLabel(ctx, { kind: 'stop', id: '1_1' })).toBe('Stajalište 1_1');
     expect(subjectLabel(ctx, { kind: 'stop', id: '1_1' }, { stop: () => 'Črnomerec' })).toBe('Stajalište Črnomerec');
-    expect(subjectLabel(ctx, { kind: 'station', id: 'bajs-7' })).toBe('Stanica bajs-7');
-    expect(subjectLabel(ctx, { kind: 'station', id: 'bajs-7' }, { station: () => 'Stanica 7' })).toBe('Stanica Stanica 7');
+    expect(subjectLabel(ctx, { kind: 'station', id: 'bajs-7' })).toBe('Stanica BAJS-a bajs-7');
+    expect(subjectLabel(ctx, { kind: 'station', id: 'bajs-7' }, { station: () => 'Stanica 7' })).toBe('Stanica BAJS-a Stanica 7');
   });
   it('the focus of a subject is its own kind', () => {
     expect(focusOf({ kind: 'route', id: '228' })).toEqual({ kind: 'route', id: '228' });

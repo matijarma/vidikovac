@@ -14,14 +14,23 @@ import { buildEvents } from '../../e2e/snimka-fixtures';
 
 const html = readFileSync(new URL('../../app/snimka/index.html', import.meta.url), 'utf8');
 
+const V2_QUESTIONS = '<nav class="chips sn-q-nav" aria-label="Ulazi u snimku" data-sn="questions">' +
+  '<a class="chip sn-q-chip" href="#zamjene" data-sn-q="1" data-sn-chapter="prvo-jutro" data-sn-layer="bikes" data-sn-section="zamjene" data-sn-text="narration.q1">Što sam mogao umjesto tramvaja?</a>' +
+  '<a class="chip sn-q-chip" href="#tijek" data-sn-q="2" data-sn-chapter="trece-jutro" data-sn-subject="route:17" data-sn-section="tijek" data-sn-text="narration.q2">Koliko je štrajk bio potpun?</a>' +
+  '<a class="chip sn-q-chip" href="#otvoreno" data-sn-q="3" data-sn-chapter="stanje-usluge" data-sn-section="otvoreno" data-sn-text="narration.q3">Što je grad mogao znati u svakoj minuti?</a>' +
+  '<a class="chip sn-q-chip" href="#vidjelo" data-sn-q="4" data-sn-section="vidjelo" data-sn-text="narration.q4">Odakle brojevi i kako ih provjeriti?</a></nav>';
+
 function page(): { doc: Document; ctx: SnimkaContext; clock: { pause: ReturnType<typeof vi.fn>; seek: ReturnType<typeof vi.fn> }; scrolled: string[] } {
   const win = new Window({ url: 'http://localhost/snimka/' });
   const doc = win.document as unknown as Document;
   doc.write(html.replace(/<script[^>]*><\/script>/g, ''));
+  // v3 removed the question chips from the page (report.ts upgradeQuestions is dead until W4b deletes it): the v2
+  // markup is put back here so the module keeps its tests while it lives.
+  if (!doc.querySelector('[data-sn="questions"]')) doc.getElementById('ukratko')!.insertAdjacentHTML('beforeend', V2_QUESTIONS);
   const stage = doc.querySelector('[data-sn-mount="stage"]')!;
   stage.innerHTML = '<div class="sn-stage-root" data-sn-stage=""></div>';
   const scrolled: string[] = [];
-  for (const el of [...doc.querySelectorAll('[data-sn-stage], section[id]')]) {
+  for (const el of [...doc.querySelectorAll('[data-sn-stage], section[id], span[id][hidden]')]) {
     (el as HTMLElement).scrollIntoView = () => { scrolled.push((el as HTMLElement).id || 'stage'); };
   }
   const clock = { pause: vi.fn(), seek: vi.fn() };

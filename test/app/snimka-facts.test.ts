@@ -40,7 +40,8 @@ describe('factChips', () => {
     const chips = factChips(['seen', 'expected', 'state', 'bikes', 'bikesEmpty', 'closures', 'temp'], c, MARKS.thursday0745);
     expect(chips.map((x) => x.key)).toEqual(['seen', 'expected', 'state', 'bikes', 'bikesEmpty', 'closures', 'temp']);
     expect(chips[0]!.text).toBe(`u pokretu ${series.seen.all[m]!.toLocaleString('hr-HR')}`);
-    expect(chips[1]!.text).toMatch(/^po voznom redu oko \d/);
+    expect(chips[1]!.text).toMatch(/^po voznom redu \d/);
+    expect(chips[3]!.text).toMatch(/^\d[\d.]* (bicikl|bicikla|bicikala)$/);
     expect(chips[2]!.text).toBe('stanje: uobičajeno');
     expect(chips[2]!.retro).toBe(false);
     expect(chips[6]!.text).toMatch(/^\d+ °C$/);
@@ -64,7 +65,7 @@ describe('factChips', () => {
   });
   it('a line: its count against the timetable, the word for none when it ran nothing, the gap as missing', () => {
     const { ctx: c } = ctx();
-    expect(texts(factChips(['route:228'], c, zg(9, 29, 12, 0)))).toEqual(['linija 228: 2 od 4']);
+    expect(texts(factChips(['route:228'], c, zg(9, 29, 12, 0)))).toEqual(['linija 228: 2 od 4 vozila']);
     expect(texts(factChips(['route:228'], c, zg(9, 28, 12, 0)))).toEqual(['linija 228: nijedno vozilo']);
     const gap = factChips(['route:228'], c, MARKS.frameGapFrom + 60);
     expect(gap).toEqual([{ key: 'route:228', text: 'linija 228: bez podatka', retro: false, missing: true }]);
@@ -78,8 +79,8 @@ describe('factChips', () => {
   });
   it('the feed chip speaks only when the feed stood still or came empty', () => {
     const { ctx: c } = ctx();
-    expect(texts(factChips(['feed'], c, MARKS.feedFrozenFrom + 600))).toEqual(['ZET-ovi podaci stoje']);
-    expect(texts(factChips(['feed'], c, MARKS.feedEmptyFrom + 120))).toEqual(['ZET bez vozila']);
+    expect(texts(factChips(['feed'], c, MARKS.feedFrozenFrom + 600))).toEqual(['ZET-ovi podaci ne mijenjaju se']);
+    expect(texts(factChips(['feed'], c, MARKS.feedEmptyFrom + 120))).toEqual(['u ZET-ovim podacima nema vozila']);
     expect(factChips(['feed'], c, MARKS.thursday0745)).toEqual([]);
   });
   it('a station: pending while the stations load, then its bikes or "prazna"; never 0', async () => {

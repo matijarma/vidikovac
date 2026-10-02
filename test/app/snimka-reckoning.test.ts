@@ -107,7 +107,7 @@ describe('peakAt0745', () => {
     // The card says which.
     const card = renderCards(s);
     const tuesday = card.querySelector('#vidjelo-jutra [data-key="' + midnightOf(at(zm(9, 29, 7, 45))) + '"] .st-bar-value')!;
-    expect(tuesday.textContent).toBe('ZET-ovi podaci se ne mijenjaju');
+    expect(tuesday.textContent).toBe('ZET-ovi podaci ne mijenjaju se');
     const wednesday = card.querySelector('#vidjelo-jutra [data-key="' + midnightOf(at(zm(9, 30, 7, 45))) + '"] .st-bar-value')!;
     expect(wednesday.textContent).toBe('bez podatka');
   });
@@ -325,7 +325,7 @@ describe('the hero tiles over the fixture strike', () => {
   });
   it('the return: the first held ten at 18:21 to the normal state at 20:20', () => {
     expect(tiles.return!.value).toBe('119');
-    expect(tiles.return!.sub).toBe('srijeda, od 18:21 do 20:20');
+    expect(tiles.return!.sub).toBe('u srijedu 30. 9. od 18:21 do 20:20');
   });
   it('the bikes drained, with the empty stations and the stations reporting', () => {
     const r = bikeDrain(series)!;
@@ -336,8 +336,9 @@ describe('the hero tiles over the fixture strike', () => {
     expect(r.minAt).toBeLessThanOrEqual(Date.UTC(2026, 8, 30, 10, 0) / 1000);
     // The v2 tile (Appendix B kpi.bikes): the most empty stations, when, and the drain.
     expect(tiles.bikes!.value).toBe('110');
-    expect(tiles.bikes!.label).toBe('praznih stanica BAJS-a od 200');
-    expect(tiles.bikes!.sub).toMatch(/^najviše sri 30\. 9\. u 1[12]:\d\d; bicikala sa \d\.?\d{3} na 534$/);
+    // v3 (Appendix A kpi.bikes): the form follows the figure; Thursday's same minute is W4a's (bez podatka until then).
+    expect(tiles.bikes!.label).toBe('od 200 stanica BAJS-a prazno');
+    expect(tiles.bikes!.sub).toMatch(/^sri 30\. 9\. u 1[12]:\d\d · čet 1\. 10\. u isto doba: bez podatka$/);
   });
   it('minutes text never reads a counted zero as "under a minute"', () => {
     expect(minutesText(0)).toBe('0 min');
@@ -460,7 +461,7 @@ describe('linesByDay', () => {
   });
   it('the card names the days and lists Monday\'s lines on the fixture', () => {
     const card = renderCards(buildWindowSeries(), { routes: buildRoutes() }).querySelector('[data-card="lines"]')!;
-    expect(card.querySelector('h3')!.textContent).toBe('Linije s vozilom u pokretu');
+    expect(card.querySelector('h3')!.textContent).toBe('Što je vozilo');
     expect(card.querySelectorAll('.st-bar')).toHaveLength(6);
     const monday = card.querySelector('dd')!.textContent!;
     expect(monday).toMatch(/^\d+ linij[ae]: /);

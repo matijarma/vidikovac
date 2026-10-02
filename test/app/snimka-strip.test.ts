@@ -105,7 +105,7 @@ describe('the readout', () => {
     expect(text).toContain('stanje usluge: gotovo bez vozila (izračunano naknadno)');
     expect(text).toContain('bicikli na stanicama ');
     expect(text).toContain('prazne stanice ');
-    expect(text).toContain(`zaslon je rekao ${series.published!.vehicles[m]}`);
+    expect(text).toContain(`na zaslonu ${series.published!.vehicles[m]}`);
     expect(text).toMatch(/medijski naslovi po satu \d/);
     expect(text).not.toContain('običan dan');
   });

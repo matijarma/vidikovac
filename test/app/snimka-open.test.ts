@@ -10,13 +10,13 @@ import type { SnimkaContext } from '../../app/src/snimka/context';
 import { buildSnimkaFixture } from '../../e2e/snimka-fixtures';
 
 describe('sizeWords', () => {
-  it('kilobytes under a megabyte, never 0 KB for a file with bytes; one decimal under ten megabytes', () => {
-    expect(sizeWords(0)).toBe('0 KB');
-    expect(sizeWords(1)).toBe('1 KB');
-    expect(sizeWords(499)).toBe('1 KB');
-    expect(sizeWords(1500)).toBe('2 KB');
-    expect(sizeWords(812_345)).toBe('812 KB');
-    expect(sizeWords(999_400)).toBe('999 KB');
+  it('kilobytes under a megabyte, never 0 kB for a file with bytes; one decimal under ten megabytes', () => {
+    expect(sizeWords(0)).toBe('0 kB');
+    expect(sizeWords(1)).toBe('1 kB');
+    expect(sizeWords(499)).toBe('1 kB');
+    expect(sizeWords(1500)).toBe('2 kB');
+    expect(sizeWords(812_345)).toBe('812 kB');
+    expect(sizeWords(999_400)).toBe('999 kB');
     expect(sizeWords(999_999)).toBe('1,0 MB');
     expect(sizeWords(1_000_000)).toBe('1,0 MB');
     expect(sizeWords(1_449_000)).toBe('1,4 MB');
@@ -69,10 +69,10 @@ describe('the section', () => {
     const hrefs = [...root.querySelectorAll('a')].map((a) => a.getAttribute('href'));
     expect(hrefs).toContain('/open/catalog.json');
     expect(hrefs).toContain('/open/#snimka-2026-09');
-    expect(root.querySelector('[data-sn="repro"]')!.textContent).toContain('npm run build:snimka na predaji 0123456789ab');
+    expect(root.querySelector('[data-sn="repro"]')!.textContent).toContain('npm run build:snimka na inačici koda 0123456789ab');
     expect(hrefs).toContain('https://github.com/matijarma/vidikovac/commit/0123456789abcdef0123456789abcdef01234567');
     expect(root.textContent).toContain('Otvorena dozvola, uz navođenje izvora');
-    expect(root.textContent).toContain('Nisu u preuzimanjima');
+    expect(root.textContent).toContain('Nema u preuzimanjima');
     off();
   });
   it('shortCommit keeps a non-hash as it is', () => {

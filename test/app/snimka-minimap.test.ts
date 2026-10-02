@@ -9,6 +9,7 @@ import { ROUTES_STEP_S, SNIMKA_COMPARISONS, SNIMKA_WINDOW, ZAGREB_OFFSET_S, type
 import { encodeRoutes } from '../../shared/snimka-codec';
 import type { ReplayClock } from '../../app/src/snimka/clock';
 import { createLayerStore, createViewStore, type SnimkaContext } from '../../app/src/snimka/context';
+import { zagrebDay } from '../../app/src/snimka/format';
 import { minimapGeometry, mountMinimaps, simplifyRdp } from '../../app/src/snimka/minimap';
 
 describe('simplifyRdp', () => {
@@ -87,7 +88,7 @@ function fakeContext(startSec: number) {
   const view = createViewStore();
   const comparisons = SNIMKA_COMPARISONS.map((c) => ({ id: c.id, day: c.day, weekday: c.weekday, fromSec: c.fromSec, series: {} as never, routes: compRoutes(c) }));
   const ctx = {
-    manifest: { networks: { '396': { path: 'networks/396.json', bytes: 1, sha256: 'x' }, '395': { path: 'networks/395.json', bytes: 1, sha256: 'y' } } },
+    manifest: { window: SNIMKA_WINDOW, networks: { '396': { path: 'networks/396.json', bytes: 1, sha256: 'x' }, '395': { path: 'networks/395.json', bytes: 1, sha256: 'y' } } },
     routes: windowRoutes, comparisons, clock, frames, layers: createLayerStore(), view, reducedMotion: false, doc: document,
     data: { get: vi.fn(async () => net), url: () => '' },
   } as unknown as SnimkaContext;
@@ -112,18 +113,18 @@ describe('mountMinimaps', () => {
     expect(now.getAttribute('data-sn-mm-paths')).toBe('2');
     expect(classesOf(now, '6')).toEqual(['sn-mm-alive']);
     expect(classesOf(now, '228')).toEqual(['sn-mm-dead']);
-    expect(root.querySelector('.sn-mm-now .sn-mm-name')!.textContent).toBe('sada');
-    expect(root.querySelector('.sn-mm-now .sn-mm-count')!.textContent).toBe('1 od 2 linija s vozilom');
+    expect(root.querySelector('.sn-mm-now .sn-mm-name')!.textContent).toBe(zagrebDay(monday0745 * 1000));
+    expect(root.querySelector('.sn-mm-now .sn-mm-count')!.textContent).toBe('linije s vozilom: 1 od 2');
     // Monday against Monday 21 Sep (S-12): 6 alive, 228 dead there too.
-    expect(root.querySelector('.sn-mm-normal .sn-mm-name')!.textContent).toBe('ponedjeljak 21. rujna u isto doba');
+    expect(root.querySelector('.sn-mm-normal .sn-mm-name')!.textContent).toBe('ponedjeljak 21. rujna, isto doba');
     expect(classesOf(normal, '6')).toEqual(['sn-mm-alive']);
     expect(classesOf(normal, '228')).toEqual(['sn-mm-dead']);
     expect(root.querySelector('.sn-mm-legend')).toBeNull();
     // Tuesday: the window has nothing alive; the comparison is Thursday with both alive.
     f.frame(tuesday0745);
     expect(classesOf(now, '6')).toEqual(['sn-mm-dead']);
-    expect(root.querySelector('.sn-mm-now .sn-mm-count')!.textContent).toBe('0 od 2 linija s vozilom');
-    expect(root.querySelector('.sn-mm-normal .sn-mm-name')!.textContent).toBe('četvrtak 24. rujna u isto doba');
+    expect(root.querySelector('.sn-mm-now .sn-mm-count')!.textContent).toBe('linije s vozilom: 0 od 2');
+    expect(root.querySelector('.sn-mm-normal .sn-mm-name')!.textContent).toBe('četvrtak 24. rujna, isto doba');
     expect(classesOf(normal, '228')).toEqual(['sn-mm-alive']);
     expect(normal.getAttribute('data-sn-mm-alive')).toBe('2');
     unmount();

@@ -2,7 +2,7 @@
 // any speed with an injected wall clock, the latest line winning at expiry,
 // the same text being no change, the observed readings sampled per replay
 // minute at 600x, and on the page the record ("Zapis") inside a run and
-// today's rules ("Današnja pravila") between runs.
+// today's rules ("Po današnjim pravilima pisalo bi") between runs.
 import { Window } from 'happy-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SNIMKA_WINDOW, type HashedRef, type ScreenRun } from '../../shared/snimka';
@@ -128,13 +128,13 @@ describe('mountSubtitle', () => {
     for (let i = 0; i < 4; i++) { await vi.advanceTimersByTimeAsync(50); sub.update(clock.now()); }
     const band = root.querySelector<HTMLElement>('.sn-sub')!;
     expect(band.dataset.snSubSource).toBe('replayed');
-    expect(root.querySelector('.sn-sub-kicker')!.textContent).toBe('Zaslon bi rekao');
-    expect(root.querySelector('.sn-sub-mark')!.textContent).toBe('Današnja pravila');
+    expect(root.querySelector('.sn-sub-kicker')!.textContent).toBe('Po današnjim pravilima pisalo bi');
+    expect(root.querySelector('.sn-sub-mark')!.textContent).toBe('izračun');
     expect(root.querySelector('.sn-sub-text')!.textContent).toMatch(/^U pokretu su 2 vozila|^Na stanicama je/);
     const mark = root.querySelector<HTMLButtonElement>('.sn-sub-mark')!;
     expect(mark.tagName).toBe('BUTTON');
     const note = root.querySelector<HTMLElement>(`#${mark.getAttribute('aria-describedby')}`)!;
-    expect(note.textContent).toContain('izračunana naknadno');
+    expect(note.textContent).toContain('naknadno izračunala');
     expect(band.hasAttribute('aria-live')).toBe(false);
     expect(root.querySelector('[aria-live]')).toBeNull();
     // Into the Monday run: the record shows once the hold has passed.
@@ -142,8 +142,8 @@ describe('mountSubtitle', () => {
     for (let i = 0; i < 4; i++) { await vi.advanceTimersByTimeAsync(50); sub.update(clock.now()); }
     await vi.advanceTimersByTimeAsync(SUBTITLE_HOLD_MS + 50);
     expect(band.dataset.snSubSource).toBe('observed');
-    expect(root.querySelector('.sn-sub-mark')!.textContent).toBe('Zapis');
-    expect(root.querySelector('.sn-sub-kicker')!.textContent).toBe('Zaslon je rekao');
+    expect(root.querySelector('.sn-sub-mark')!.textContent).toBe('zapis');
+    expect(root.querySelector('.sn-sub-kicker')!.textContent).toBe('Na zaslonu je pisalo');
     expect(root.querySelector('.sn-sub-text')!.textContent).toBe('Tramvaj 6 prema Črnomercu polazi u 07:52 po voznom redu.');
     // A tap opens the note; Escape closes it.
     mark.click();

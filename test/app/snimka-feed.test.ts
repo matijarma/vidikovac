@@ -56,7 +56,7 @@ describe('mountVoicesFeed', () => {
   it('says nobody has spoken before the first item, then fills newest on top with kind, tone, time and title', () => {
     const early = mount(MARKS.windowStart, { bare: true });
     expect(early.root.querySelector<HTMLElement>('.sn-feed-empty')!.hidden).toBe(false);
-    expect(early.root.querySelector('.sn-feed-empty')!.textContent).toBe('Još se nitko nije oglasio.');
+    expect(early.root.querySelector('.sn-feed-empty')!.textContent).toBe('Do ovog trenutka nema objava.');
     expect(early.root.dataset.snFeedCount).toBe('0');
     early.off();
     const { root, off } = mount(zg(9, 29, 12, 0));
@@ -70,7 +70,7 @@ describe('mountVoicesFeed', () => {
     expect(v1.querySelector('.sn-feed-kind')!.textContent).toBe('Mediji');
     expect(v1.querySelector('.sn-feed-beat')!.textContent).toBe('Linija 228');
     expect(v1.querySelector('.sn-feed-time')!.textContent).toBe('uto 29. 9. u 10:30');
-    expect(v1.querySelector('.sn-feed-seek')!.getAttribute('aria-label')).toBe('Premjesti snimku na uto 29. 9. u 10:30');
+    expect(v1.querySelector('.sn-feed-seek')!.getAttribute('aria-label')).toBe('Idi na uto 29. 9. u 10:30');
     const a = v1.querySelector<HTMLAnchorElement>('.sn-feed-headline a')!;
     expect(a.getAttribute('href')).toBe('https://www.vecernji.hr/zagreb/primjer-2');
     expect(a.getAttribute('rel')).toBe('noopener noreferrer');
@@ -101,7 +101,7 @@ describe('mountVoicesFeed', () => {
     expect(older.querySelectorAll('.sn-feed-item').length).toBe(total - 14);
     off();
   });
-  it('a click pauses, seeks to the item\'s minute and sets its line as the subject; Sve teme clears it', () => {
+  it('a click pauses, seeks to the item\'s minute and sets its line as the subject; Prikaži sve clears it', () => {
     const { root, ctx, clock, off, emit } = mount(zg(9, 30, 12, 0));
     clock.play();
     const v1 = root.querySelector<HTMLElement>('[data-id="news:v1"]')!;
@@ -113,7 +113,7 @@ describe('mountVoicesFeed', () => {
     expect(root.dataset.snFeedSubject).toBe('route:228');
     const filter = root.querySelector<HTMLElement>('.sn-feed-filter')!;
     expect(filter.hidden).toBe(false);
-    expect(filter.querySelector('.sn-feed-filter-text')!.textContent).toBe('Tema: Linija 228');
+    expect(filter.querySelector('.sn-feed-filter-text')!.textContent).toMatch(/^Samo Linija 228 · skriveno \d+$/);
     expect(ids(root)).toEqual(['news:v1', 'notice:10166']);
     const hidden = Number(root.dataset.snFeedCount);
     expect(hidden).toBe(2);
@@ -178,8 +178,8 @@ describe('mountVoicesFeed', () => {
     off();
   });
   it('the folded headlines read in Croatian whatever their number', () => {
-    expect(plural(1, SN.voices.moreForms).replace('{count}', '+1')).toBe('+1 naslov iste teme');
-    expect(plural(3, SN.voices.moreForms).replace('{count}', '+3')).toBe('+3 naslova iste teme');
+    expect(plural(1, SN.voices.moreForms).replace('{count}', '+1')).toBe('+1 sličan naslov');
+    expect(plural(3, SN.voices.moreForms).replace('{count}', '+3')).toBe('+3 slična naslova');
     expect(plural(1, SN.voices.hiddenForms).replace('{count}', '1')).toBe('1 stavka bez te teme');
     expect(plural(3, SN.voices.hiddenForms).replace('{count}', '3')).toBe('3 stavke bez te teme');
     expect(plural(7, SN.voices.hiddenForms).replace('{count}', '7')).toBe('7 stavki bez te teme');

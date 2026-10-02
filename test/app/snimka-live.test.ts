@@ -62,9 +62,12 @@ describe('readLive', () => {
 });
 
 describe('liveLines', () => {
-  it('the sentence of Appendix B with the state word, and the age; or the one unavailable line', () => {
-    expect(liveLines({ kind: 'numbers', seen: 380, expected: 400, state: 'normal', ageS: 30 })).toEqual(['Sada: u pokretu 380, po voznom redu oko 400, stanje uobičajeno.', 'Podatak star manje od minute.']);
-    expect(liveLines({ kind: 'numbers', seen: 2, expected: 35, state: 'silent', ageS: 125 })).toEqual(['Sada: u pokretu 2, po voznom redu oko 35, stanje gotovo bez vozila.', 'Podatak star 2 min.']);
+  it('the sentence of the v3 Appendix A with the daypart\'s state sentence, and the age only over five minutes; or the one unavailable line', () => {
+    // NOW is 14:00 in Zagreb: a normal reading says "Uobičajen dan."
+    expect(liveLines({ kind: 'numbers', seen: 380, expected: 400, state: 'normal', ageS: 30 }, NOW)).toEqual(['Sada, u 14:00: u pokretu 380 vozila, po voznom redu 400. Uobičajen dan.']);
+    expect(liveLines({ kind: 'numbers', seen: 2, expected: 35, state: 'silent', ageS: 125 }, NOW)).toEqual(['Sada, u 14:00: u pokretu 2 vozila, po voznom redu 35. Gotovo bez vozila.']);
+    expect(liveLines({ kind: 'numbers', seen: 1, expected: 35, state: 'reduced', ageS: 600 }, NOW)).toEqual(['Sada, u 14:00: u pokretu 1 vozilo, po voznom redu 35. Smanjeno.', 'Stanje od prije 10 min.']);
+    expect(liveLines({ kind: 'numbers', seen: 380, expected: 400, state: 'normal', ageS: null }, Date.parse('2026-10-02T18:14:00.000Z'))).toEqual(['Sada, u 20:14: u pokretu 380 vozila, po voznom redu 400. Uobičajena večer.']);
     expect(liveLines({ kind: 'unavailable' })).toEqual(['Trenutačno stanje nije dostupno.']);
   });
 });
@@ -106,15 +109,16 @@ describe('the card', () => {
     const off = mountLive(root, { fetchImpl, observe, now: () => NOW });
     expect(root.hasAttribute('aria-busy')).toBe(false);
     expect(root.dataset.snLive).toBe('pending');
-    expect(root.querySelector('.sn-live-kicker')!.textContent).toBe('Uživo, nije snimka');
+    expect(root.querySelector('.sn-live-kicker')!.textContent).toBe('uživo');
     expect([...root.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['/', '/statistika/']);
     expect(root.querySelector('.sn-live-method')!.textContent).toContain('ništa se ne broji i ne šalje');
     expect(fetchImpl).not.toHaveBeenCalled();
     enter!();
     await vi.waitFor(() => expect(root.dataset.snLive).toBe('numbers'));
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(root.querySelector('.sn-live-line')!.textContent).toBe('Sada: u pokretu 380, po voznom redu oko 400, stanje uobičajeno.');
-    expect(root.querySelector('.sn-live-age')!.textContent).toBe('Podatak star manje od minute.');
+    // mountLive does not pass its now() to liveLines (the clock time is the wall's): the shape, not the minute.
+    expect(root.querySelector('.sn-live-line')!.textContent).toMatch(/^Sada, u \d\d:\d\d: u pokretu 380 vozila, po voznom redu 400\. Uobičaj(eno jutro|en dan|ena večer|ena noć)\.$/u);
+    expect(root.querySelector('.sn-live-age')).toBeNull();
     off();
   });
   it('says unavailable on a down summary, and the links stay', async () => {

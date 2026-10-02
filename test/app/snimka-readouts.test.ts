@@ -31,7 +31,7 @@ describe('stateText', () => {
   it('says the state with its tone and the naknadno mark before the service went live', () => {
     const r = stateText(series, MARKS.monday0745, MARKS.serviceLive);
     expect(r).toMatchObject({ state: 'silent', word: 'Gotovo bez vozila', tone: 'down', retro: true });
-    expect(r.sub).toMatch(/^u pokretu \d, po voznom redu oko \d+$/);
+    expect(r.sub).toMatch(/^u pokretu \d, po voznom redu \d+$/);
     const after = stateText(series, MARKS.thursday0745, MARKS.serviceLive);
     expect(after).toMatchObject({ state: 'normal', word: 'Uobičajeno', tone: 'live', retro: false });
   });
@@ -105,7 +105,7 @@ describe('dataPathText', () => {
     const at = MARKS.monday0745;
     const i = m(at);
     const t = dataPathText(series, at)!;
-    expect(t).toBe(`ZET šalje ${series.feed.entities[i]}, u spremištu ${series.feed.hiddenDepot[i]}, parkirano ${series.feed.hiddenParked[i]}, u pokretu ${series.seen.all[i]}, zaslon je rekao ${series.published!.vehicles[i]}`);
+    expect(t).toBe(`u ZET-ovim podacima ${series.feed.entities[i]} vozila: u spremištu ${series.feed.hiddenDepot[i]}, stoji izvan spremišta ${series.feed.hiddenParked[i]}, u pokretu ${series.seen.all[i]}; na zaslonu ${series.published!.vehicles[i]}`);
   });
   it('is silent when the numbers agree and when fewer than two are known; a missing part reads bez podatka', () => {
     const at = MARKS.monday0745;
@@ -114,6 +114,6 @@ describe('dataPathText', () => {
     const lone = withMinute(at, (s, i) => { s.feed.entities[i] = null; s.published!.vehicles[i] = null; });
     expect(dataPathText(lone, at)).toBeNull();
     const gap = withMinute(at, (s, i) => { s.feed.entities[i] = 45; s.seen.all[i] = 2; s.published!.vehicles[i] = null; s.feed.hiddenParked[i] = null; });
-    expect(dataPathText(gap, at)).toBe(`ZET šalje 45, u spremištu ${series.feed.hiddenDepot[m(at)]}, parkirano bez podatka, u pokretu 2, zaslon je rekao bez podatka`);
+    expect(dataPathText(gap, at)).toBe(`u ZET-ovim podacima 45 vozila: u spremištu ${series.feed.hiddenDepot[m(at)]}, stoji izvan spremišta bez podatka, u pokretu 2; na zaslonu bez podatka`);
   });
 });

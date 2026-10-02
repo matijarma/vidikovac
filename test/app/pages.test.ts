@@ -133,7 +133,7 @@ describe('static pages', () => {
     // Counting what is shown here would be a counter the privacy page does not list: the page makes no beacon call.
     expect(read('app/src/entries/statistika.ts')).not.toMatch(/sendBeacon|\/api\/(?!statistika)/);
   });
-  it('/snimka follows /statistika: skip link, wordmark, one h1, the six-link footer, the nine sections, prose and sources that stand without JS', () => {
+  it('/snimka follows /statistika: skip link, wordmark, one h1, the six-link footer, the five chips and seven sections, prose and sources that stand without JS', () => {
     const html = read('app/snimka/index.html');
     expect(html).toContain('<html lang="hr">');
     expect(html).not.toContain('<style>');
@@ -149,24 +149,42 @@ describe('static pages', () => {
     expect(html).toContain('src="/src/entries/snimka.ts"');
     for (const href of ['/hitno', '/s/', '/izvori/', '/open/', '/privatnost/', '/pristupacnost/', '/statistika/', '/prijava/']) expect(html, href).toContain(`href="${href}"`);
     expect(html).toContain('<noscript>');
-    // The nine sections of the plan (section 4), each in the bar, in order.
-    const sections = ['ukratko', 'snimka', 'brojke', 'zaslon', 'tijek', 'zamjene', 'vidjelo', 'otvoreno', 'izvori'];
-    for (const id of sections) {
-      expect(html, id).toContain(`id="${id}"`);
-      expect(html, id).toContain(`href="#${id}"`);
-    }
+    // v3 (V3-20): five chips in the bar, in order; the hero has none. Seven sections in reading order.
+    const chips = ['snimka', 'pokazuje', 'zaslon', 'tijek', 'podaci'];
     const nav = html.slice(html.indexOf('data-st="sections"'), html.indexOf('</nav>'));
-    expect([...nav.matchAll(/href="#([a-z]+)"/g)].map((m) => m[1])).toEqual(sections);
-    expect(sections.map((id) => html.indexOf(`id="${id}"`))).toEqual([...sections.map((id) => html.indexOf(`id="${id}"`))].sort((a, b) => a - b));
-    // The four question chips: a nav of static links to the answering sections, upgraded by the script.
-    expect(html).toMatch(/<nav class="chips sn-q-nav" aria-label="[^"]+" data-sn="questions">/);
-    expect((html.match(/data-sn-q="\d"/g) ?? []).length).toBe(4);
+    expect([...nav.matchAll(/href="#([a-z]+)"/g)].map((m) => m[1])).toEqual(chips);
+    const sections = ['ukratko', 'snimka', 'pokazuje', 'danas', 'zaslon', 'tijek', 'podaci'];
+    for (const id of sections) expect(html, id).toMatch(new RegExp(`<section id="${id}"`));
+    expect(sections.map((id) => html.indexOf(`<section id="${id}"`))).toEqual([...sections.map((id) => html.indexOf(`<section id="${id}"`))].sort((a, b) => a - b));
+    // The v2 section ids stay as hidden anchors where their content now lives, so shared links still land.
+    for (const id of ['brojke', 'zamjene', 'vidjelo', 'otvoreno', 'izvori']) expect(html, id).toContain(`<span id="${id}" hidden></span>`);
+    const within = (anchor: string, section: string, next: string): void => {
+      const at = html.indexOf(`<span id="${anchor}" hidden>`);
+      expect(at, anchor).toBeGreaterThan(html.indexOf(`<section id="${section}"`));
+      expect(at, anchor).toBeLessThan(html.indexOf(`<section id="${next}"`));
+    };
+    within('brojke', 'pokazuje', 'danas');
+    within('vidjelo', 'pokazuje', 'danas');
+    within('zamjene', 'pokazuje', 'danas');
+    expect(html.indexOf('<span id="otvoreno" hidden>')).toBeGreaterThan(html.indexOf('<section id="podaci"'));
+    expect(html.indexOf('<span id="izvori" hidden>')).toBeGreaterThan(html.indexOf('<span id="otvoreno" hidden>'));
+    // The four question chips, their hidden links and the "Za koga" line are gone (V3-19); one instruction line instead.
+    expect(html).not.toContain('data-sn="questions"');
+    expect(html).not.toMatch(/data-sn-q=/);
+    expect(html).not.toContain('narration.forWhom');
+    expect(html).toContain('data-sn="how-to" data-sn-text="narration.howTo"');
     // The stage: a visually hidden heading and one mount; the instrument composes itself inside it.
     expect(html).toMatch(/<h2 id="snimka-h" class="visually-hidden" data-sn-text="stage.title">/);
     // The slots the scripts fill, each busy until its lane draws into it.
     for (const mount of ['stage', 'brojke', 'screen', 'strip', 'alternatives', 'reckoning', 'open', 'live']) expect(html, mount).toContain(`data-sn-mount="${mount}" aria-busy="true"`);
-    for (const kpi of ['kpi-silent', 'kpi-peak', 'kpi-bikes', 'kpi-return', 'kpi-alerts']) expect(html, kpi).toContain(`data-sn="${kpi}"`);
-    expect(html).toContain('data-sn="attribution" aria-busy="true"');
+    const pokazuje = html.slice(html.indexOf('<section id="pokazuje"'), html.indexOf('<section id="danas"'));
+    expect(['brojke', 'reckoning', 'alternatives'].map((m) => pokazuje.indexOf(`data-sn-mount="${m}"`))).toEqual([...['brojke', 'reckoning', 'alternatives'].map((m) => pokazuje.indexOf(`data-sn-mount="${m}"`))].sort((a, b) => a - b).filter((i) => i >= 0));
+    for (const kpi of ['kpi-silent', 'kpi-bikes', 'kpi-return']) expect(pokazuje, kpi).toContain(`data-sn="${kpi}"`);
+    for (const kpi of ['kpi-peak', 'kpi-alerts']) expect(html, kpi).not.toContain(`data-sn="${kpi}"`);
+    expect(html.slice(html.indexOf('<section id="danas"'), html.indexOf('<section id="zaslon"'))).toContain('data-sn-mount="live"');
+    const podaci = html.slice(html.indexOf('<section id="podaci"'));
+    expect(podaci.indexOf('data-sn-mount="open"')).toBeLessThan(podaci.indexOf('data-sn-text="sources.title"'));
+    expect(podaci).toContain('data-sn="attribution" aria-busy="true"');
     // The page calls no live API except the one read of /api/teaser in live.ts (decision S-10), and never references the map library statically.
     const entry = read('app/src/entries/snimka.ts');
     expect(entry).not.toMatch(/sendBeacon|\/api\/(?!snimka)/);
