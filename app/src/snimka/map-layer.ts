@@ -26,11 +26,10 @@
 // at BAJS_TIP_ZOOM and up shows its numbers as a tooltip. The director
 // binds itself here until the shell binds it with its hooks (director.ts).
 // Loaded by stage.ts with one dynamic import, so the page's entry graph
-// never carries the map library; the sheet ui/snimka-map.css rides this
+// never carries the map library; the sheet ui/snimka-map.css is linked by app/snimka/index.html (the kiosk's stylesheet pin counts every sheet a module imports)
 // chunk. Probes on the host: data-sn-drawn, data-sn-ghosts, data-sn-compare,
 // data-sn-bajs="<drawn>/<anomalies>", data-sn-glyphs, data-sn-frame,
 // data-sn-edge, data-sn-motion, data-sn-at, data-sn-subject.
-import '../ui/snimka-map.css';
 import { decodeNetwork, type GraphNetwork, type Network } from '../../../shared/motion/network';
 import {
   BAJS_STEP_S, isBajsFile, isMotionIndex, isStationsFile, ZAGREB_OFFSET_S,

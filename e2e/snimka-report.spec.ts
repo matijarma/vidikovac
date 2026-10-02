@@ -50,6 +50,9 @@ async function horizontalOverflow(page: Page): Promise<number> {
 
 const tParam = (page: Page): string | null => new URL(page.url()).searchParams.get('t');
 
+const minuteOf = (sec: number): string => new Date((sec + 7200) * 1000).toISOString().slice(0, 16);
+const stageTop = (page: Page): Promise<number> => page.locator('[data-sn-stage]').evaluate((el) => el.getBoundingClientRect().top);
+
 test.describe('/snimka/ dossier', () => {
   test('no sideways scroll at 360 px', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
