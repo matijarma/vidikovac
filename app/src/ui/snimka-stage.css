@@ -1,96 +1,130 @@
-/* Kaj ima? / Snimka: the stage (map, clock plate, controls, scrubber, side column). Owner: lane S2 (app/src/snimka/stage.ts); page level is in snimka.css.
-   Layer-2 tokens only. Desktop: the map and its controls on the left, a 20rem side column on the right; under 60rem the column stacks
-   beneath. The map box is min(58vh, 36rem) tall, 56vh on a phone, with the clock plate laid over its top-left corner. Every control
-   is at least 44 px (--target) and takes the page's own focus ring from base.css. */
+/* Kaj ima? / Snimka: the instrument's shell (lane V3, app/src/snimka/stage.ts). The five slots of STAGE_SLOTS laid out as one
+   instrument on one clock: on a desktop (60rem and wider) the grid "deck map voices" over "timeline timeline timeline", the
+   subtitle at the map's foot, the whole stage as tall as the viewport under the sticky section bar (--sn-chrome-h, measured);
+   between 40 and 60rem the map on top and the deck beside the voices; on a phone the map at 56vh, the subtitle under it, the
+   deck and the voices as one horizontal swipe row and the timeline bar sticky at the bottom. Presenting (data-sn-presenting)
+   fills the screen; idle (data-sn-idle) hides the controls, never under reduced motion. Both themes: glass panels on the
+   page's glass token, hairlines, radii 14/18, tabular numerals on every value, motion 140/180/220 ms. Layer-2 tokens only.
+   The deck's own parts and the timeline bar are in snimka-panels.css. */
 
-.sn-stage { position: relative; }
-.sn-stage[aria-busy='true'] .sn-stage-grid { visibility: hidden; }
-.sn-stage-grid { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: var(--sp-5); align-items: start; padding: var(--sp-4); }
-.sn-stage-main { display: grid; gap: var(--sp-4); min-inline-size: 0; }
-.sn-side { display: grid; gap: var(--sp-3); min-inline-size: 0; }
+.sn-stage-root {
+  --sn-glass: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent);
+  --sn-glass-stroke: var(--tone-glass-stroke);
+  --sn-r-panel: var(--r-lg);
+  --sn-r-stage: var(--r-xl);
+  --sn-deck-w: 20rem;
+  --sn-voices-w: 22rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--sn-deck-w) minmax(0, 1fr) var(--sn-voices-w);
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-areas: "deck map voices" "deck subtitle voices" "timeline timeline timeline";
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  block-size: calc(100svh - var(--sn-chrome-h, 0px) - 2 * var(--sp-2));
+  min-block-size: 38rem;
+  box-sizing: border-box;
+  border-radius: var(--sn-r-stage);
+  font-variant-numeric: tabular-nums;
+  transition: grid-template-columns var(--dur-slow) var(--ease);
+}
+/* The stage's section sits right under the sticky bar, so the whole instrument is one viewport when the reader lands on #snimka. */
+#snimka { padding-block: var(--sp-2); scroll-margin-block-start: var(--sn-chrome-h, var(--st-bar-h, 3.75rem)); }
+
+/* An open panel widens the deck; the map's canvas follows its box (stage.ts resizes it). */
+.sn-stage-root:not([data-sn-expanded='none']) { --sn-deck-w: minmax(20rem, 30rem); }
+.sn-stage-root [hidden] { display: none !important; }
+.sn-deck-row { display: contents; }
+
+.sn-slot { min-inline-size: 0; min-block-size: 0; }
+.sn-slot-map { grid-area: map; display: flex; flex-direction: column; gap: var(--sp-2); }
+.sn-slot-deck { grid-area: deck; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.sn-slot-voices { grid-area: voices; overflow-y: auto; overscroll-behavior: contain; border-radius: var(--sn-r-panel); background: var(--sn-glass); border: 1px solid var(--sn-glass-stroke); }
+.sn-slot-subtitle { grid-area: subtitle; min-block-size: 2.75rem; border-radius: var(--sn-r-panel); background: var(--sn-glass); border: 1px solid var(--sn-glass-stroke); }
+.sn-slot-subtitle[data-spot] { box-shadow: 0 0 0 2px var(--tone-action-brand); transition: box-shadow var(--dur-base) var(--ease); }
+.sn-slot-timeline { grid-area: timeline; }
+@supports (backdrop-filter: blur(8px)) {
+  .sn-slot-voices, .sn-slot-subtitle { backdrop-filter: blur(8px); }
+}
 
 /* The map box and the clock plate over it. */
-.sn-map-box { position: relative; block-size: min(58vh, 36rem); min-block-size: 18rem; border-radius: var(--r-lg); overflow: hidden; background: var(--tone-surface-3); isolation: isolate; }
-/* A block filling its box, not an absolute inset: MapLibre's own sheet makes its container position: relative, which an inset would lose, leaving a 300 px canvas in a 522 px box. */
+.sn-map-box { position: relative; flex: 1 1 auto; min-block-size: 16rem; border-radius: var(--sn-r-stage); overflow: hidden; background: var(--tone-surface-3); border: 1px solid var(--sn-glass-stroke); isolation: isolate; }
+/* A block filling its box, not an absolute inset: MapLibre's sheet makes its container position: relative. */
 .sn-map { inline-size: 100%; block-size: 100%; }
 .sn-map .maplibregl-canvas { outline-offset: -2px; }
 .sn-map[data-map-status='unavailable'] { background: var(--tone-surface-2); }
-.sn-plate { position: absolute; inset-block-start: var(--sp-3); inset-inline-start: var(--sp-3); z-index: 2; display: grid; gap: 0; padding: var(--sp-2) var(--sp-4); border-radius: var(--r-md); background: var(--tone-glass-bg, color-mix(in oklab, var(--tone-surface-1) 88%, transparent)); border: 1px solid var(--tone-glass-stroke, var(--tone-stroke)); box-shadow: var(--tone-shadow-soft); pointer-events: none; }
+.sn-plate { position: absolute; inset-block-start: var(--sp-3); inset-inline-start: var(--sp-3); z-index: 2; display: grid; gap: 0.125rem; max-inline-size: min(22rem, calc(100% - 2 * var(--sp-3))); padding: var(--sp-2) var(--sp-4); border-radius: var(--sn-r-panel); background: var(--sn-glass); border: 1px solid var(--sn-glass-stroke); box-shadow: var(--tone-shadow-soft); pointer-events: none; }
+@supports (backdrop-filter: blur(8px)) { .sn-plate { backdrop-filter: blur(8px); } }
 .sn-plate-day { font-size: var(--type-secondary); font-weight: var(--weight-bold); color: var(--tone-text-muted); letter-spacing: 0.02em; }
 .sn-plate-time { font-size: clamp(2rem, 1.4rem + 2vw, 2.75rem); font-weight: var(--weight-bold); line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--tone-text-primary); }
+.sn-plate-chapter { font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-primary); line-height: 1.3; }
+.sn-plate-chapter:empty { display: none; }
+.sn-lagano-note { position: absolute; inset: 0; display: grid; place-content: center; padding: var(--sp-6); margin: 0; text-align: center; }
 
-/* The lightweight variant: the fleet numbers where the map would be. */
-.sn-lagano { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: var(--sp-2); padding: var(--sp-6) var(--sp-4); text-align: center; }
-.sn-lagano-num { font-size: clamp(3rem, 2rem + 6vw, 6rem); font-weight: var(--weight-bold); line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
-.sn-lagano-label { font-size: var(--type-head); font-weight: var(--weight-bold); }
-.sn-lagano-expected { font-size: var(--type-body); color: var(--tone-text-muted); min-block-size: 1.4em; }
-.sn-lagano-note { margin-block-start: var(--sp-3); max-inline-size: 36ch; }
+/* The layer chips in two labelled groups, the legend words and the notes, under the map. */
+.sn-chips-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-4); }
+.sn-chip-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); }
+.sn-chip-label { font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
+.sn-chip { font-size: var(--type-secondary); padding-inline: 0.625rem; }
+.sn-legend-words { position: absolute; z-index: 2; inset-block-end: var(--sp-2); inset-inline-start: var(--sp-2); max-inline-size: calc(100% - 4rem); margin: 0; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-md); background: var(--sn-glass); border: 1px solid var(--sn-glass-stroke); list-style: none; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-legend-words li { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.sn-legend-mark { display: inline-block; inline-size: 1rem; block-size: 0.25rem; border-radius: 2px; background: var(--tone-stroke-strong); }
+.sn-legend-alive { background: var(--tone-action-brand); block-size: 0.3rem; }
+.sn-legend-dead { background: var(--tone-text-subtle); }
+.sn-legend-quiet { background: var(--tone-stroke); block-size: 1px; }
+.sn-legend-ghost { inline-size: 0.6rem; block-size: 0.6rem; border-radius: 50%; background: transparent; border: 1.5px solid var(--tone-text-muted); box-sizing: border-box; }
+.sn-layer-note { margin: 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-legend-words .sn-layer-note { flex-basis: 100%; }
 
-/* The controls row. */
-.sn-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
-.sn-play { min-inline-size: 7.5rem; }
-.sn-chapters { display: inline-flex; gap: var(--sp-2); }
-.sn-chapter { inline-size: var(--target); padding: 0; font-size: var(--type-head); line-height: 1; }
-.sn-speed { display: flex; flex-wrap: wrap; gap: var(--sp-1); padding: 0.125rem; border-radius: var(--r-md); background: var(--tone-surface-2); }
-.sn-speed .segment { flex: 1 1 auto; min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; cursor: pointer; touch-action: manipulation; }
-.sn-speed .segment[aria-pressed='true'] { background: var(--tone-surface-1); color: var(--tone-text-primary); font-weight: var(--weight-bold); box-shadow: var(--tone-shadow-soft); }
-@media (hover: hover) { .sn-speed .segment:not([aria-pressed='true']):hover { color: var(--tone-text-primary); } }
-.sn-speed-pick { display: none; }
-.sn-speed-select { min-block-size: var(--target); padding-inline: var(--sp-3); font-size: var(--type-control); font-weight: var(--weight-bold); border-radius: var(--r-md); background: var(--tone-surface-2); border: 1px solid transparent; color: var(--tone-text-primary); }
+/* Presenting: the stage fills the screen; a browser without element fullscreen gets it pinned over the page. */
+#snimka:fullscreen { background: var(--tone-surface-canvas); overflow: auto; }
+#snimka:fullscreen .sn-stage-root, .sn-stage-root[data-sn-presenting] { block-size: 100vh; min-block-size: 0; border-radius: 0; }
+.sn-stage-root[data-sn-presenting='pinned'] { position: fixed; inset: 0; z-index: 60; inline-size: 100vw; background: var(--tone-surface-canvas); }
+.sn-stage-root[data-sn-idle] .sn-slot-timeline, .sn-stage-root[data-sn-idle] .sn-chips-row, .sn-stage-root[data-sn-idle] .sn-slot-deck { opacity: 0; transition: opacity var(--dur-slow) var(--ease); }
+.sn-stage-root[data-sn-idle] { cursor: none; }
 
-/* The scrubber: a native range, with the chapter ticks and the day lines drawn beside it, never inside the input. */
-.sn-scrub { display: grid; grid-template-rows: auto auto; gap: var(--sp-1); padding-block-start: var(--sp-2); }
-.sn-range { inline-size: 100%; min-block-size: var(--target); margin: 0; accent-color: var(--tone-action-brand); cursor: pointer; }
-.sn-scrub-marks { position: relative; block-size: 0.75rem; margin-inline: 0.5rem; }
-.sn-mark-chapter, .sn-mark-day { position: absolute; inset-block-start: 0; translate: -50% 0; }
-.sn-mark-chapter { inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--tone-action-brand); }
-.sn-mark-day { inline-size: 1px; block-size: 0.75rem; background: var(--tone-stroke-strong); }
-.sn-scrub-days { position: relative; block-size: 1.25rem; margin-inline: 0.5rem; }
-.sn-day-label { position: absolute; inset-block-start: 0; translate: -50% 0; font-size: var(--type-meta); color: var(--tone-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-
-/* The layers row and the notes. */
-.sn-layers { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); }
-.sn-layers-label { font-size: var(--type-control); font-weight: var(--weight-bold); color: var(--tone-text-muted); }
-.sn-layer-note { flex-basis: 100%; margin-block-start: 0; }
-.sn-status { min-block-size: 1.4em; margin: 0; font-size: var(--type-control); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
-.sn-reduced-note { margin-block-start: 0; }
-
-/* The side column's cards. */
-.sn-card { gap: var(--sp-2); padding: var(--sp-4); }
-.sn-card h3 { font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
-.sn-badge-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin: 0; }
-.sn-badge { min-block-size: 1.9rem; padding-inline: var(--sp-3); font-size: var(--type-control); }
-.sn-retro { font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-text-muted); border: 1px dashed var(--tone-stroke-strong); border-radius: var(--r-xs); padding: 0.1rem 0.4rem; }
-.sn-counts { margin: 0; font-size: var(--type-body); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
-.sn-holds, .sn-feed, .sn-retro-note, .sn-card-meta, .sn-none { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: 1.5; }
-.sn-feed { color: var(--tone-text-primary); }
-.sn-retro-note { font-size: var(--type-meta); }
-.sn-card-body { display: grid; gap: var(--sp-2); }
-.sn-card-title { margin: 0; font-size: var(--type-body); font-weight: var(--weight-bold); line-height: 1.35; }
-.sn-headline, .sn-link { color: var(--tone-text-primary); text-decoration-thickness: 1px; text-underline-offset: 0.15em; }
-.sn-card-meta a { color: var(--tone-text-primary); }
-.sn-stage [hidden] { display: none !important; }
-
-/* Narrower than the two columns: the side column stacks under the stage. */
+/* Between a phone and a desktop: the map on top, the deck beside the voices, the bar under them. */
 @media (max-width: 60rem) {
-  .sn-stage-grid { grid-template-columns: minmax(0, 1fr); }
-  .sn-side { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+  .sn-stage-root {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas: "map map" "subtitle subtitle" "deck voices" "timeline timeline";
+    block-size: auto;
+    min-block-size: 0;
+  }
+  .sn-stage-root:not([data-sn-expanded='none']) { grid-template-areas: "map map" "subtitle subtitle" "deck deck" "voices voices" "timeline timeline"; }
+  .sn-slot-map .sn-map-box { flex: none; block-size: 60vh; }
+  .sn-slot-deck, .sn-slot-voices { max-block-size: 36rem; }
 }
-/* A phone: the native select replaces the segmented speed control, the map is 56vh, the controls wrap. */
+
+/* A phone: the map at 56vh with the plate, the subtitle under it, one swipe row of panels and the voices, the bar at the bottom. */
 @media (max-width: 40rem) {
-  .sn-stage-grid { padding: var(--sp-3); gap: var(--sp-4); }
-  .sn-map-box { block-size: 56vh; min-block-size: 16rem; }
-  .sn-speed { display: none; }
-  .sn-speed-pick { display: block; flex: 1 1 8rem; }
-  .sn-speed-select { inline-size: 100%; }
-  .sn-play { flex: 1 1 7rem; }
-  .sn-side { grid-template-columns: minmax(0, 1fr); }
-  .sn-day-label { font-size: 0.65rem; }
+  .sn-stage-root, .sn-stage-root:not([data-sn-expanded='none']) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-2) 0 0;
+    block-size: auto;
+  }
+  .sn-slot-map { order: 1; padding-inline: var(--sp-2); }
+  .sn-slot-subtitle { order: 2; margin-inline: var(--sp-2); }
+  .sn-deck-row { order: 3; display: flex; gap: var(--sp-2); overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding-inline: var(--sp-3); padding: var(--sp-1) var(--sp-3) var(--sp-2); overscroll-behavior-x: contain; }
+  .sn-slot-deck { display: contents; }
+  .sn-slot-voices { flex: 0 0 86vw; max-block-size: 70vh; scroll-snap-align: start; }
+  .sn-slot-timeline { order: 4; position: sticky; inset-block-end: 0; z-index: 5; }
+  .sn-slot-map .sn-map-box { block-size: 56vh; min-block-size: 16rem; }
+  .sn-plate { padding: var(--sp-1) var(--sp-3); }
+  .sn-chip-label { flex-basis: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sn-range { scroll-behavior: auto; }
+  .sn-stage-root { transition: none; }
+  .sn-slot-subtitle[data-spot] { transition: none; }
+  .sn-stage-root[data-sn-idle] .sn-slot-timeline, .sn-stage-root[data-sn-idle] .sn-chips-row, .sn-stage-root[data-sn-idle] .sn-slot-deck { opacity: 1; }
+}
+@media (forced-colors: active) {
+  .sn-legend-mark { forced-color-adjust: none; }
 }
 @media print {
-  .sn-controls, .sn-scrub, .sn-layers, .sn-status { display: none; }
+  .sn-chips-row, .sn-slot-timeline { display: none; }
 }

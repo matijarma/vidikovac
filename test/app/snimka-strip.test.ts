@@ -6,19 +6,20 @@
 // changes on pause and seek only.
 import { Window } from 'happy-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { SNIMKA_WINDOW, type Col, type SeriesFile } from '../../shared/snimka';
+import { SNIMKA_COMPARISONS, SNIMKA_WINDOW, type Col, type SeriesFile } from '../../shared/snimka';
 import { createReplayClock } from '../../app/src/snimka/clock';
-import { createLayerStore, type SnimkaContext } from '../../app/src/snimka/context';
+import { createLayerStore, createViewStore, type SnimkaContext } from '../../app/src/snimka/context';
 import type { FrameLoop } from '../../app/src/snimka/frames';
 import {
-  areaPath, comparisonMinute, cursorFraction, dayLines, linePath, mountStrip, readoutText, readoutValues, renderStrip, runsOf, seekTime, stateClass, subpaths, columnsPath,
+  areaPath, comparisonColumn, comparisonMinute, cursorFraction, frozenMinute, dayLines, linePath, mountStrip, readoutText, readoutValues, renderStrip, runsOf, seekTime, stateClass, subpaths, columnsPath,
 } from '../../app/src/snimka/strip';
-import { MARKS, buildComparisonSeries, buildWindowSeries } from '../../e2e/snimka-fixtures';
+import { MARKS, buildComparisonRoutes, buildComparisonSeries, buildRoutes, buildWindowSeries } from '../../e2e/snimka-fixtures';
 
 const START = SNIMKA_WINDOW.fromSec * 1000;
 const END = SNIMKA_WINDOW.toSec * 1000;
 const series = buildWindowSeries();
 const comparison = buildComparisonSeries();
+const routes = buildRoutes();
 const minuteOf = (sec: number): number => (sec - series.t0) / 60;
 
 describe('linePath', () => {
@@ -147,8 +148,8 @@ function context(at: number, playing = false) {
   const frames = stubFrames();
   const ctx = {
     manifest: { serviceLiveFromSec: MARKS.serviceLive, window: { ...SNIMKA_WINDOW } },
-    series, comparison, events: [], clock, frames, data: { get: vi.fn(), url: (r: { path: string } | string) => String(typeof r === 'string' ? r : r.path) },
-    comparisons: [{ id: 'cet-0924', day: '2026-09-24', weekday: 4, fromSec: comparison.t0, series: comparison, routes: null }],
+    series, routes, comparison, events: [], clock, frames, view: createViewStore(), data: { get: vi.fn(), url: (r: { path: string } | string) => String(typeof r === 'string' ? r : r.path) },
+    comparisons: [{ id: 'cet-0924', day: '2026-09-24', weekday: 4, fromSec: SNIMKA_COMPARISONS[0].fromSec, series: comparison, routes: buildComparisonRoutes() }],
     layers: createLayerStore({ compare: false }), lagano: false, reducedMotion: false, theme: { resolved: () => 'light', onChange: () => () => {} }, doc: document,
   } as unknown as SnimkaContext;
   return { ctx, clock, frames };
@@ -171,16 +172,16 @@ afterAll(async () => {
 afterEach(() => { if (page) document.body.innerHTML = ''; });
 
 describe('mountStrip', () => {
-  it('draws six panels, each with a legend in words and its table of hours', () => {
+  it('draws its panels, each with a legend in words and its table of hours, the heatmap last', () => {
     const { ctx } = context(MARKS.monday0745 * 1000);
     const root = document.createElement('div');
     root.setAttribute('aria-busy', 'true');
     document.body.append(root);
     const off = mountStrip(ctx, root);
     const panels = [...root.querySelectorAll<HTMLElement>('.sn-panel')].map((p) => p.dataset.panel);
-    expect(panels).toEqual(['fleet', 'state', 'bikes', 'feed', 'ghosts', 'news']);
+    expect(panels).toEqual(['fleet', 'state', 'bikes', 'feed', 'weather', 'ghosts', 'news', 'lines']);
     expect(root.hasAttribute('aria-busy')).toBe(false);
-    for (const p of root.querySelectorAll('.sn-panel')) {
+    for (const p of root.querySelectorAll('.sn-panel:not([data-panel="lines"])')) {
       expect(p.querySelector('.st-table summary')?.textContent).toBe('Brojevi po satu');
       expect(p.querySelectorAll('.st-table tbody tr').length).toBe(112);
     }
@@ -196,7 +197,7 @@ describe('mountStrip', () => {
     document.body.append(root);
     const off = mountStrip(ctx, root);
     const cursors = [...root.querySelectorAll<HTMLElement>('.sn-cursor')];
-    expect(cursors.length).toBe(7); // fleet, state, two bike plots, feed, ghosts, news
+    expect(cursors.length).toBe(11); // fleet with its tram and bus plots, state, two bike plots, two feed plots, weather, ghosts, news
     expect(cursors.every((c) => c.style.transform === 'translateX(0.0000%)')).toBe(true);
     frames.emit(END);
     expect(cursors.every((c) => c.style.transform === 'translateX(100.0000%)')).toBe(true);
@@ -283,9 +284,57 @@ describe('mountStrip', () => {
     const root = document.createElement('div');
     document.body.append(root);
     const handle = renderStrip(root, { series: bare, comparison: null, startMs: START, endMs: END, serviceLiveFromSec: MARKS.serviceLive, compare: false, onSeek: () => {} });
-    expect([...root.querySelectorAll<HTMLElement>('.sn-panel')].map((p) => p.dataset.panel)).toEqual(['fleet', 'state', 'feed']);
+    expect([...root.querySelectorAll<HTMLElement>('.sn-panel')].map((p) => p.dataset.panel)).toEqual(['fleet', 'state', 'feed', 'weather']);
     handle.setReadout(MARKS.monday0745 * 1000);
     expect(root.querySelector('.sn-strip-readout')!.textContent).not.toContain('bicikli');
     handle.destroy();
+  });
+});
+
+describe('the v2 additions', () => {
+  it('comparisonColumn sets Monday against Monday 21 September and every other day against Thursday 24 (S-12)', () => {
+    const mon = buildComparisonSeries(SNIMKA_COMPARISONS[1]);
+    const ctx = { comparisons: [
+      { id: 'cet-0924', day: '2026-09-24', weekday: 4 as const, fromSec: SNIMKA_COMPARISONS[0].fromSec, series: comparison, routes },
+      { id: 'pon-0921', day: '2026-09-21', weekday: 1 as const, fromSec: SNIMKA_COMPARISONS[1].fromSec, series: mon, routes },
+    ] };
+    const col = comparisonColumn(ctx, series, (c) => c.seen.all);
+    expect(col).toHaveLength(series.n);
+    expect(col[minuteOf(MARKS.monday0745)]).toBe(mon.seen.all[7 * 60 + 45]);
+    expect(col[minuteOf(MARKS.thursday0745)]).toBe(comparison.seen.all[7 * 60 + 45]);
+    expect(comparisonColumn({ comparisons: [] }, series, (c) => c.seen.all).every((v) => v === null)).toBe(true);
+  });
+  it('the frozen lane reads feed.frozen, the header age only where an old series lacks the column', () => {
+    expect(frozenMinute(series, minuteOf(MARKS.feedFrozenFrom))).toBe(true);
+    expect(frozenMinute(series, minuteOf(MARKS.monday0745))).toBe(false);
+    const old = { ...series, feed: { ...series.feed, frozen: undefined as unknown as typeof series.feed.frozen } };
+    expect(frozenMinute(old, minuteOf(MARKS.feedFrozenFrom) + 10)).toBe(true);
+    expect(frozenMinute(old, minuteOf(MARKS.monday0745))).toBe(false);
+  });
+  it('the fleet panel carries trams and buses, ZET\'s panel the depot lane and the future ticks, the weather its words; panel 7 is the heatmap', () => {
+    const { ctx } = context(MARKS.monday0745 * 1000);
+    const root = document.createElement('div');
+    document.body.append(root);
+    const off = mountStrip(ctx, root);
+    const fleet = root.querySelector<HTMLElement>('[data-panel="fleet"]')!;
+    expect([...fleet.querySelectorAll('.sn-subplot-title')].map((t) => t.textContent)).toEqual(['Tramvaji', 'Autobusi']);
+    expect(fleet.querySelector('[data-plot="fleet-tram"] path.sn-line-seen')!.getAttribute('d')).toBe(linePath(series.seen.tram, Math.max(...[...series.seen.tram, ...series.expected.tram].map((v) => v ?? 0))));
+    const feed = root.querySelector<HTMLElement>('[data-panel="feed"]')!;
+    expect(feed.querySelector('.st-legend')!.textContent).toContain('u spremištu');
+    expect(feed.querySelector('.st-legend')!.textContent).toContain('vrijeme unaprijed');
+    expect(feed.querySelectorAll('[data-lane="depot"] .sn-panel-depot-on').length).toBeGreaterThan(0);
+    const future = series.feed.rejectedFuture.filter((v) => (v ?? 0) > 0).length;
+    expect(feed.querySelectorAll('[data-lane="future"] .sn-panel-tick')).toHaveLength(future);
+    const frozen = feed.querySelectorAll('[data-lane="frozen"] .sn-feed-frozen-on');
+    expect(frozen.length).toBe(1);
+    const weather = root.querySelector<HTMLElement>('[data-panel="weather"]')!;
+    expect(weather.querySelector('h3')!.textContent).toBe('Temperatura i vrijeme');
+    expect(weather.querySelectorAll('.sn-panel-word').length).toBeGreaterThan(0);
+    expect(weather.querySelectorAll('.st-table tbody tr')).toHaveLength(series.hourly.n);
+    const lines = root.querySelector<HTMLElement>('[data-panel="lines"]')!;
+    expect(lines.querySelector('h3')!.textContent).toBe('Sve linije, svaki sat');
+    expect(lines.querySelector('[data-sn-heatmap]')).not.toBeNull();
+    off();
+    expect(root.querySelector('[data-sn-heatmap]')).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
-// Tijek: six small multiples on one shared 84-hour axis, one cursor that
+// Tijek: small multiples on one shared 112-hour axis (the window of the
+// contract), one cursor that
 // follows the replay clock, and a readout line of real text. Curves are
 // inline SVG paths drawn once at mount (viewBox in minutes, strokes that do
 // not scale); bands and marks are HTML spans placed by percent. Per frame the
@@ -8,11 +9,17 @@
 // seeking; hovering shows the values at the pointer without moving anything.
 //
 // Every panel says what it draws in words (a legend with a mark beside each
-// word) and carries its numbers in a table, "Brojevi po satu".
+// word) and carries its numbers in a table, "Brojevi po satu". The fleet
+// panel carries trams and buses as two sub-plots, the weather has its own
+// plot, ZET's data panel adds the depot lane and the future-stamp ticks, the
+// frozen lane reads feed.frozen (FROZEN_AFTER_S 180, S-19), and panel 7 is
+// the heatmap "Sve linije, svaki sat" (heatmap.ts). The normal day is the
+// weekday-matched comparison per minute (context.ts comparisonMinute, S-12).
 import { ZAGREB_OFFSET_S, type Col, type SeriesFile, type SnimkaState } from '../../../shared/snimka';
 import { columns, hideTip, showTip, tableDetails } from '../statistika/charts';
 import { escapeHtml } from '../ui/dom/escape';
-import type { SnimkaContext } from './context';
+import { comparisonFor, comparisonMinute as contextComparisonMinute, type SnimkaContext } from './context';
+import { mountHeatmap } from './heatmap';
 import { num, zagrebClock, zagrebDateTime, zagrebDay } from './format';
 import { FROZEN_AFTER_S, frozenAt, ghostSeries, midnightOf } from './reckoning';
 import { SN, fill } from './strings';
@@ -179,7 +186,31 @@ export function comparisonMinute(c: SeriesFile, tMs: number): number | null {
   return m >= 0 && m < c.n ? m : null;
 }
 
-export interface ReadoutInput { series: SeriesFile; comparison: SeriesFile | null; compare: boolean; serviceLiveFromSec: number }
+/** A comparison column aligned to the window by time of day, the weekday-matched day per minute (S-12); null where the day lacks the minute. */
+export function comparisonColumn(ctx: Pick<SnimkaContext, 'comparisons'>, s: Pick<SeriesFile, 't0' | 'n'>, pick: (c: SeriesFile) => Col<number>): (number | null)[] {
+  const out: (number | null)[] = new Array<number | null>(s.n).fill(null);
+  if (!ctx.comparisons.length) return out;
+  for (let m = 0; m < s.n; m++) {
+    const atSec = s.t0 + m * 60;
+    const cm = contextComparisonMinute(ctx, atSec);
+    out[m] = cm === null ? null : (pick(comparisonFor(ctx, atSec).series)[cm] ?? null);
+  }
+  return out;
+}
+
+/** A minute the series marks frozen (feed.frozen, S-19); the header age where an old series has no column. */
+export function frozenMinute(s: SeriesFile, m: number): boolean | null {
+  const f = s.feed.frozen?.[m];
+  if (f !== undefined && f !== null) return f === 1;
+  const age = s.feed.headerAgeS[m];
+  return age === null || age === undefined ? null : isFrozen(age);
+}
+
+export interface ReadoutInput {
+  series: SeriesFile; comparison: SeriesFile | null; compare: boolean; serviceLiveFromSec: number;
+  /** The normal day's fleet per window minute (comparisonColumn); when given it replaces the one comparison series. */
+  compareCol?: readonly (number | null)[] | null;
+}
 
 /** The values of every panel at an instant, as words: "u pokretu 5, po voznom redu 230, ...". */
 export function readoutValues(o: ReadoutInput, tMs: number): string[] {
@@ -188,7 +219,8 @@ export function readoutValues(o: ReadoutInput, tMs: number): string[] {
   const nv = SN.strip.noValue;
   const n = (label: string, v: number | null): string => `${label} ${v === null ? nv : num(v)}`;
   const out = [n(SN.strip.fleetSeen, value(s.seen.all, m)), n(SN.strip.fleetExpected, value(s.expected.all, m))];
-  if (o.compare && o.comparison) {
+  if (o.compare && o.compareCol) out.push(n(SN.strip.fleetCompare, o.compareCol[m] ?? null));
+  else if (o.compare && o.comparison) {
     const cm = comparisonMinute(o.comparison, tMs);
     out.push(n(SN.strip.fleetCompare, cm === null ? null : value(o.comparison.seen.all, cm)));
   }
@@ -204,7 +236,7 @@ export function readoutValues(o: ReadoutInput, tMs: number): string[] {
   if (entities === null && age === null) out.push(`${SN.strip.feed} ${nv}`);
   else {
     if (entities === 0) out.push(`${SN.strip.feed} ${SN.strip.feedEmpty}`);
-    if (isFrozen(age)) out.push(`${SN.strip.feed} ${SN.strip.feedFrozen}`);
+    if (frozenMinute(s, m)) out.push(`${SN.strip.feed} ${SN.strip.feedFrozen}`);
   }
   if (s.published) out.push(n(SN.strip.productScreen, value(s.published.vehicles, m)));
   const pulse = s.hourly.newsPulse;
@@ -327,7 +359,15 @@ export interface StripHandle {
 }
 
 /** Builds Tijek into its slot. The clock and the layers are wired by mountStrip. */
-export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparison: SeriesFile | null; startMs: number; endMs: number; serviceLiveFromSec: number; compare: boolean; onSeek: (tMs: number) => void }): StripHandle {
+export interface StripOptions {
+  series: SeriesFile; comparison: SeriesFile | null; startMs: number; endMs: number; serviceLiveFromSec: number; compare: boolean; onSeek: (tMs: number) => void;
+  /** The weekday-matched normal day per window minute, for all vehicles, trams and buses (comparisonColumn); the one comparison series otherwise. */
+  compareCols?: { all: readonly (number | null)[]; tram: readonly (number | null)[]; bus: readonly (number | null)[] } | null;
+  /** Panel 7 (the heatmap), built by the caller into the element it is given. */
+  lines?: ((host: HTMLElement) => void) | null;
+}
+
+export function renderStrip(root: HTMLElement, o: StripOptions): StripHandle {
   const s = o.series;
   const n = s.n;
   const days = dayLines(o.startMs, o.endMs);
@@ -339,8 +379,8 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
   const seenCell = (m: number): string => (s.seen.all[m] === null && frozenAt(s, m) ? SN.reckoning.feedFrozen : cell(s.seen.all[m]));
 
   // 1. Vehicles in motion: seen (the line that matters), the timetable as a grey silhouette, the normal day as a grey line.
-  const compareCol: (number | null)[] = new Array(n).fill(null);
-  if (o.comparison) {
+  const compareCol: (number | null)[] = o.compareCols ? [...o.compareCols.all] : new Array(n).fill(null);
+  if (!o.compareCols && o.comparison) {
     for (let m = 0; m < n; m++) {
       const cm = comparisonMinute(o.comparison, (s.t0 + m * 60) * 1000);
       compareCol[m] = cm === null ? null : (o.comparison.seen.all[cm] ?? null);
@@ -355,7 +395,21 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
     { d: areaPath(s.expected.all, fleetMax), cls: 'sn-area-expected' },
     { d: linePath(compareCol, fleetMax), cls: 'sn-line-compare', layer: 'compare' },
     { d: linePath(s.seen.all, fleetMax), cls: 'sn-line-seen' },
-  ])], days, num(fleetMax), 'tall'))], tableDetails(`${S.fleet}, ${S.table}`, [S.hour, S.fleetSeen, S.fleetExpected, S.fleetCompare], hourRows(s, (m) => [seenCell(m), cell(s.expected.all[m]), cell(compareCol[m])]), S.table));
+  ])], days, num(fleetMax), 'tall'))], tableDetails(`${S.fleet}, ${S.table}`, [S.hour, S.fleetSeen, S.fleetExpected, S.fleetCompare, S.tram, S.bus], hourRows(s, (m) => [seenCell(m), cell(s.expected.all[m]), cell(compareCol[m]), cell(s.seen.tram[m]), cell(s.seen.bus[m])]), S.table),
+  // Trams and buses: two sub-plots, each on its own scale (never a second axis on one plot).
+  (['tram', 'bus'] as const).flatMap((mode) => {
+    const normal = o.compareCols ? o.compareCols[mode] : null;
+    const max = colMax(s.seen[mode], s.expected[mode], normal);
+    const title = document.createElement('p');
+    title.className = 'sn-subplot-title';
+    title.dataset.mode = mode;
+    title.textContent = mode === 'tram' ? S.tram : S.bus;
+    return [title, keep(plot(`fleet-${mode}`, [svg(n, [
+      { d: areaPath(s.expected[mode], max), cls: 'sn-area-expected' },
+      ...(normal ? [{ d: linePath(normal, max), cls: 'sn-line-compare', layer: 'compare' }] : []),
+      { d: linePath(s.seen[mode], max), cls: 'sn-line-seen' },
+    ])], days, num(max), 'short'))];
+  }));
 
   // 2. The service state: one band, a hatch where the machine held its verdict, an overlay where it was computed afterwards.
   const liveFrom = Math.max(0, Math.min(n, Math.ceil((o.serviceLiveFromSec - s.t0) / 60)));
@@ -399,7 +453,10 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
 
   // 4. ZET's data: two lanes of marks, the minutes it carried no vehicle and the minutes it did not change.
   const emptyRuns = runsOf<'on'>(n, (m) => (s.feed.entities[m] === 0 ? 'on' : null));
-  const frozenRuns = runsOf<'on'>(n, (m) => (isFrozen(s.feed.headerAgeS[m]) ? 'on' : null));
+  const frozenRuns = runsOf<'on'>(n, (m) => (frozenMinute(s, m) ? 'on' : null));
+  const depotRuns = runsOf<'on'>(n, (m) => ((s.feed.hiddenDepot[m] ?? 0) > 0 ? 'on' : null));
+  const futureTicks: number[] = [];
+  for (let m = 0; m < n; m++) if ((s.feed.rejectedFuture[m] ?? 0) > 0) futureTicks.push(m);
   const minutesIn = (m0: number, test: (m: number) => boolean | null): string => {
     let seen = 0;
     let c = 0;
@@ -411,16 +468,69 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
     }
     return seen === 0 ? S.noValue : `${num(c)} min`;
   };
+  const depotMax = colMax(s.feed.hiddenDepot);
   const feedPanel = panel('feed', S.feed, [
     { kind: 'mark', tone: 'sn-tone-feed-empty', label: S.feedEmpty },
     { kind: 'mark', tone: 'sn-tone-feed-frozen', label: S.feedFrozen },
+    { kind: 'mark', tone: 'sn-panel-tone-depot', label: S.feedDepot },
+    { kind: 'mark', tone: 'sn-panel-tone-future', label: S.feedFuture },
   ], [keep(plot('feed', [
     `<div class="sn-lane" data-lane="empty">${bandSpans(emptyRuns, n, 'sn-feed-empty')}</div>`,
     `<div class="sn-lane" data-lane="frozen">${bandSpans(frozenRuns, n, 'sn-feed-frozen')}</div>`,
-  ], days, null, 'lane'))], tableDetails(`${S.feed}, ${S.table}`, [S.hour, S.feedEmpty, S.feedFrozen], hourRows(s, (m) => [
-    minutesIn(m, (k) => (s.feed.entities[k] === null || s.feed.entities[k] === undefined ? null : s.feed.entities[k] === 0)),
-    minutesIn(m, (k) => (s.feed.headerAgeS[k] === null || s.feed.headerAgeS[k] === undefined ? null : isFrozen(s.feed.headerAgeS[k]))),
-  ]), S.table));
+  ], days, null, 'lane')), keep(plot('feed-depot', [
+    `<div class="sn-panel-lane" data-lane="depot">${bandSpans(depotRuns, n, 'sn-panel-depot')}</div>`,
+    `<div class="sn-panel-lane" data-lane="future">${futureTicks.map((m) => `<span class="sn-panel-tick" style="--x:${(m / n).toFixed(5)}"></span>`).join('')}</div>`,
+  ], days, depotMax > 0 ? num(depotMax) : null, 'lane'))], tableDetails(`${S.feed}, ${S.table}`, [S.hour, S.feedEmpty, S.feedFrozen, S.feedDepot, S.feedFuture], hourRows(s, (m) => {
+    let depot: number | null = null;
+    let future: number | null = null;
+    for (let k = m; k < Math.min(n, m + 60); k++) {
+      const d = s.feed.hiddenDepot[k];
+      if (d !== null && d !== undefined) depot = Math.max(depot ?? 0, d);
+      const f = s.feed.rejectedFuture[k];
+      if (f !== null && f !== undefined) future = (future ?? 0) + (f > 0 ? 1 : 0);
+    }
+    return [
+      minutesIn(m, (k) => (s.feed.entities[k] === null || s.feed.entities[k] === undefined ? null : s.feed.entities[k] === 0)),
+      minutesIn(m, (k) => frozenMinute(s, k)),
+      cell(depot),
+      future === null ? S.noValue : `${num(future)} min`,
+    ];
+  }), S.table));
+
+  // The weather: DHMZ's hourly temperature as one line, the words at each change written on the plot.
+  let weather: HTMLElement | null = null;
+  const hr = s.hourly;
+  if (hr.n > 0 && hr.tempC.some((v) => v !== null && v !== undefined)) {
+    const known = hr.tempC.filter((v): v is number => v !== null && v !== undefined);
+    const lo = Math.floor(Math.min(...known)) - 1;
+    const shifted = hr.tempC.map((v) => (v === null || v === undefined ? null : v - lo));
+    const max = colMax(shifted);
+    const words: string[] = [];
+    let prev: string | null = null;
+    let lastAt = -Infinity;
+    hr.weather.forEach((w, h) => {
+      if (!w || w === prev) return;
+      prev = w;
+      if (h - lastAt < 6) return;
+      lastAt = h;
+      words.push(`<span class="sn-panel-word" style="--x:${((h + 0.5) / hr.n).toFixed(5)}">${escapeHtml(w)}</span>`);
+    });
+    const temps = svg(hr.n, [{ d: linePath(shifted, max), cls: 'sn-line-seen sn-panel-line-temp' }]);
+    weather = panel('weather', S.weather, null, [keep(plot('weather', [temps, ...words], days, `${num(lo + max)} °C`, 'short'))],
+      tableDetails(`${S.weather}, ${S.table}`, [S.hour, S.weather, SN.panel.weather], hr.tempC.map((t, h) => [
+        zagrebDateTime((hr.t0 + h * 3600) * 1000), t === null || t === undefined ? S.noValue : `${num(Math.round(t))} °C`, hr.weather[h] ?? S.noValue,
+      ]), S.table));
+  }
+
+  // 7. Sve linije, svaki sat: the heatmap, drawn by the caller (it needs the page's context).
+  let lines: HTMLElement | null = null;
+  if (o.lines) {
+    const host = document.createElement('div');
+    host.className = 'sn-panel-strip-lines';
+    lines = panel('lines', S.lines, null, [host], document.createElement('div'));
+    lines.querySelector(':scope > div:last-child')?.remove();
+    o.lines(host);
+  }
 
   // 5. The vehicles the screen counted that had no position: published minus seen, on its own small scale, only in
   // the minutes where the difference cannot be the lag between two samples or the hold of a shrinking fleet (reckoning.ts ghostSeries).
@@ -486,11 +596,11 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
   frame.setAttribute('role', 'group');
   frame.setAttribute('aria-label', S.plotsLabel);
   frame.setAttribute('aria-describedby', readout.id);
-  frame.append(axis, fleet, statePanel, ...(bikes ? [bikes] : []), feedPanel, ...(ghosts ? [ghosts] : []), ...(news ? [news] : []));
+  frame.append(axis, fleet, statePanel, ...(bikes ? [bikes] : []), feedPanel, ...(weather ? [weather] : []), ...(ghosts ? [ghosts] : []), ...(news ? [news] : []), ...(lines ? [lines] : []));
   root.replaceChildren(frame, readout);
   root.removeAttribute('aria-busy');
 
-  const readoutInput = (): ReadoutInput => ({ series: s, comparison: o.comparison, compare, serviceLiveFromSec: o.serviceLiveFromSec });
+  const readoutInput = (): ReadoutInput => ({ series: s, comparison: o.comparison, compare, serviceLiveFromSec: o.serviceLiveFromSec, compareCol: o.compareCols?.all ?? null });
   const applyCompare = (): void => {
     frame.dataset.compare = compare ? 'on' : 'off';
     for (const el of frame.querySelectorAll<Element>('[data-series="compare"]')) {
@@ -602,6 +712,7 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
 
 /** Tijek on the page: the strip wired to the clock (cursor every frame, readout on pause and seek) and the layers. */
 export function mountStrip(ctx: SnimkaContext, root: HTMLElement): () => void {
+  let heatmapOff: (() => void) | null = null;
   const handle = renderStrip(root, {
     series: ctx.series,
     comparison: ctx.comparisons.find((c) => c.id === 'cet-0924')?.series ?? ctx.comparisons[0]?.series ?? null,
@@ -609,6 +720,12 @@ export function mountStrip(ctx: SnimkaContext, root: HTMLElement): () => void {
     endMs: ctx.clock.end,
     serviceLiveFromSec: ctx.manifest.serviceLiveFromSec,
     compare: ctx.layers.get().compare,
+    compareCols: ctx.comparisons.length ? {
+      all: comparisonColumn(ctx, ctx.series, (c) => c.seen.all),
+      tram: comparisonColumn(ctx, ctx.series, (c) => c.seen.tram),
+      bus: comparisonColumn(ctx, ctx.series, (c) => c.seen.bus),
+    } : null,
+    lines: (host) => { heatmapOff = mountHeatmap(ctx, host); },
     onSeek: (t) => {
       ctx.clock.pause();
       ctx.clock.seek(t);
@@ -632,6 +749,7 @@ export function mountStrip(ctx: SnimkaContext, root: HTMLElement): () => void {
     offFrames();
     offTick();
     offLayers();
+    heatmapOff?.();
     handle.destroy();
   };
 }

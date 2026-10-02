@@ -1,1 +1,226 @@
-/* snimka-panels.css: the panel deck of the instrument (faces, the expansion grammar, depth charts, the spot pulse). Owner: lane V3; class prefixes sn-deck-, sn-panel-, sn-tl-. */
+/* snimka-panels.css: the panel deck of the instrument (faces, the expansion grammar, depth charts, the spot pulse), the heatmap
+   "Sve linije, svaki sat" and the timeline bar. Owner: lane V3; class prefixes sn-deck-, sn-panel-, sn-tl-, sn-ro-, sn-hm-,
+   sn-present-. Glass panels on color-mix(in oklab, var(--tone-glass-bg) 84%, transparent) with a hairline glass stroke and a
+   blur where supported; radii 14/18; every value in tabular numerals; motion 140/180/220 ms; nothing moves under reduced
+   motion. The heatmap ramp is five steps from --tone-surface-3 to --tone-action-brand, mixed in OKLab at 32, 49, 66, 83 and
+   100 %, validated with the dataviz validator (ordinal: monotone lightness, one hue, light end at least 2:1 on the surface)
+   in both themes: light #97b4e0 #769cd9 #5584d1 #336bc8 #0751bf (2.06:1 on #fbfcfe), dark #4c6689 #5a79a5 #678dc2 #76a1e0
+   #84b5ff (2.67:1 on #192430, 2.26:1 on the glass #23313f). */
+
+/* ---- the deck --------------------------------------------------------------------------------------------- */
+.sn-deck { --sn-deck-glass: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: row dense; gap: var(--sp-2); font-variant-numeric: tabular-nums; }
+.sn-deck-item { position: relative; min-inline-size: 0; border-radius: var(--r-lg); background: var(--sn-deck-glass); border: 1px solid var(--tone-glass-stroke); transition: opacity var(--dur-base) var(--ease); }
+@supports (backdrop-filter: blur(8px)) { .sn-deck-item { backdrop-filter: blur(8px); } }
+.sn-deck-item[data-panel='poglavlja'] { grid-column: 1 / -1; }
+.sn-deck-item[data-expanded] { grid-column: 1 / -1; grid-row: span 3; border-color: var(--tone-stroke-strong); animation: sn-panel-settle var(--dur-base) var(--ease-enter); }
+/* Beside an open panel the others recede by their glass, never by their words' contrast (they keep ticking and stay readable). */
+.sn-deck-item[data-dim] { background: color-mix(in oklab, var(--tone-glass-bg) 40%, transparent); border-color: transparent; }
+@keyframes sn-panel-settle { from { opacity: 0.4; } to { opacity: 1; } }
+
+/* A face: one button, the panel's name, one figure, one subline. */
+.sn-panel-face { display: grid; align-content: start; gap: 0.125rem; inline-size: 100%; min-block-size: var(--target); padding: var(--sp-2) var(--sp-3); border: 0; border-radius: inherit; background: transparent; color: var(--tone-text-primary); font: inherit; text-align: start; cursor: pointer; touch-action: manipulation; }
+.sn-panel-face:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; }
+@media (hover: hover) { .sn-panel-face:hover { background: color-mix(in oklab, var(--tone-surface-2) 60%, transparent); } }
+.sn-deck-item[data-expanded] .sn-panel-face { border-end-start-radius: 0; border-end-end-radius: 0; border-block-end: 1px solid var(--tone-stroke); }
+.sn-panel-name { font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
+.sn-panel-fig { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1); font-size: var(--type-tile-m); font-weight: var(--weight-bold); line-height: 1.2; font-variant-numeric: tabular-nums; }
+.sn-panel-num { font-size: var(--type-tile-l); letter-spacing: -0.02em; }
+.sn-panel-unit { font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
+.sn-panel-sub { font-size: var(--type-meta); color: var(--tone-text-muted); line-height: 1.35; font-variant-numeric: tabular-nums; }
+.sn-panel-badge { font-size: var(--type-secondary); }
+.sn-panel-retro { font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-text-muted); border: 1px dashed var(--tone-stroke-strong); border-radius: var(--r-xs); padding: 0.05rem 0.35rem; }
+.sn-panel-minis { display: block; min-block-size: 3.5rem; }
+.sn-panel-fig[data-spot], .sn-panel-face[data-spot] { border-radius: var(--r-sm); box-shadow: 0 0 0 2px var(--tone-action-brand); transition: box-shadow var(--dur-fast) var(--ease); }
+
+/* A depth: a region with its heading, a back button, the body, the way deeper. */
+.sn-panel-depth { display: grid; gap: var(--sp-3); padding: var(--sp-3); min-inline-size: 0; }
+.sn-panel-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.sn-panel-heading { margin: 0; font-size: var(--type-head); letter-spacing: -0.01em; }
+.sn-panel-heading:focus { outline: none; }
+.sn-panel-heading:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 2px; }
+.sn-panel-back { font-size: var(--type-control); }
+.sn-panel-body { display: grid; gap: var(--sp-2); min-inline-size: 0; }
+.sn-panel-foot { margin: 0; font-size: var(--type-control); }
+.sn-panel-deeper { display: inline-flex; align-items: center; min-block-size: var(--target); color: var(--tone-text-brand); font-weight: var(--weight-bold); }
+.sn-panel-subhead { margin: var(--sp-2) 0 0; font-size: var(--type-secondary); font-weight: var(--weight-bold); color: var(--tone-text-muted); }
+.sn-panel-caption, .sn-panel-note, .sn-panel-now, .sn-panel-datapath { margin: 0; font-size: var(--type-secondary); line-height: 1.5; }
+.sn-panel-note, .sn-panel-caption { color: var(--tone-text-muted); }
+.sn-panel-now, .sn-panel-datapath { font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+.sn-panel-rules { margin: 0; padding-inline-start: 1.1rem; display: grid; gap: var(--sp-1); font-size: var(--type-secondary); line-height: 1.5; }
+.sn-panel-clear { justify-self: start; font-size: var(--type-control); }
+.sn-panel-legend { font-size: var(--type-meta); }
+
+/* The depths' plots: curves in a viewBox of samples, hairline borders, the day lines, the scale, one cursor. */
+.sn-panel-plot { --sn-seen: var(--tone-action-brand); --sn-normal: var(--tone-text-muted); --sn-expected: color-mix(in oklab, var(--tone-text-muted) 22%, transparent); position: relative; block-size: 4rem; border-block: 1px solid var(--tone-stroke); overflow: clip visible; }
+.sn-panel-plot-tall { block-size: 7rem; }
+.sn-panel-plot-band { block-size: 1.75rem; border-block: 0; }
+.sn-panel-curves { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; overflow: visible; }
+.sn-panel-curves path { fill: none; stroke-width: 2px; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.sn-panel-line-seen { stroke: var(--sn-seen); }
+.sn-panel-line-normal { stroke: var(--sn-normal); stroke-dasharray: 4 3; }
+.sn-panel-curves .sn-panel-area-expected { fill: var(--sn-expected); stroke: none; }
+.sn-panel-line-bike { stroke: var(--tone-bike); }
+.sn-panel-curves .sn-panel-area-bike { fill: color-mix(in oklab, var(--tone-bike) 20%, transparent); stroke: none; }
+.sn-panel-line-temp { stroke: var(--tone-weather); }
+.sn-panel-dayline { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: 1px; background: var(--tone-stroke); pointer-events: none; }
+.sn-panel-scale { position: absolute; inset-block-start: 0.125rem; inset-inline-end: 0.25rem; font-size: var(--type-meta); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
+.sn-panel-scale-low { inset-block: auto 0.125rem; }
+.sn-panel-word { position: absolute; inset-block-end: 0.25rem; inset-inline-start: calc(var(--x) * 100%); max-inline-size: 8rem; font-size: var(--type-meta); color: var(--tone-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.sn-panel-cursor { position: absolute; z-index: 2; inset-block: -0.25rem; inset-inline-start: 0; inline-size: 100%; pointer-events: none; will-change: transform; }
+.sn-panel-cursor::before { content: ''; position: absolute; inset-block: 0; inset-inline-start: -1px; inline-size: 2px; background: var(--tone-text-primary); }
+.sn-panel-key { display: inline-block; inline-size: 0.875rem; block-size: 0.875rem; border-radius: 3px; background: var(--tone-stroke-strong); }
+.sn-panel-key-seen { block-size: 0.2rem; background: var(--tone-action-brand); }
+.sn-panel-key-expected { background: color-mix(in oklab, var(--tone-text-muted) 22%, transparent); }
+.sn-panel-key-normal { block-size: 0; border-block-start: 2px dashed var(--tone-text-muted); background: none; }
+.sn-panel-key-alive { block-size: 0.3rem; background: var(--tone-action-brand); }
+.sn-panel-key-dead { block-size: 0.2rem; background: var(--tone-text-subtle); }
+.sn-panel-key-quiet { block-size: 1px; background: var(--tone-stroke-strong); }
+
+/* The state band of the Stanje depth: a word and a shape per state in the legend, never colour alone. */
+.sn-panel-band { position: absolute; inset: 0; border-radius: 3px; background: var(--tone-surface-2); overflow: hidden; }
+.sn-panel-seg { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: calc(var(--w) * 100%); }
+.sn-panel-state-normal { background: color-mix(in oklab, var(--tone-state-success) 45%, var(--tone-surface-1)); }
+.sn-panel-state-reduced { background: color-mix(in oklab, var(--tone-state-warning) 75%, var(--tone-surface-1)); }
+.sn-panel-state-silent { background: var(--tone-state-danger); }
+.sn-panel-state-unknown { background: var(--tone-surface-3); }
+.sn-panel-state-none { background: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1px, transparent 1px 4px); }
+
+/* The stations of the Bicikli depth, emptiest first; each a button that makes it the subject. */
+.sn-panel-stations { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--tone-stroke); border-block: 1px solid var(--tone-stroke); }
+.sn-panel-station { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); inline-size: 100%; min-block-size: var(--target); padding: 0 var(--sp-2); border: 0; background: var(--tone-surface-1); color: var(--tone-text-primary); font: inherit; font-size: var(--type-secondary); text-align: start; cursor: pointer; }
+.sn-panel-station[aria-pressed='true'] { font-weight: var(--weight-bold); box-shadow: inset 3px 0 0 var(--tone-bike); }
+.sn-panel-station-n { font-variant-numeric: tabular-nums; color: var(--tone-text-muted); white-space: nowrap; }
+.sn-panel-minis-large { min-block-size: 10rem; }
+
+/* Lanes the shell adds to Tijek's ZET panel: vehicles in the depots, future stamps as 1 px ticks. */
+.sn-panel-lane { position: absolute; inset-inline: 0; block-size: 0.75rem; border-radius: 2px; background: var(--tone-surface-2); }
+.sn-panel-lane[data-lane='depot'] { inset-block-start: 0.25rem; }
+.sn-panel-lane[data-lane='future'] { inset-block-end: 0.25rem; }
+.sn-panel-depot-on { background: color-mix(in oklab, var(--tone-transit) 70%, var(--tone-text-primary)); }
+.sn-panel-tick { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: 1px; background: var(--tone-text-primary); }
+.sn-panel-tone-depot { --key: color-mix(in oklab, var(--tone-transit) 70%, var(--tone-text-primary)); background: var(--key); }
+.sn-panel-tone-future { inline-size: 2px; background: var(--tone-text-primary); }
+.sn-panel-strip-lines { min-inline-size: 0; }
+
+/* ---- the heatmap ------------------------------------------------------------------------------------------- */
+.sn-hm { --sn-hm-c0: color-mix(in oklab, var(--tone-action-brand) 32%, var(--tone-surface-3)); --sn-hm-c1: color-mix(in oklab, var(--tone-action-brand) 49%, var(--tone-surface-3)); --sn-hm-c2: color-mix(in oklab, var(--tone-action-brand) 66%, var(--tone-surface-3)); --sn-hm-c3: color-mix(in oklab, var(--tone-action-brand) 83%, var(--tone-surface-3)); --sn-hm-c4: var(--tone-action-brand); --sn-hm-gap: var(--tone-surface-1); --sn-hm-label-w: 3.25rem; display: grid; gap: var(--sp-2); min-inline-size: 0; font-variant-numeric: tabular-nums; }
+.sn-hm-lede { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); }
+.sn-hm-legend { font-size: var(--type-meta); }
+.sn-hm-key { display: inline-block; inline-size: 0.875rem; block-size: 0.875rem; border-radius: 2px; }
+.sn-hm-key-c0 { background: var(--sn-hm-c0); }
+.sn-hm-key-c1 { background: var(--sn-hm-c1); }
+.sn-hm-key-c2 { background: var(--sn-hm-c2); }
+.sn-hm-key-c3 { background: var(--sn-hm-c3); }
+.sn-hm-key-c4 { background: var(--sn-hm-c4); }
+.sn-hm-key-off { background: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1px, var(--tone-surface-2) 1px 4px); }
+.sn-hm-key-none { box-shadow: inset 0 0 0 1px var(--tone-stroke-strong); }
+.sn-hm-axis { position: relative; block-size: 1.1rem; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-hm-corner { position: sticky; inset-inline-start: 0; z-index: 2; background: var(--tone-surface-1); border-inline-end: 1px solid var(--tone-stroke); }
+.sn-hm-day { position: absolute; inset-inline-start: calc(var(--x) * 100%); white-space: nowrap; }
+.sn-hm-scroll { overflow-x: auto; overscroll-behavior-x: contain; border-radius: var(--r-sm); }
+.sn-hm-scroll:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 2px; }
+.sn-hm-grid { display: grid; grid-template-columns: var(--sn-hm-label-w) minmax(42rem, 1fr); min-inline-size: 0; }
+.sn-hm-labels { position: sticky; inset-inline-start: 0; z-index: 2; display: grid; grid-auto-rows: 1.5rem; background: var(--tone-surface-1); border-inline-end: 1px solid var(--tone-stroke); }
+.sn-hm-label { display: flex; align-items: stretch; min-inline-size: 0; }
+/* The group seams are drawn inside the row (a border would take a pixel from the 24 px target). */
+.sn-hm-label[data-kind='aggregate'], .sn-hm-label[data-kind='tram'] + .sn-hm-label[data-kind='strike'] { box-shadow: inset 0 1px 0 var(--tone-stroke-strong); }
+.sn-hm-row, .sn-hm-name { display: flex; align-items: center; inline-size: 100%; padding: 0 var(--sp-2); font-size: var(--type-meta); font-weight: var(--weight-bold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sn-hm-row { border: 0; background: transparent; color: var(--tone-text-primary); font-family: inherit; cursor: pointer; }
+.sn-hm-row:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; }
+@media (hover: hover) { .sn-hm-row:hover { background: var(--tone-surface-2); } }
+.sn-hm-name { color: var(--tone-text-muted); font-weight: var(--weight-medium); }
+.sn-hm-plot { position: relative; block-size: calc(var(--rows) * 1.5rem); cursor: crosshair; }
+.sn-hm-svg { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
+.sn-hm-svg rect { stroke: var(--sn-hm-gap); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.sn-hm-c0 { fill: var(--sn-hm-c0); }
+.sn-hm-c1 { fill: var(--sn-hm-c1); }
+.sn-hm-c2 { fill: var(--sn-hm-c2); }
+.sn-hm-c3 { fill: var(--sn-hm-c3); }
+.sn-hm-c4 { fill: var(--sn-hm-c4); }
+.sn-hm-hatch-bg { fill: var(--tone-surface-2); stroke: none !important; }
+.sn-hm-hatch-line { stroke: var(--tone-stroke-strong); stroke-width: 1.5; }
+.sn-hm-days { position: absolute; inset: 0; pointer-events: none; }
+.sn-hm-dayline { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: 2px; translate: -1px 0; background: var(--tone-surface-1); }
+.sn-hm-cursor { position: absolute; z-index: 1; inset-block: -0.25rem; inset-inline-start: calc(var(--x, 0) * 100%); inline-size: 2px; translate: -1px 0; background: var(--tone-text-primary); pointer-events: none; }
+.sn-hm-more > summary { min-block-size: var(--target); display: flex; align-items: center; font-size: var(--type-control); font-weight: var(--weight-bold); cursor: pointer; }
+
+/* ---- the timeline bar ---------------------------------------------------------------------------------------- */
+.sn-tl { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "controls scrub tail"; align-items: center; gap: var(--sp-1) var(--sp-4); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); border: 1px solid var(--tone-glass-stroke); font-variant-numeric: tabular-nums; }
+@supports (backdrop-filter: blur(8px)) { .sn-tl { backdrop-filter: blur(8px); } }
+.sn-tl-controls { grid-area: controls; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.sn-tl-play { min-inline-size: 7rem; }
+.sn-tl-chapters { display: inline-flex; gap: var(--sp-1); }
+.sn-tl-chapter { inline-size: var(--target); padding: 0; font-size: var(--type-head); line-height: 1; }
+.sn-tl-speed { display: flex; gap: 0.125rem; padding: 0.125rem; border-radius: var(--r-md); background: var(--tone-surface-2); }
+.sn-tl-seg { min-block-size: var(--target); padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; touch-action: manipulation; }
+.sn-tl-seg[aria-pressed='true'] { background: var(--tone-surface-1); color: var(--tone-text-primary); font-weight: var(--weight-bold); box-shadow: var(--tone-shadow-soft); }
+@media (hover: hover) { .sn-tl-seg:not([aria-pressed='true']):hover { color: var(--tone-text-primary); } }
+.sn-tl-pick { display: none; }
+.sn-tl-select { min-block-size: var(--target); padding-inline: var(--sp-3); font: inherit; font-size: var(--type-control); font-weight: var(--weight-bold); border-radius: var(--r-md); background: var(--tone-surface-2); border: 1px solid transparent; color: var(--tone-text-primary); }
+.sn-tl-scrub { grid-area: scrub; display: grid; min-inline-size: 0; }
+.sn-tl-range { inline-size: 100%; min-block-size: var(--target); margin: 0; accent-color: var(--tone-action-brand); cursor: pointer; }
+/* The lanes sit under the native range, inset by half its thumb so a tick lines up with the thumb's centre. */
+.sn-tl-lanes { position: relative; display: grid; gap: 2px; margin-inline: 0.5rem; }
+.sn-tl-fleet { position: relative; block-size: 1.5rem; }
+.sn-tl-svg { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
+.sn-tl-svg path { vector-effect: non-scaling-stroke; }
+.sn-tl-expected { fill: color-mix(in oklab, var(--tone-text-muted) 22%, transparent); stroke: none; }
+.sn-tl-seen { fill: none; stroke: var(--tone-action-brand); stroke-width: 1.5px; stroke-linejoin: round; }
+.sn-tl-band { position: relative; block-size: 0.375rem; border-radius: 2px; background: var(--tone-surface-2); overflow: hidden; }
+.sn-tl-seg-state { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: calc(var(--w) * 100%); }
+.sn-tl-state-normal { background: color-mix(in oklab, var(--tone-state-success) 45%, var(--tone-surface-1)); }
+.sn-tl-state-reduced { background: color-mix(in oklab, var(--tone-state-warning) 75%, var(--tone-surface-1)); }
+.sn-tl-state-silent { background: var(--tone-state-danger); }
+.sn-tl-state-unknown { background: var(--tone-surface-3); }
+.sn-tl-state-none { background: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1px, transparent 1px 3px); }
+.sn-tl-ticks { position: relative; block-size: 0.375rem; }
+.sn-tl-tick { position: absolute; inset-block: 0; inset-inline-start: var(--x); inline-size: 1px; background: var(--tone-text-primary); }
+.sn-tl-ticks[data-lane='notice'] .sn-tl-tick { background: var(--tone-text-muted); }
+.sn-tl-ticks[data-lane='press'] .sn-tl-tick { background: var(--tone-text-subtle); }
+.sn-tl-daylines { position: absolute; inset: 0; pointer-events: none; }
+.sn-tl-dayline { position: absolute; inset-block: 0; inset-inline-start: var(--x); inline-size: 1px; background: var(--tone-stroke-strong); }
+.sn-tl-cursor { position: absolute; inset-block: -0.125rem; inset-inline: 0; pointer-events: none; will-change: transform; }
+.sn-tl-cursor::before { content: ''; position: absolute; inset-block: 0; inset-inline-start: -1px; inline-size: 2px; background: var(--tone-text-primary); }
+.sn-tl-dayrow { position: relative; block-size: 1rem; margin-inline: 0.5rem; }
+.sn-tl-days { position: absolute; inset: 0; }
+.sn-tl-day { position: absolute; inset-inline-start: var(--x); font-size: var(--type-meta); color: var(--tone-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sn-tl-tail { grid-area: tail; display: flex; align-items: center; gap: var(--sp-2); }
+.sn-tl-present { font-size: var(--type-control); }
+.sn-tl-present-glyph { font-size: 1.1em; line-height: 1; }
+/* The status line is the bar's spoken word (role status); the plate already shows the instant, so it is not drawn twice. */
+.sn-tl-status { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
+.sn-tl-reduced { grid-column: 1 / -1; margin: 0; font-size: var(--type-meta); }
+
+/* Narrower: the controls over the scrubber. */
+@media (max-width: 75rem) {
+  .sn-tl { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "controls tail" "scrub scrub"; }
+}
+/* A phone: the deck's panels join the swipe row (stage.css), the speed is a native select, the day labels shorten. */
+@media (max-width: 40rem) {
+  .sn-deck { display: contents; }
+  .sn-deck-item, .sn-deck-item[data-expanded] { flex: 0 0 86vw; max-block-size: 70vh; overflow-y: auto; scroll-snap-align: start; grid-row: auto; }
+  .sn-tl { border-radius: var(--r-lg) var(--r-lg) 0 0; padding: var(--sp-2); gap: var(--sp-1) var(--sp-2); }
+  .sn-tl-speed { display: none; }
+  .sn-tl-pick { display: block; }
+  .sn-tl-controls { flex-wrap: nowrap; gap: var(--sp-1); }
+  .sn-tl-play { min-inline-size: 0; flex: 1 1 5rem; padding-inline: var(--sp-2); }
+  .sn-tl-select { padding-inline: var(--sp-2); max-inline-size: 7rem; }
+  .sn-tl-present { inline-size: var(--target); padding: 0; }
+  .sn-tl-present-text { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .sn-tl-fleet { block-size: 1rem; }
+  .sn-tl-ticks { block-size: 0.25rem; }
+  .sn-tl-day { font-size: 0; }
+  .sn-tl-day::after { content: attr(data-short); font-size: 0.65rem; }
+  .sn-hm-grid { grid-template-columns: var(--sn-hm-label-w) 42rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sn-deck-item, .sn-deck-item[data-expanded] { transition: none; animation: none; }
+  .sn-panel-fig[data-spot], .sn-panel-face[data-spot] { box-shadow: none; transition: none; }
+}
+@media (forced-colors: active) {
+  .sn-hm-svg rect, .sn-hm-key, .sn-panel-seg, .sn-tl-seg-state, .sn-panel-key { forced-color-adjust: none; }
+}
+@media print {
+  .sn-tl, .sn-panel-back { display: none; }
+}
