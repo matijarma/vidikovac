@@ -8,7 +8,8 @@
 // the page never sees a manifest whose objects are not there yet.
 //
 //   node scripts/snimka/upload.mjs [--out <dir>] [--jobs N] [--dry-run]
-//       production: `cf r2 objects put` per object, N at a time (default 4),
+//       production: `cf r2 objects put` per object, N at a time (default 4; the
+//       local R2 always one at a time),
 //       then `cf r2 objects list` (paginated) and a size check of every key
 //       (exit 1 on a mismatch). cf runs with the owner's login; CF_API_TOKEN
 //       (the read-only S3 key of .r2.env) is unset for it.
@@ -174,6 +175,9 @@ async function putAll(o, items) {
 
 async function main() {
   const o = parseArgs(process.argv.slice(2));
+  // The local R2 is one miniflare store on disk: concurrent `wrangler r2 object put --local` processes crash its
+  // workerd, so local puts go one at a time.
+  if (o.local) o.jobs = 1;
   if (o.listOnly) {
     const remote = listRemote(o.prefix);
     console.log(`snimka list: ${remote.size} keys under r2://${BUCKET}/${o.prefix}`);
