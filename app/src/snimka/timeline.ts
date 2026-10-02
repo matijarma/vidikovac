@@ -303,7 +303,7 @@ export function mountTimeline(ctx: SnimkaContext, root: HTMLElement, markers: re
   }
   const scrub = el(doc, 'div', { class: 'sn-tl-scrub' }, track, rug, marks, el(doc, 'div', { class: 'sn-tl-dayrow', 'aria-hidden': 'true' }, days));
 
-  const nextText = el(doc, 'p', { class: 'sn-tl-next', 'data-sn': 'next' });
+  const nextText = el(doc, 'p', { class: 'sn-tl-next', 'data-sn': 'next-chapter' });
   const status = el(doc, 'p', { class: 'sn-tl-status', role: 'status', 'aria-live': 'polite', 'data-sn': 'status' });
   const bar = el(doc, 'div', { class: 'sn-tl', role: 'group', 'aria-label': SN.timeline.label, 'data-sn-timeline': '' }, controls, scrub, nextText, status, pop);
   if (ctx.reducedMotion) bar.append(el(doc, 'p', { class: 'st-note sn-tl-reduced', text: SN.stage.reducedNote }));
