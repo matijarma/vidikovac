@@ -228,12 +228,12 @@ export function pressByBeat(news: Pick<NewsFile, 'items'>, beats: readonly strin
 
 // ---- the stage hook ----------------------------------------------------------------------
 
-/** Pauses the replay, seeks it (epoch seconds) when given an instant, and brings the instrument into view: the stage
- *  section (#snimka) carries the scroll margin of the sticky nav, so the instrument never lands under it. */
+/** Pauses the replay, seeks it (epoch seconds) when given an instant, and brings the instrument into view; the
+ *  instrument carries the sticky nav's scroll margin (snimka-report.css), so it never lands under the nav. */
 export function showOnStage(ctx: Pick<SnimkaContext, 'clock' | 'doc' | 'reducedMotion'>, atSec: number | null): void {
   ctx.clock.pause();
   if (atSec !== null) ctx.clock.seek(atSec * 1000);
-  const stage = ctx.doc.querySelector<HTMLElement>('#snimka') ?? ctx.doc.querySelector<HTMLElement>('[data-sn-stage]');
+  const stage = ctx.doc.querySelector<HTMLElement>('[data-sn-stage]') ?? ctx.doc.querySelector<HTMLElement>('#snimka');
   stage?.scrollIntoView?.({ block: 'start', behavior: ctx.reducedMotion ? 'auto' : 'smooth' });
 }
 

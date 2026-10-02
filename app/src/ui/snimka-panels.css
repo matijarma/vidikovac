@@ -159,7 +159,6 @@
   .sn-tl-ticks { block-size: 0.25rem; }
   .sn-tl-day { font-size: 0; }
   .sn-tl-day::after { content: attr(data-short); font-size: 0.65rem; }
-  .sn-hm-grid { grid-template-columns: var(--sn-hm-label-w) 42rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -167,7 +166,7 @@
   .sn-panel-fig[data-spot], .sn-panel-face[data-spot] { box-shadow: none; transition: none; }
 }
 @media (forced-colors: active) {
-  .sn-hm-svg rect, .sn-hm-key, .sn-panel-seg, .sn-tl-seg-state, .sn-panel-key { forced-color-adjust: none; }
+  .sn-panel-seg, .sn-tl-seg-state, .sn-panel-key { forced-color-adjust: none; }
 }
 @media print {
   .sn-tl, .sn-panel-back { display: none; }

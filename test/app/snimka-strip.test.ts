@@ -11,8 +11,9 @@ import { createReplayClock } from '../../app/src/snimka/clock';
 import { createLayerStore, createViewStore, type SnimkaContext } from '../../app/src/snimka/context';
 import type { FrameLoop } from '../../app/src/snimka/frames';
 import {
-  areaPath, comparisonColumn, comparisonMinute, cursorFraction, frozenMinute, dayLines, linePath, mountStrip, readoutText, readoutValues, renderStrip, runsOf, seekTime, stateClass, subpaths, columnsPath,
+  areaPath, bikesColumns, bikesHeadline, comparisonColumn, comparisonMinute, cursorFraction, frozenMinute, dayLines, linePath, mountStrip, readoutText, readoutValues, renderStrip, rugRuns, runsOf, seekTime, stateClass, subpaths, columnsPath, tintClass, tintRuns,
 } from '../../app/src/snimka/strip';
+import { bikesOnThursday } from '../../app/src/snimka/reckoning';
 import { MARKS, buildComparisonRoutes, buildComparisonSeries, buildRoutes, buildWindowSeries } from '../../e2e/snimka-fixtures';
 
 const START = SNIMKA_WINDOW.fromSec * 1000;
@@ -103,10 +104,11 @@ describe('the readout', () => {
     expect(text.startsWith('pon 28. 9. u 07:45: ')).toBe(true);
     expect(text).toContain(`u pokretu ${series.seen.all[m]}, po voznom redu ${series.expected.all[m]}`);
     expect(text).toContain('stanje usluge: gotovo bez vozila (izračunano naknadno)');
-    expect(text).toContain('bicikli na stanicama ');
-    expect(text).toContain('prazne stanice ');
-    expect(text).toContain(`na zaslonu ${series.published!.vehicles[m]}`);
-    expect(text).toMatch(/medijski naslovi po satu \d/);
+    expect(text).toContain(`prazne stanice BAJS-a ${series.bikes!.empty[m]}`);
+    expect(text).toContain(`čet 1. 10., isto doba ${bikesOnThursday(series, MARKS.monday0745)}`);
+    // v3: the screen's number, the bikes total and the headlines per hour left Tijek.
+    expect(text).not.toContain('na zaslonu');
+    expect(text).not.toContain('bicikli na stanicama');
     expect(text).not.toContain('običan dan');
   });
   it('says "bez podatka" where the frames are missing, never a zero', () => {
@@ -179,14 +181,16 @@ describe('mountStrip', () => {
     document.body.append(root);
     const off = mountStrip(ctx, root);
     const panels = [...root.querySelectorAll<HTMLElement>('.sn-panel')].map((p) => p.dataset.panel);
-    expect(panels).toEqual(['fleet', 'state', 'bikes', 'feed', 'weather', 'ghosts', 'news', 'lines']);
+    expect(panels).toEqual(['fleet', 'bikes', 'lines']);
     expect(root.hasAttribute('aria-busy')).toBe(false);
-    for (const p of root.querySelectorAll('.sn-panel:not([data-panel="lines"])')) {
-      expect(p.querySelector('.st-table summary')?.textContent).toBe('Brojevi po satu');
-      expect(p.querySelectorAll('.st-table tbody tr').length).toBe(112);
-    }
-    expect(root.querySelector('[data-panel="fleet"] .st-legend')?.textContent).toContain('po voznom redu');
-    expect(root.querySelector('[data-panel="state"] .st-legend')?.textContent).toContain('izračunano naknadno');
+    // One table twin per chart, "{title}: brojevi po satu".
+    const summaries = [...root.querySelectorAll('.sn-panel > .st-table > summary, .sn-panel .sn-hm > .st-table > summary')].map((x) => x.textContent);
+    expect(summaries).toEqual(['Vozila u pokretu: brojevi po satu', 'Prazne stanice BAJS-a: brojevi po satu', 'Sve linije, svaki sat: brojevi po satu']);
+    expect(root.querySelectorAll('[data-panel="fleet"] .st-table tbody tr').length).toBe(112);
+    // The bikes are drawn to Wednesday 24:00 (Thursday is the reference): Sunday 20:00 to Thursday 00:00 is 76 hours.
+    expect(root.querySelectorAll('[data-panel="bikes"] .st-table tbody tr').length).toBe(76);
+    const legend = root.querySelector('[data-panel="fleet"] .st-legend')!.textContent!;
+    for (const word of ['u pokretu', 'običan dan', 'gotovo bez vozila', 'smanjeno', 'izračunano naknadno', 'ZET ne šalje podatke ili se ne osvježavaju']) expect(legend).toContain(word);
     // The comparison day is a layer, on by default in v2 (S-17); this page opened with it off.
     expect(root.querySelector('[data-panel="fleet"] li[data-series="compare"]')?.hasAttribute('hidden')).toBe(true);
     off();
@@ -197,12 +201,12 @@ describe('mountStrip', () => {
     document.body.append(root);
     const off = mountStrip(ctx, root);
     const cursors = [...root.querySelectorAll<HTMLElement>('.sn-cursor')];
-    expect(cursors.length).toBe(11); // fleet with its tram and bus plots, state, two bike plots, two feed plots, weather, ghosts, news
+    expect(cursors.length).toBe(2); // the fleet and the bikes (the heatmap has its own cursor)
     expect(cursors.every((c) => c.style.transform === 'translateX(0.0000%)')).toBe(true);
     frames.emit(END);
     expect(cursors.every((c) => c.style.transform === 'translateX(100.0000%)')).toBe(true);
     frames.emit(START + (END - START) / 2);
-    expect(cursors[3]!.style.transform).toBe('translateX(50.0000%)');
+    expect(cursors[1]!.style.transform).toBe('translateX(50.0000%)');
     off();
   });
   it('a press on a plot pauses and seeks; the readout changes on that seek, not while the clock plays', () => {
@@ -231,26 +235,50 @@ describe('mountStrip', () => {
     expect(clock.now()).toBe(seekTime(0.75, START, END));
     off();
   });
-  it('the ghosts panel draws a column only in the minutes the ghost rule counts, on its own scale', () => {
+  it('the fleet draws the seen line over the normal day\'s silhouette, the state tint behind and the rug under', () => {
+    const { ctx } = context(MARKS.monday0745 * 1000);
+    ctx.layers.set({ compare: true });
+    const root = document.createElement('div');
+    document.body.append(root);
+    const off = mountStrip(ctx, root);
+    const fleet = root.querySelector<HTMLElement>('[data-panel="fleet"]')!;
+    // Two paths: the normal day as a silhouette (a layer), the seen line over it; no timetable, no sub-plots.
+    expect([...fleet.querySelectorAll('path')].map((p) => p.getAttribute('class'))).toEqual(['sn-area-compare', 'sn-line-seen']);
+    expect(fleet.querySelectorAll('.sn-subplot-title')).toHaveLength(0);
+    const tints = tintRuns(series, MARKS.serviceLive);
+    expect(fleet.querySelectorAll('.sn-strip-tint')).toHaveLength(tints.length);
+    // Silent from Mon 02:00, a gap minute (no verdict) untinted, then reduced on Wednesday evening.
+    expect(tints.map((t) => t.cls)).toEqual(['reduced', 'silent', 'silent', 'silent', 'reduced']);
+    // Every run before Tue 23:17 (the live state) carries the dashed edge; the one crossing it is split.
+    expect(tints.filter((t) => t.retro).every((t) => series.t0 + t.to * 60 <= MARKS.serviceLive)).toBe(true);
+    expect(tints.filter((t) => !t.retro).every((t) => series.t0 + t.from * 60 >= MARKS.serviceLive)).toBe(true);
+    expect(fleet.querySelectorAll('.sn-strip-tint-retro').length).toBe(tints.filter((t) => t.retro).length);
+    expect(tintClass(series, minuteOf(MARKS.frameGapFrom))).toBeNull();
+    // The rug: the empty feed (Mon 18:42 to Tue 06:28) then the frozen stretch (to 09:00); the frame gap of Tue 03:00
+    // (no frame: nothing known) breaks it, never drawn as either.
+    const rug = rugRuns(series);
+    expect(rug).toEqual([{ from: minuteOf(MARKS.feedEmptyFrom), to: minuteOf(MARKS.frameGapFrom) }, { from: minuteOf(MARKS.frameGapTo), to: minuteOf(MARKS.feedFrozenTo) }]);
+    expect(fleet.querySelectorAll('.sn-strip-rug .sn-strip-rug-run')).toHaveLength(2);
+    off();
+  });
+  it('the bikes chart sets the empty stations against Thursday 1 October at the same time of day, to Wednesday 24:00', () => {
+    const cols = bikesColumns(series);
+    const mon = minuteOf(MARKS.monday0745);
+    expect(cols.now[mon]).toBe(series.bikes!.empty[mon]);
+    expect(cols.thu[mon]).toBe(series.bikes!.empty[minuteOf(MARKS.thursday0745)]);
+    expect(cols.now[minuteOf(MARKS.thursday0745)]).toBeNull();
+    // Before the BAJS recording (Sunday 22:07) there is nothing, never a zero.
+    expect(cols.now[0]).toBeNull();
+    expect(bikesHeadline(series)).toMatch(/^iz dana u dan više: \d+ · \d+ · \d+ \(čet 1\. 10\.: \d+\)$/);
     const { ctx } = context(MARKS.monday0745 * 1000);
     const root = document.createElement('div');
     document.body.append(root);
     const off = mountStrip(ctx, root);
-    const panel = root.querySelector<HTMLElement>('[data-panel="ghosts"]')!;
-    expect(panel.querySelector('h3')!.textContent).toBe('Vozila koja je zaslon brojio, a nisu imala položaj');
-    // The fixture publishes five more than seen on Monday 17:00 to 21:00, in the silence: one run of columns at 5.
-    expect(panel.querySelector('.sn-scale')!.textContent).toBe('5');
-    const d = panel.querySelector('path.sn-cols-ghost')!.getAttribute('d')!;
-    expect((d.match(/Z/g) ?? []).length).toBe(1);
-    expect(d.startsWith(`M${minuteOf(Date.UTC(2026, 8, 28, 15, 0) / 1000) - 0.5} 100V0h1`)).toBe(true);
-    const rows = [...panel.querySelectorAll('.st-table tbody tr')];
-    expect(rows.length).toBe(112);
-    const at17 = rows.find((r) => r.querySelector('th')!.textContent === 'pon 28. 9. u 17:00')!;
-    expect([...at17.querySelectorAll('td')].map((c) => c.textContent)).toEqual(['5', '60 min']);
-    const at07 = rows.find((r) => r.querySelector('th')!.textContent === 'pon 28. 9. u 07:00')!;
-    expect([...at07.querySelectorAll('td')].map((c) => c.textContent)).toEqual(['0', '0 min']);
-    // Before the first published minute (Sunday 22:07) there is nothing to compare.
-    expect([...rows[0]!.querySelectorAll('td')].map((c) => c.textContent)).toEqual(['bez podatka', 'bez podatka']);
+    const bikes = root.querySelector<HTMLElement>('[data-panel="bikes"]')!;
+    expect(bikes.querySelector('h3')!.textContent).toBe('Prazne stanice BAJS-a');
+    expect(bikes.querySelector('.sn-strip-headline')!.textContent).toBe(bikesHeadline(series));
+    expect(bikes.querySelector('.st-legend')!.textContent).toContain('čet 1. 10., isto doba');
+    expect(bikes.querySelector('.st-legend')!.textContent).not.toContain('obično');
     off();
   });
   it('the keyboard steps the replay ten minutes, an hour with Shift', () => {
@@ -284,7 +312,7 @@ describe('mountStrip', () => {
     const root = document.createElement('div');
     document.body.append(root);
     const handle = renderStrip(root, { series: bare, comparison: null, startMs: START, endMs: END, serviceLiveFromSec: MARKS.serviceLive, compare: false, onSeek: () => {} });
-    expect([...root.querySelectorAll<HTMLElement>('.sn-panel')].map((p) => p.dataset.panel)).toEqual(['fleet', 'state', 'feed', 'weather']);
+    expect([...root.querySelectorAll<HTMLElement>('.sn-panel')].map((p) => p.dataset.panel)).toEqual(['fleet']);
     handle.setReadout(MARKS.monday0745 * 1000);
     expect(root.querySelector('.sn-strip-readout')!.textContent).not.toContain('bicikli');
     handle.destroy();
@@ -311,29 +339,20 @@ describe('the v2 additions', () => {
     expect(frozenMinute(old, minuteOf(MARKS.feedFrozenFrom) + 10)).toBe(true);
     expect(frozenMinute(old, minuteOf(MARKS.monday0745))).toBe(false);
   });
-  it('the fleet panel carries trams and buses, ZET\'s panel the depot lane and the future ticks, the weather its words; panel 7 is the heatmap', () => {
+  it('the heatmap is the third chart, with its own head; a tapped cell writes its words into the readout', () => {
     const { ctx } = context(MARKS.monday0745 * 1000);
     const root = document.createElement('div');
     document.body.append(root);
     const off = mountStrip(ctx, root);
-    const fleet = root.querySelector<HTMLElement>('[data-panel="fleet"]')!;
-    expect([...fleet.querySelectorAll('.sn-subplot-title')].map((t) => t.textContent)).toEqual(['Tramvaji', 'Autobusi']);
-    expect(fleet.querySelector('[data-plot="fleet-tram"] path.sn-line-seen')!.getAttribute('d')).toBe(linePath(series.seen.tram, Math.max(...[...series.seen.tram, ...series.expected.tram].map((v) => v ?? 0))));
-    const feed = root.querySelector<HTMLElement>('[data-panel="feed"]')!;
-    expect(feed.querySelector('.st-legend')!.textContent).toContain('u spremištu');
-    expect(feed.querySelector('.st-legend')!.textContent).toContain('vrijeme unaprijed');
-    expect(feed.querySelectorAll('[data-lane="depot"] .sn-panel-depot-on').length).toBeGreaterThan(0);
-    const future = series.feed.rejectedFuture.filter((v) => (v ?? 0) > 0).length;
-    expect(feed.querySelectorAll('[data-lane="future"] .sn-panel-tick')).toHaveLength(future);
-    const frozen = feed.querySelectorAll('[data-lane="frozen"] .sn-feed-frozen-on');
-    expect(frozen.length).toBe(1);
-    const weather = root.querySelector<HTMLElement>('[data-panel="weather"]')!;
-    expect(weather.querySelector('h3')!.textContent).toBe('Temperatura i vrijeme');
-    expect(weather.querySelectorAll('.sn-panel-word').length).toBeGreaterThan(0);
-    expect(weather.querySelectorAll('.st-table tbody tr')).toHaveLength(series.hourly.n);
     const lines = root.querySelector<HTMLElement>('[data-panel="lines"]')!;
     expect(lines.querySelector('h3')!.textContent).toBe('Sve linije, svaki sat');
     expect(lines.querySelector('[data-sn-heatmap]')).not.toBeNull();
+    const plot = lines.querySelector<HTMLElement>('.sn-hm-plot')!;
+    plot.getBoundingClientRect = () => ({ left: 0, width: 1120, top: 0, height: 24 * Number(plot.dataset.rows), bottom: 0, right: 1120, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    plot.dispatchEvent(new PointerEvent('click', { bubbles: true, clientX: 5, clientY: 5, pointerType: 'touch' }));
+    expect(root.querySelector('.sn-strip-readout')!.textContent).toMatch(/^linija 1, ned 27\. 9\. u 20 h: /);
+    // A tap reads; it does not set the line as the subject.
+    expect(ctx.view.get().subject).toBeNull();
     off();
     expect(root.querySelector('[data-sn-heatmap]')).toBeNull();
   });

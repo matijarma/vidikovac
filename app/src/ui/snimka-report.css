@@ -135,7 +135,7 @@
 
 @media (forced-colors: active) {
   .sn-cursor::before { background: CanvasText; }
-  .sn-key, .sn-strip-tint, .sn-strip-rug-run { forced-color-adjust: none; }
+  .sn-key, .sn-strip-tint, .sn-strip-rug-run, .sn-hm-svg rect, .sn-hm-key { forced-color-adjust: none; }
 }
 
 /* ---- Što se vidjelo -------------------------------------------------------------- */
@@ -188,6 +188,9 @@
 /* The link to the answering section: out of sight until focused, then a real, visible target. */
 .sn-q-to { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .sn-q-to:focus { position: static; inline-size: auto; block-size: auto; clip-path: none; display: inline-flex; align-items: center; min-block-size: var(--target); padding-inline: var(--sp-2); border-radius: var(--r-sm); background: var(--tone-surface-1); }
+
+/* A tile's or a station's seek lands the instrument below the sticky nav (decision V3-19; the same margin as #snimka). */
+[data-sn-stage] { scroll-margin-block-start: calc(var(--sn-chrome-h, var(--st-bar-h, 3.75rem)) + var(--sp-2)); }
 
 /* ---- The three tiles of Što snimka pokazuje (lane W4a, v3): each a button that moves the instrument ---- */
 .sn-numbers .st-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
