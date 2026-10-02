@@ -394,7 +394,7 @@ export function mountScreen(ctx: SnimkaContext, root: HTMLElement, onIndex: (ind
     if (!loaded) return SKELETON_LINE;
     const sentence = morningSentence(loaded, slot.atSec);
     const photo = run.captures.kiosk ? captureLink(ctx.data.url(run.captures.kiosk), run) : '';
-    return (sentence ? escapeHtml(sentence) : `<span class="sn-screen-none">${escapeHtml(S.notRecorded)}</span>`) + photo;
+    return (sentence ? `<span class="sn-screen-said">${escapeHtml(sentence)}</span>` : `<span class="sn-screen-none">${escapeHtml(S.notRecorded)}</span>`) + photo;
   };
   const wouldCell = (slot: MorningSlot): string => {
     if (voice.index() === null && !voiceFailed) return SKELETON_LINE;

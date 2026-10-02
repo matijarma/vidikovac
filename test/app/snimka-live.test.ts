@@ -1,12 +1,14 @@
-// The card "I danas" (app/src/snimka/live.ts, decision S-10): readLive says
+// The band "I danas" (app/src/snimka/live.ts, decisions S-10 and V3-25): readLive says
 // numbers only for a judged state with whole counts, through the product's
 // own seam (serviceStateOf, serviceNumbers, aboutExpected), and "nije
 // dostupno" for everything else; fetchLive turns a refused answer, a timeout
-// and malformed JSON into the same; the card reads once, when it comes into
-// view, and always shows its links and its method line.
+// and malformed JSON into the same; mondayLine says the same minute of Monday
+// 28 September from the window series ("bez podatka" when missing, never 0);
+// the band reads once, when it comes into view, and always shows its links.
 import { Window } from 'happy-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { LIVE_TIMEOUT_MS, TEASER_URL, fetchLive, liveLines, mountLive, readLive, type FetchLike } from '../../app/src/snimka/live';
+import type { SeriesFile } from '../../shared/snimka';
+import { LIVE_TIMEOUT_MS, MONDAY_MS, TEASER_URL, fetchLive, liveLines, mondayLine, mountLive, readLive, type FetchLike } from '../../app/src/snimka/live';
 
 const NOW = Date.parse('2026-10-02T12:00:30.000Z');
 const FRESH = '2026-10-02T12:00:00.000Z';
@@ -72,6 +74,23 @@ describe('liveLines', () => {
   });
 });
 
+/** The window from Sun 27 Sep 22:00 Zagreb: Monday 14:00 has 3 vehicles moving, Monday 14:01 no number. */
+const T0 = MONDAY_MS / 1000 - 2 * 3600;
+const SERIES = { t0: T0, n: 6720, seen: { all: Array.from({ length: 6720 }, (_, m) => (m === 16 * 60 + 1 ? null : m === 16 * 60 ? 3 : 0)) } } as unknown as SeriesFile;
+
+describe('mondayLine', () => {
+  it('the same Zagreb minute of Monday 28 September, from the window series', () => {
+    // NOW is 14:00:30 in Zagreb.
+    expect(mondayLine(SERIES, NOW)).toBe('U ponedjeljak 28. 9. u 14:00: u pokretu 3.');
+  });
+  it('a minute the recording has no number for says so, never 0; a zero is a zero', () => {
+    expect(mondayLine(SERIES, NOW + 60_000)).toBe('U ponedjeljak 28. 9. u 14:01: bez podatka.');
+    expect(mondayLine(SERIES, NOW + 120_000)).toBe('U ponedjeljak 28. 9. u 14:02: u pokretu 0.');
+    // Before the window starts (Monday 00:30 is inside; a series that starts later is not).
+    expect(mondayLine({ ...SERIES, t0: MONDAY_MS / 1000 + 15 * 3600 }, NOW)).toBe('U ponedjeljak 28. 9. u 14:00: bez podatka.');
+  });
+});
+
 const ok = (body: string, status = 200): Response => new Response(body, { status, headers: { 'content-type': 'application/json' } });
 
 describe('fetchLive', () => {
@@ -92,7 +111,7 @@ describe('fetchLive', () => {
   });
 });
 
-describe('the card', () => {
+describe('the band', () => {
   function page(): { root: HTMLElement; doc: Document } {
     const win = new Window({ url: 'http://localhost/snimka/' });
     const doc = win.document as unknown as Document;
@@ -101,31 +120,34 @@ describe('the card', () => {
     doc.body.append(root);
     return { root: root as unknown as HTMLElement, doc };
   }
-  it('shows the kicker, the links and the method at once, reads nothing until it is in view, then reads once', async () => {
+  const ctx = { series: SERIES };
+  it('shows the lower-case kicker and the two links at once, reads nothing until in view, then reads once: now and Monday', async () => {
     const { root } = page();
     let enter: (() => void) | null = null;
     const observe = vi.fn((_el: HTMLElement, fn: () => void) => { enter = fn; return () => { enter = null; }; });
     const fetchImpl = vi.fn<FetchLike>(async () => ok(JSON.stringify(teaser({ state: 'normal', seen: 380, expected: 400 }))));
-    const off = mountLive(root, { fetchImpl, observe, now: () => NOW });
+    const off = mountLive(root, ctx, { fetchImpl, observe, now: () => NOW });
     expect(root.hasAttribute('aria-busy')).toBe(false);
     expect(root.dataset.snLive).toBe('pending');
     expect(root.querySelector('.sn-live-kicker')!.textContent).toBe('uživo');
-    expect([...root.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['/', '/statistika/']);
-    expect(root.querySelector('.sn-live-method')!.textContent).toContain('ništa se ne broji i ne šalje');
+    expect([...root.querySelectorAll('a')].map((a) => [a.getAttribute('href'), a.textContent])).toEqual([['/', 'Aplikacija uživo →'], ['/statistika/', 'Statistika usluge →']]);
+    // The method line moved to Podaci i izvori (sources.live).
+    expect(root.querySelector('.sn-live-method')).toBeNull();
     expect(fetchImpl).not.toHaveBeenCalled();
     enter!();
     await vi.waitFor(() => expect(root.dataset.snLive).toBe('numbers'));
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    // mountLive does not pass its now() to liveLines (the clock time is the wall's): the shape, not the minute.
-    expect(root.querySelector('.sn-live-line')!.textContent).toMatch(/^Sada, u \d\d:\d\d: u pokretu 380 vozila, po voznom redu 400\. Uobičaj(eno jutro|en dan|ena večer|ena noć)\.$/u);
+    expect(root.querySelector('.sn-live-line')!.textContent).toBe('Sada, u 14:00: u pokretu 380 vozila, po voznom redu 400. Uobičajen dan.');
+    expect(root.querySelector('[data-sn="live-then"]')!.textContent).toBe('U ponedjeljak 28. 9. u 14:00: u pokretu 3.');
     expect(root.querySelector('.sn-live-age')).toBeNull();
     off();
   });
-  it('says unavailable on a down summary, and the links stay', async () => {
+  it('says unavailable on a down summary; the Monday line and the links stay', async () => {
     const { root } = page();
-    mountLive(root, { fetchImpl: async () => ok(JSON.stringify(teaser(null, { status: 'down' }))), observe: (_el, fn) => { fn(); return () => {}; }, now: () => NOW });
+    mountLive(root, ctx, { fetchImpl: async () => ok(JSON.stringify(teaser(null, { status: 'down' }))), observe: (_el, fn) => { fn(); return () => {}; }, now: () => NOW });
     await vi.waitFor(() => expect(root.dataset.snLive).toBe('unavailable'));
     expect(root.querySelector('[data-sn="live-now"]')!.textContent).toBe('Trenutačno stanje nije dostupno.');
+    expect(root.querySelector('[data-sn="live-then"]')!.textContent).toBe('U ponedjeljak 28. 9. u 14:00: u pokretu 3.');
     expect(root.querySelectorAll('a')).toHaveLength(2);
   });
 });
