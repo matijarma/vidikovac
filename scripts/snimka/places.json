@@ -1,0 +1,17 @@
+{
+ "note": "The places the instrument flies to (plan Appendix C). Every lonLat is checked by the places stage against app/public/data/stops.json (from: stop, by platform id) or the DEPOTS box centre in shared/motion/depots.ts (from: depot, by depot name); a hand-typed coordinate more than 5 m off fails the build. rebro is the line-228 terminus platform found by name.",
+ "places": [
+  { "id": "jelacic", "from": "stop", "ref": "106_1", "lonLat": [15.97726, 45.81286], "zoom": 13.2 },
+  { "id": "glavni-kolodvor", "from": "stop", "ref": "109_1", "lonLat": [15.97928, 45.80521], "zoom": 14 },
+  { "id": "crnomerec", "from": "stop", "ref": "98_1", "lonLat": [15.93493, 45.815] },
+  { "id": "dubrava", "from": "stop", "ref": "208_24", "lonLat": [16.03708, 45.82448] },
+  { "id": "savski-most", "from": "stop", "ref": "271_24", "lonLat": [15.95284, 45.78585] },
+  { "id": "kvaternikov-trg", "from": "stop", "ref": "236_1", "lonLat": [15.99592, 45.81457] },
+  { "id": "ljubljanica", "from": "stop", "ref": "245_1", "lonLat": [15.93857, 45.79723] },
+  { "id": "borongaj", "from": "stop", "ref": "192_22", "lonLat": [16.01865, 45.81479] },
+  { "id": "zaprude", "from": "stop", "ref": "1780_11", "lonLat": [16.0009, 45.77805] },
+  { "id": "rebro", "from": "stop", "find": { "route": "228", "name": "Kišpatićeva|Rebro", "near": [15.99, 45.82], "withinM": 2000 } },
+  { "id": "spremiste-dubrava", "from": "depot", "ref": "Dubrava", "name": "Spremište Dubrava", "lonLat": [16.03995, 45.82043], "zoom": 14 },
+  { "id": "spremiste-ljubljanica", "from": "depot", "ref": "Ljubljanica", "name": "Spremište Ljubljanica", "lonLat": [15.9386, 45.79618], "zoom": 14 }
+ ]
+}

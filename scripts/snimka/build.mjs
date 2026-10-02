@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Builds the /snimka/ dataset (lane S1 of the snimka pass, docs/snimka-2026-10.md
-// section 6) from the private recordings into review.local/snimka/build/v1/:
-//   node scripts/snimka/build.mjs [--stage <frames|series|bajs|closures|news|events|screen|captures|manifest|verify|all>]
-//                                 [--segment window|day] [--force] [--inputs <dir>] [--out <dir>]
+// Builds the /snimka/ dataset (lanes S1 and V1, docs/snimka-2026-10.md) from the
+// private recordings into review.local/snimka/build/v2/:
+//   node scripts/snimka/build.mjs [--stage <name>|all] [--segment window|day-0924|day-0921] [--force] [--inputs <dir>] [--out <dir>]
+// Stage names: scripts/snimka/main.ts STAGE_NAMES.
 // `npm run build:snimka` is the same. Read-only against the recordings; the
 // output is never committed (it is uploaded by scripts/snimka/upload.mjs).
 //
@@ -34,6 +34,10 @@ async function loadMain() {
       logLevel: 'warning',
       // sharp is native; stage-captures loads it with a require bound to the repository.
       external: ['sharp'],
+      // The voice stage runs the app's own sentence code (app/src/city), which reads Vite's env; under node it is empty,
+      // as the strike seed review.local/strike/scratch/run.mjs runs it.
+      define: { 'import.meta.env': '{}' },
+      loader: { '.json': 'json' },
     });
     return await import(pathToFileURL(outfile).href);
   } finally {

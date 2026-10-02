@@ -15,7 +15,8 @@ import { XMLParser } from 'fast-xml-parser';
 import { SNIMKA_WINDOW, ZAGREB_OFFSET_S, type HashedRef, type NewsFile } from '../../shared/snimka';
 import { filterNews, zagrebHour, type Candidate, type NewsItem, type Outlet } from './news-filter';
 import { stampSec } from './stage-bajs';
-import { writeJsonObject, writeWork, type Paths } from './paths';
+import { readWork, writeJsonObject, writeWork, type Paths } from './paths';
+import { beatDefaults, resolvePointers, withDefaults, type Known, type Pointers } from './focus-defaults';
 
 export const OUTLETS: NewsFile['outlets'] = {
   jutarnji: { name: 'Jutarnji list', home: 'https://www.jutarnji.hr/' },
@@ -51,7 +52,7 @@ export function parseRss(xml: string): RssItem[] {
   });
 }
 
-export interface CuratedEntry { link: string; beat?: string | null; title?: string; outlet?: Outlet; at?: string; note?: string }
+export interface CuratedEntry extends Partial<Pick<Pointers, 'focus' | 'facts' | 'mentions'>> { link: string; beat?: string | null; title?: string; outlet?: Outlet; at?: string; note?: string }
 export interface NewsWorkItem { outlet: Outlet; title: string; link: string; pubSec: number; categories: string[]; firstSeenSec: number }
 export interface NewsRefs { news: HashedRef; items: number; perOutlet: Record<Outlet, number> }
 
@@ -89,6 +90,7 @@ export function readPress(paths: Paths, log: (line: string) => void): { items: N
   };
 }
 
+/** Stage news: the distinct items, the candidates for curation and the hourly pulse. The published list is built by publishNews from the events stage, once the routes and places it points at exist. */
 export async function stageNews(paths: Paths, log: (line: string) => void): Promise<boolean> {
   const { items, work } = readPress(paths, log);
   writeWork(paths, 'news-items.json', work);
@@ -109,6 +111,12 @@ export async function stageNews(paths: Paths, log: (line: string) => void): Prom
     })),
   });
   log(`news: ${items.length} distinct items recorded, ${inWindow.length} in the window (${JSON.stringify(countBy(inWindow))}), ${pool.length} relevant after de-duplication, ${candidates.filter((c) => c.selected).length} under the hourly cap`);
+  return true;
+}
+
+/** The published headline list from the committed curation, every pointer resolved against `known`. */
+export function publishNews(paths: Paths, known: Known, log: (line: string) => void): NewsRefs {
+  const items = readWork<NewsWorkItem[]>(paths, 'news-items.json');
 
   const curatedFile = join(paths.repo, 'scripts/snimka/news-curated.json');
   if (!existsSync(curatedFile)) throw new Error('news: scripts/snimka/news-curated.json is missing; curate from work/news-candidates.json');
@@ -124,14 +132,19 @@ export async function stageNews(paths: Paths, log: (line: string) => void): Prom
     const item = byLink.get(entry.link)!;
     if (entry.title !== undefined && entry.title !== item.title) throw new Error(`news: curated title differs from the recorded one for ${entry.link}: ${JSON.stringify(entry.title)} against ${JSON.stringify(item.title)}`);
     if (entry.outlet !== undefined && entry.outlet !== item.outlet) throw new Error(`news: curated outlet ${entry.outlet} is not ${item.outlet} for ${entry.link}`);
-    out.items.push({ id: `${item.outlet}-${createHash('sha256').update(item.link).digest('hex').slice(0, 10)}`, outlet: item.outlet, title: item.title, link: item.link, pubSec: item.pubSec, beat: entry.beat ?? null, focus: { kind: 'none' }, facts: [], mentions: {} }); // V1: focus-defaults.ts per beat
+    const beat = entry.beat ?? null;
+    const defaults = withDefaults(entry, beatDefaults(beat));
+    const p = resolvePointers(`news ${entry.link}`, defaults, known);
+    out.items.push({ id: `${item.outlet}-${createHash('sha256').update(item.link).digest('hex').slice(0, 10)}`, outlet: item.outlet, title: item.title, link: item.link, pubSec: item.pubSec, beat, focus: p.focus, facts: p.facts, mentions: p.mentions });
   }
   out.items.sort((a, b) => a.pubSec - b.pubSec);
   const ref = writeJsonObject(paths, 'news/window', out);
   const perOutlet = countBy(out.items);
-  writeWork(paths, 'news-refs.json', { news: ref, items: out.items.length, perOutlet } satisfies NewsRefs);
-  log(`news: ${out.items.length} curated headlines, every link found in the recordings (${JSON.stringify(perOutlet)})`);
-  return true;
+  const refs: NewsRefs = { news: ref, items: out.items.length, perOutlet };
+  writeWork(paths, 'news-refs.json', refs);
+  writeWork(paths, 'news-window.json', out);
+  log(`news: ${out.items.length} curated headlines, every link found in the recordings and every pointer resolved (${JSON.stringify(perOutlet)})`);
+  return refs;
 }
 
 function countBy(items: readonly { outlet: Outlet }[]): Record<Outlet, number> {

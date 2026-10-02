@@ -1452,6 +1452,8 @@ export interface PublishedTick {
   hidden: { depot: number; parked: number };
   /** Positioned vehicle entities in the frame (an empty feed is a real 0). */
   entities: number;
+  /** The frame's own operator statements, counted as decoded: Alert entities and CANCELED trip updates (snimka v2). */
+  raw: { alerts: number; canceled: number };
 }
 
 export interface ReplayPublishedOptions {
@@ -1509,7 +1511,8 @@ export async function replayPublished(dirs: readonly string[], engine: Engine, o
     for (const dwell of result.learned.dwells) pushDwellRecent(engine.dwellRecent, dwell.stopId, dwell.atSec, dwell.seconds);
     trimDwellRecent(engine.dwellRecent, headerSec);
     frames++;
-    o.onTick({ headerSec, payload: result.payload, service: state.service, rejectedFuture: result.rejectedFuture, hidden: result.hidden, entities: feed.vehicles.length });
+    o.onTick({ headerSec, payload: result.payload, service: state.service, rejectedFuture: result.rejectedFuture, hidden: result.hidden, entities: feed.vehicles.length,
+      raw: { alerts: feed.alerts?.length ?? 0, canceled: feed.tripUpdates.filter((u) => u.canceled === true).length } });
   }
   return { frames, dropped };
 }

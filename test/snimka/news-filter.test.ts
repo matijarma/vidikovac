@@ -51,6 +51,18 @@ describe('the press filter', () => {
     expect(beatOf(item({ title: 'Nešto sasvim drugo', pubSec: z(29, 9) }))).toBeNull();
   });
 
+  it('gives the after-days their own beat from Thursday 1 October: nakon', () => {
+    // Day 31 of September is Thursday 1 October.
+    expect(beatOf(item({ title: 'Nakon štrajka: tramvaji voze normalno', pubSec: z(31, 8) }))).toBe('nakon');
+    expect(beatOf(item({ title: 'Štrajk je gotov, što su posljedice', pubSec: z(32, 9) }))).toBe('nakon');
+    // Before Thursday the same words are still the return.
+    expect(beatOf(item({ title: 'Štrajk završio, tramvaji se vraćaju', pubSec: z(30, 19) }))).toBe('povratak');
+    // A court story stays a court story.
+    expect(beatOf(item({ title: 'Sud: štrajk u ZET-u je nezakonit, posljedice', pubSec: z(31, 10) }))).toBe('presuda');
+    // Thursday without the strike word is no after-day beat.
+    expect(beatOf(item({ title: 'Promet je opet normalan', pubSec: z(31, 8) }))).not.toBe('nakon');
+  });
+
   it('measures near-duplicate titles by their words', () => {
     expect(jaccard(titleWords('Štrajk ZET-a: tramvaji stoje u Zagrebu'), titleWords('Štrajk ZET-a, tramvaji stoje u Zagrebu!'))).toBe(1);
     expect(jaccard(titleWords('Štrajk ZET-a: tramvaji stoje'), titleWords('BAJS bicikli nestali sa stanica'))).toBe(0);

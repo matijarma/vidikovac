@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { contentPath } from '../../shared/snimka-codec';
+import { contentPath, type ContentExt } from '../../shared/snimka-codec';
 import type { HashedRef } from '../../shared/snimka';
 
 export interface Paths {
@@ -19,7 +19,7 @@ export interface Paths {
   main: string;
   /** The recordings root (`<main>/review.local` by default). */
   inputs: string;
-  /** The build root (`<inputs>/snimka/build/v1` by default). */
+  /** The build root (`<inputs>/snimka/build/v2` by default). */
   out: string;
   objects: string;
   work: string;
@@ -39,7 +39,7 @@ export function mainCheckout(repo: string): string {
 export function resolvePaths(repo: string, o: { inputs?: string; out?: string } = {}): Paths {
   const main = mainCheckout(repo);
   const inputs = resolve(o.inputs ?? join(main, 'review.local'));
-  const out = resolve(o.out ?? join(inputs, 'snimka', 'build', 'v1'));
+  const out = resolve(o.out ?? join(inputs, 'snimka', 'build', 'v2'));
   const paths = { repo, main, inputs, out, objects: join(out, 'objects'), work: join(out, 'work'), state: join(out, 'state') };
   for (const dir of [paths.objects, paths.work, paths.state]) mkdirSync(dir, { recursive: true });
   // Read-only inputs: the build root may sit inside them, but never in the recorders' own folders.
@@ -53,7 +53,8 @@ export function resolvePaths(repo: string, o: { inputs?: string; out?: string } 
 export const sha256 = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
 
 /** Writes one immutable object under `objects/` by its content name and returns its ref. */
-export function writeObject(paths: Paths, name: string, ext: 'json' | 'webp', bytes: Uint8Array | string): HashedRef {
+export const CONTENT_TYPES: Record<ContentExt, string> = { json: 'application/json', webp: 'image/webp', csv: 'text/csv; charset=utf-8', geojson: 'application/geo+json' };
+export function writeObject(paths: Paths, name: string, ext: ContentExt, bytes: Uint8Array | string): HashedRef {
   const buf = typeof bytes === 'string' ? Buffer.from(bytes, 'utf8') : Buffer.from(bytes);
   const hash = sha256(buf);
   const path = contentPath(name, hash, ext);

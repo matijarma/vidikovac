@@ -61,6 +61,19 @@
    "chapter": true
   },
   {
+   "id": "feed-stoji-pon",
+   "rule": {
+    "kind": "header-age-over",
+    "value": 300,
+    "after": "2026-09-28T04:30:00+02:00"
+   },
+   "kind": "zet",
+   "title": "ZET-ovi podaci se ne mijenjaju: prvi put",
+   "text": null,
+   "sources": [],
+   "chapter": false
+  },
+  {
    "id": "prvo-jutro",
    "at": "2026-09-28T07:45:00+02:00",
    "kind": "recording",
@@ -68,6 +81,20 @@
    "text": "Jutro kad se najviše putuje, gotovo bez tramvaja i autobusa.",
    "sources": [],
    "chapter": true
+  },
+  {
+   "id": "vozni-red-396",
+   "at": "2026-09-28T08:34:58+02:00",
+   "kind": "zet",
+   "title": "ZET objavljuje novi vozni red (000396)",
+   "text": "Aplikacija je novi vozni red preuzela pri svojoj sljedećoj izgradnji.",
+   "sources": [
+    {
+     "label": "ZET, vozni red u formatu GTFS",
+     "url": "https://www.zet.hr/gtfs-scheduled/latest"
+    }
+   ],
+   "chapter": false
   },
   {
    "id": "feed-prazan",
@@ -307,6 +334,24 @@
    "text": null,
    "sources": [],
    "chapter": true
+  },
+  {
+   "id": "drugo-uobicajeno-jutro",
+   "at": "2026-10-02T07:45:00+02:00",
+   "kind": "recording",
+   "title": "Drugo uobičajeno jutro",
+   "text": null,
+   "sources": [],
+   "chapter": true
+  },
+  {
+   "id": "kraj-snimke",
+   "at": "2026-10-02T12:00:00+02:00",
+   "kind": "recording",
+   "title": "Kraj snimke",
+   "text": null,
+   "sources": [],
+   "chapter": false
   }
  ]
 }

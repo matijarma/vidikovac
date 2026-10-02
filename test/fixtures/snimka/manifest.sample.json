@@ -1,1 +1,397 @@
-{"version":2,"builtAt":"2026-10-02T15:00:00.000Z","title":"Tri dana bez tramvaja","build":{"commit":"7b0f00d0","inputs":{"frames-window":"691c4b5e8bea8ec275ce5ec119cfd9e50ae35c5488e911473a6fcf46f963d93a","frames-day":"fa118342b1e6da817794a0ca34f79759c24db29a911c6342629d4964304c4c9d","bajs":"a56b4102a5ffe16c36ba597e4b3d7658df4a6ac74dacd073d1474fc71657d833","closures":"8beacb4e4b19ecfc4eb69a6aaff5f36e2762fa98739dffc3f8ecd38b7e345fcb","news":"4282e2df89bb38a10f8ee69762bf55a5884efe1495d31bd5b5da39adbcd608f6","series":"ab2c44f42fa146415c344ac22cd474179b62c137caca3813d29bede6ba867412","events":"b227abae9bfa794e3f64d2cf5d0ea35ef14a842c04676fd7e84af0722f6069de","screen":"5df3b269ecbccf64c104c544de91ae969f55d572a415bb841073e001c173d188","captures":"bf1ee67080fc5f41a1f9e5aba104b3678c0e8638b43b4dcf12fef1247e248e96","manifest":"20079e74cee2b3aeb33572dc2c1d2b625939d9c8fefdcc1887018091520c9ae3","routes":"b0bd744948ed4f227226b4b011a4e2c8ae579c602fd20c393fdf35e83c484a88","places":"2fd5e1bf8c8fe0286117ec6b325643135f6cef8855ae94c6fa87a75813765a62","boards":"6a5be23ed109955eb5e7ee904c9a4b69676ab01191c533142bd497c35d6ce9f1","voice":"07be1da6c89541539af9ce519b5a748fbeabe185482a54a6c79c64002bc151f9","exports":"bf79976ccf26be24607106b1cbff7e2a4f74420369d0727bdcbabf2f40034bb9"}},"window":{"fromSec":1790532000,"toSec":1790935200,"minutes":6720,"tz":"Europe/Zagreb","utcOffsetMin":120},"comparisons":[{"id":"cet-0924","day":"2026-09-24","weekday":4,"fromSec":1790200800,"minutes":1440,"net":"395","files":{"series":{"path":"series/day-0924.e39763daba163e36.json","bytes":95302,"sha256":"e39763daba163e36b97bb98c9b2ef382282a488544180115509d71329dea8c6d"},"routes":{"path":"routes/day-0924.9547d4557bf1b6b1.json","bytes":61000,"sha256":"9547d4557bf1b6b1db5d94554d014a704a6655f110da32dcb6b6ffab14150760"}},"notes":["Običan dan, četvrtak 24. rujna, nema snimljenih ZET-ovih podataka od ponoći do 02:00."]},{"id":"pon-0921","day":"2026-09-21","weekday":1,"fromSec":1789941600,"minutes":1440,"net":"395","files":{"series":{"path":"series/day-0921.7f27ba1863b27197.json","bytes":96100,"sha256":"7f27ba1863b271978cb87d7a25f428520be2336f21aef6a383e65580abec9b6c"},"routes":{"path":"routes/day-0921.1996a4661a8d3bf8.json","bytes":60500,"sha256":"1996a4661a8d3bf84e9a12536d9b1a8923b6721bf7ef2d3c58111238905645bf"}},"notes":["Običan dan, ponedjeljak 21. rujna: nedostaju dva okvira."]}],"serviceLiveFromSec":1790716680,"networks":{"395":{"path":"network/395.2c63a6688642f0fd.json","bytes":591814,"sha256":"2c63a6688642f0fd15eb890ddf5c338aa44acee8b32d63b8080fadc779c37302","feedVersion":"000395","graphHash":"7ad4834435980e22","paths":227,"shapes":524},"396":{"path":"network/396.aba7637f4483bc82.json","bytes":579543,"sha256":"aba7637f4483bc821128bbd44594371d16321029fa8b8defbbf7e3767b0f2624","feedVersion":"000396","graphHash":"b0ac946be55f8f79","paths":207,"shapes":561}},"files":{"series":{"path":"series/window.164de239bfcb2c94.json","bytes":640000,"sha256":"164de239bfcb2c94027897afd3e137708d41e96b5b2aa211da81c68a82ba40db"},"motionIndex":{"path":"motion/index.ee4d9b1fe40443f5.json","bytes":98000,"sha256":"ee4d9b1fe40443f508e6bcbd86a9329d9ba05e06f15e9e3dc1cb39c1c3092a26"},"routes":{"path":"routes/window.18b32fa6e2ac203c.json","bytes":290000,"sha256":"18b32fa6e2ac203cb50c13cf9b0169b2952e4d245220a1e052e0aec9a6aecc26"},"stations":{"path":"bajs/stations.757c7db70844b9cf.json","bytes":19239,"sha256":"757c7db70844b9cfb90496635e7717d55d16a6f8cf9e1546f49c2b887b91a341"},"bajs":{"path":"bajs/window.534ec16602b7c8e5.json","bytes":362000,"sha256":"534ec16602b7c8e5c7f2686e4f7293b0627ba70b8a7a670e57e71f1813fdae8a"},"closures":{"path":"closures/window.fdc44e385e17c770.json","bytes":31000,"sha256":"fdc44e385e17c7703d43c1318aa855309fc5dade7632d4789fdbe772b8ca6a28"},"events":{"path":"events/window.38b66128d1cc8fcb.json","bytes":9400,"sha256":"38b66128d1cc8fcb393569a81256039c4e0e1f238162445b20448078ada8db40"},"notices":{"path":"notices/window.76d434827b434d25.json","bytes":1400,"sha256":"76d434827b434d256574444b4ed31cf89b246f8fef94ef54e8672d2799b74a58"},"news":{"path":"news/window.d1435b58b3a6834f.json","bytes":24000,"sha256":"d1435b58b3a6834fb3856e7ac541590d0775520fac811761a58cb90ce86fb82f"},"places":{"path":"places.de561a59674cd89c.json","bytes":1900,"sha256":"de561a59674cd89c16695cafd4a467c3baee7e6fc9a344c3ba91d78b01f98486"},"screenIndex":{"path":"screen/index.f86155a591218636.json","bytes":41000,"sha256":"f86155a5912186366eded922e0c0e871d3e2f9a1603342c136b7ac7b46d08c8e"},"boards":[{"path":"boards/106_1.259e3c86d9cf63b0.json","bytes":200640,"sha256":"259e3c86d9cf63b0f6436c3c573cb8a1d2fe41c61cc74126f27b1f51fd9f2d87","stop":"106_1","name":"Trg bana J. Jelačića","samples":1344},{"path":"boards/106_2.f67659ed26fa84ed.json","bytes":200640,"sha256":"f67659ed26fa84edf5d38abab5df5d61a50d20d831535e9bc24c1928facf5655","stop":"106_2","name":"Trg bana J. Jelačića","samples":1344},{"path":"boards/98_1.145acdb35042f7a2.json","bytes":200460,"sha256":"145acdb35042f7a26386a79efbba0cf0700c92ef08a251ac57ab4e777bde76e7","stop":"98_1","name":"Črnomerec","samples":1341},{"path":"boards/208_24.d5807eb6d293552e.json","bytes":200400,"sha256":"d5807eb6d293552e8ee45e26c77a3e41e2ac15561c9b449029ebe407f73beac6","stop":"208_24","name":"Dubrava","samples":1340},{"path":"boards/271_24.238ee95e12db07b7.json","bytes":200520,"sha256":"238ee95e12db07b74ee5e08597673139297bdc0d8742a0559acd8771e6dfa617","stop":"271_24","name":"Savski most","samples":1342},{"path":"boards/236_1.125ba9d9c6bad5ff.json","bytes":200580,"sha256":"125ba9d9c6bad5ff6c0eefc73d52d218e39c5c70b8d85e9111bc827fd54c23d7","stop":"236_1","name":"Kvaternikov trg","samples":1343},{"path":"boards/109_1.2e663da84a3c534d.json","bytes":200640,"sha256":"2e663da84a3c534dab8085940095c5c4884123f2e2bf18b1076e5243abc7299c","stop":"109_1","name":"Glavni kolodvor","samples":1344},{"path":"boards/245_1.593701a7bc17d63d.json","bytes":200340,"sha256":"593701a7bc17d63df33d816d25eaec90f2047cd3b0212382e3eaca27ecc4ca90","stop":"245_1","name":"Ljubljanica","samples":1339}],"voiceIndex":{"path":"voice/index.7cdc5df11d4bc542.json","bytes":900,"sha256":"7cdc5df11d4bc5428eeaf52a4040c3ed5f9215ce399ed5aba7c0c837552d3f6c"},"exports":[{"path":"exports/series.f387a8d6958a9c73.csv","bytes":812000,"sha256":"f387a8d6958a9c73966c3cc1126954ab0fbaacf40b4566212e2405971aba0a63","name":"series","format":"csv","mediaType":"text/csv","title":"Stanje usluge i vozila po minuti","rows":6721},{"path":"exports/hourly.8f21e625beab5672.csv","bytes":9800,"sha256":"8f21e625beab56727912bd2eab5cd73c5cf8ca5758d60fe357f0740c614173a2","name":"hourly","format":"csv","mediaType":"text/csv","title":"Brojevi po satu","rows":113},{"path":"exports/routes-5min.3fd1ec024eb1bbc4.csv","bytes":9100000,"sha256":"3fd1ec024eb1bbc493fce90593c8b3b129fb54b3a2376a6db7102ee9868973ad","name":"routes-5min","format":"csv","mediaType":"text/csv","title":"Vozila po liniji svakih pet minuta","rows":206208},{"path":"exports/bikes-5min.83afc0b01fc988b7.csv","bytes":1180000,"sha256":"83afc0b01fc988b74b454926a6d52cfc769a06615030ea865ee813d60d53b9bc","name":"bikes-5min","format":"csv","mediaType":"text/csv","title":"Bicikli po stanici svakih pet minuta","rows":1345},{"path":"exports/stations.1d883b8120ade248.csv","bytes":14200,"sha256":"1d883b8120ade248e0ba8c4714c984f76c6c69b161eb6446afbc53b380f30359","name":"stations","format":"csv","mediaType":"text/csv","title":"Stanice BAJS-a","rows":201},{"path":"exports/sentences.14a23568530d399d.csv","bytes":1420000,"sha256":"14a23568530d399d10042247cc8de8dada2ed7c45b223b2b746b39aecc268319","name":"sentences","format":"csv","mediaType":"text/csv","title":"Rečenice zaslona, zapisane i izračunane","rows":6721},{"path":"exports/events.9aa274089de2e6fe.json","bytes":9400,"sha256":"9aa274089de2e6fe4488ae3ce6482935a7e4383a13eda60be639ac23df643061","name":"events","format":"json","mediaType":"application/json","title":"Događaji snimke","rows":null},{"path":"exports/closures.0acf95e1c2377c49.geojson","bytes":38000,"sha256":"0acf95e1c2377c494881ea115bd636a2c775441a95f72e1522718172e5e98be0","name":"closures","format":"geojson","mediaType":"application/geo+json","title":"Zatvorene ulice po inačici skupa","rows":null},{"path":"exports/opis.4bf83095fa03fd20.json","bytes":6100,"sha256":"4bf83095fa03fd2052a3eef763b9b8b121ec73b86c4ad1ee9e784ff2a07999d5","name":"opis","format":"json","mediaType":"application/json","title":"Opis skupa","rows":null}],"opis":{"path":"exports/opis.4bf83095fa03fd20.json","bytes":6100,"sha256":"4bf83095fa03fd2052a3eef763b9b8b121ec73b86c4ad1ee9e784ff2a07999d5"},"grid":null},"attribution":[{"id":"zet","text":"Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669","url":"http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669","licence":"Otvorena dozvola (NN 67/17)","adaptation":"položaji vozila izvedeni modelom kretanja iz snimljenih GTFS-RT okvira, 10-sekundni korak; sirovi okviri se ne objavljuju"},{"id":"zet-rss","text":"ZET, obavijesti: naslov, vrijeme objave i poveznica na obavijest","url":"https://www.zet.hr/","licence":"uvjeti ponovne uporabe nisu objavljeni; upit ZET-u je otvoren","adaptation":null},{"id":"nextbike","text":"nextbike (BAJS), GBFS: stanje stanica svake minute","url":"https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_hd/hr/","licence":"CC0 1.0","adaptation":"brojevi bicikala po stanici svakih pet minuta; zbroj bicikala i praznih stanica po minuti"},{"id":"zagreb-closures","text":"Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba'","url":"https://data.zagreb.hr/","licence":"Otvorena dozvola (OD), http://data.gov.hr/otvorena-dozvola","adaptation":"svaka snimljena inačica skupa, s krajem zatvaranja kako ga je ta inačica objavila"},{"id":"dhmz","text":"Izvor: DHMZ, Otvorena dozvola; postaja Zagreb-Maksimir","url":"https://vrijeme.hr/hrvatska1_n.xml","licence":"Otvorena dozvola (NN 67/17)","adaptation":"temperatura i vrijeme po satu"},{"id":"news","text":"Jutarnji list, Večernji list i N1: naslovi i poveznice uz atribuciju, bez teksta članaka","url":null,"licence":"navod naslova s poveznicom na izvorni članak","adaptation":null},{"id":"osm","text":"© OpenStreetMap contributors","url":"https://www.openstreetmap.org/copyright","licence":"ODbL 1.0","adaptation":"podloga karte i karta u snimkama zaslona"},{"id":"kajima","text":"Kaj ima?: snimke javnog zaslona, objavljeni brojevi i stanje usluge izračunano istim pravilima nad snimljenim podacima","url":"https://github.com/matijarma/vidikovac","licence":"AGPL-3.0 (izvorni kod)","adaptation":null}],"notes":["Lokalni snimači rade od nedjelje 27. rujna u 22:07: za ranije minute brojevi koje je aplikacija objavila, bicikli i zatvorene ulice nemaju podatka.","U srijedu 30. rujna od 22:41 do 22:54 lokalni snimači nisu radili; ZET-ovi podaci snimljeni su bez prekida.","Aplikacija objavljuje stanje usluge od utorka 29. rujna u 23:17; za ranije minute stanje je izračunano naknadno, istim pravilima, iz snimljenih podataka.","Od nedjelje u 20:00 do ponoći vozila su snimljena prema starom voznom redu ZET-a, a smještena na mrežu novoga; na dionicama s dva kolosijeka smjer vozila zato može biti pogrešan.","Običan dan, četvrtak 24. rujna, nema snimljenih ZET-ovih podataka od ponoći do 02:00.","Običan ponedjeljak 21. rujna: u snimci nedostaju dva okvira.","Rečenice „zaslon bi rekao” izračunane su naknadno današnjim pravilima aplikacije.","Vozila koja ulaze u spremište označena su kako ih označava i aplikacija.","Snimka završava u petak 2. listopada u 12:00."]}
+{
+ "version": 2,
+ "builtAt": "2026-10-02T12:57:27.039Z",
+ "title": "Tri dana bez tramvaja",
+ "build": {
+  "commit": "ee09c9be8ad6ae98e7a8d526367581011eb353bf",
+  "inputs": {
+   "frames-window": "91e555f1a770c9c26cc3a7d1cc18ec86cd5b8f33fd08c1c8cc90bdefdf68fb77",
+   "frames-day-0924": "887e443263cd5c65e01cdae4003923d4554829c30d6fde4ea0ff514b22e8c0b0",
+   "frames-day-0921": "b1a41098d82d02b8d73487b36320e8354b209052cc24335510591ba5d0fdb4a0",
+   "bajs": "69016ae7904db2732d4dbe0e8e8d2b7eb164e862c9a1b71cf8b38fac6c8bf0ed",
+   "closures": "1561ad727ddc32a2f10a95b08ed0eb20a80927549226eba2f3238110c4231860",
+   "news": "a578a37e1f1e7a6b11acd161ac3bfa33ded3221ce4520064556c975ccd00cd2c",
+   "series": "07f0d509b276107c834a4560c0078527504f9ea4d26d74b2209cab8219e79962",
+   "routes": "e766d1aa8ccc5cde3eb068274f4513fa8a4976a7d2d1af300f734bbf8e59c9b3",
+   "places": "b1040d54c28a938880bf7f71799a2a1bf090f72eb37e24d9c017f97271acf8d7",
+   "events": "d91bac08251f0fa8a145e672fd6b7648e43d532c7f425745be631bef333f9085",
+   "screen": "4eac2d276fd0d9a9f1f53e253714ba89759ee4b636fab5245bfabbe8c459522c",
+   "boards": "813fafa31e4a21f7fcf956bb974ee8ff644f60128f9f663d986408bbfa478348",
+   "voice": "f37d01cf09ed7767eec41778ed9af5e6240356ca74aebce991e305ea80fdf695",
+   "captures": "b5b06eaef588cbdae55d1c0652b0653f8882aae90de5b2d2a510acebc89f42db",
+   "exports": "4db508908280b40843034dc2991828e6b46bd732eb2436587e72b3524a7f7654",
+   "manifest": "d31e381c6fe67ddfd44b08ec2f607a6762d67f2bcb576f663cc6b26d5f2e99da"
+  }
+ },
+ "window": {
+  "fromSec": 1790532000,
+  "toSec": 1790935200,
+  "minutes": 6720,
+  "tz": "Europe/Zagreb",
+  "utcOffsetMin": 120
+ },
+ "comparisons": [
+  {
+   "id": "cet-0924",
+   "day": "2026-09-24",
+   "weekday": 4,
+   "fromSec": 1790200800,
+   "minutes": 1440,
+   "net": "395",
+   "files": {
+    "series": {
+     "path": "series/day-0924.6a29408dc061a1fe.json",
+     "bytes": 105348,
+     "sha256": "6a29408dc061a1fe3a05ce3828a51ea6e5f88280de92c2a4b63477a12f8f346e"
+    },
+    "routes": {
+     "path": "routes/day-0924.37b081cf920da9bb.json",
+     "bytes": 124573,
+     "sha256": "37b081cf920da9bb8caf9d6171689b589b0e7cfbf9e0096918fa5dd43155cd97"
+    }
+   },
+   "notes": [
+    "Običan četvrtak 24. rujna nema snimljenih ZET-ovih podataka od ponoći do 02:00."
+   ]
+  },
+  {
+   "id": "pon-0921",
+   "day": "2026-09-21",
+   "weekday": 1,
+   "fromSec": 1789941600,
+   "minutes": 1440,
+   "net": "395",
+   "files": {
+    "series": {
+     "path": "series/day-0921.9fb00474228ab283.json",
+     "bytes": 103440,
+     "sha256": "9fb00474228ab283ee9c1bcf2518b4c5de36070eaeadd74459b430d82f4c67e9"
+    },
+    "routes": {
+     "path": "routes/day-0921.a6715bc3998a2648.json",
+     "bytes": 125387,
+     "sha256": "a6715bc3998a2648aaf74f98ca601344b5bf27ca9184d2a654905cb08f21c7dc"
+    }
+   },
+   "notes": [
+    "Običnom ponedjeljku 21. rujna u snimci nedostaju dva okvira."
+   ]
+  }
+ ],
+ "serviceLiveFromSec": 1790716680,
+ "networks": {
+  "395": {
+   "path": "network/395.2c63a6688642f0fd.json",
+   "bytes": 591814,
+   "sha256": "2c63a6688642f0fd15eb890ddf5c338aa44acee8b32d63b8080fadc779c37302",
+   "feedVersion": "000395",
+   "graphHash": "7ad4834435980e22",
+   "paths": 227,
+   "shapes": 524
+  },
+  "396": {
+   "path": "network/396.aba7637f4483bc82.json",
+   "bytes": 579543,
+   "sha256": "aba7637f4483bc821128bbd44594371d16321029fa8b8defbbf7e3767b0f2624",
+   "feedVersion": "000396",
+   "graphHash": "b0ac946be55f8f79",
+   "paths": 207,
+   "shapes": 561
+  }
+ },
+ "files": {
+  "series": {
+   "path": "series/window.649862d383f25f48.json",
+   "bytes": 703557,
+   "sha256": "649862d383f25f48e912181c80313fcbcba711e2edb476142bc7dcfee88659be"
+  },
+  "motionIndex": {
+   "path": "motion/index.15915ce9e9be10ff.json",
+   "bytes": 104520,
+   "sha256": "15915ce9e9be10ff4dec1e3e94791c0bcbbb85273d74c2011515669d3ed0a0da"
+  },
+  "routes": {
+   "path": "routes/window.71b6a052ec9518f7.json",
+   "bytes": 559056,
+   "sha256": "71b6a052ec9518f71b3babb1c0452b22a24c5fbfa7c9a0ee6f273f4b9091cf33"
+  },
+  "stations": {
+   "path": "bajs/stations.757c7db70844b9cf.json",
+   "bytes": 19239,
+   "sha256": "757c7db70844b9cfb90496635e7717d55d16a6f8cf9e1546f49c2b887b91a341"
+  },
+  "bajs": {
+   "path": "bajs/window.e5a07246f7386f1f.json",
+   "bytes": 361466,
+   "sha256": "e5a07246f7386f1fbd0c72fea650843af4983e83b98a7dc81828e12b13aae798"
+  },
+  "closures": {
+   "path": "closures/window.33f7e34c7b674b89.json",
+   "bytes": 30259,
+   "sha256": "33f7e34c7b674b8965e236cb4d294c08609b4cb182510a87f6676117dbaf1cd0"
+  },
+  "events": {
+   "path": "events/window.0d392486941dae66.json",
+   "bytes": 9828,
+   "sha256": "0d392486941dae66ffa51f4a9a99b3d35a4d381cf99285a84bd54761d2092fc1"
+  },
+  "notices": {
+   "path": "notices/window.8a375f8e2c27fd2d.json",
+   "bytes": 1227,
+   "sha256": "8a375f8e2c27fd2dc7d09008e71217e70392d27f0f46f1144bd214f1c18616cb"
+  },
+  "news": {
+   "path": "news/window.18244b8521df836e.json",
+   "bytes": 26834,
+   "sha256": "18244b8521df836e38426d3f0477b2c6129d0128efe56de4b80486567077570b"
+  },
+  "places": {
+   "path": "places.b5bb7afaae062d1e.json",
+   "bytes": 1369,
+   "sha256": "b5bb7afaae062d1e2be03f3243313982df900976b16621e89aafbbf42b71e277"
+  },
+  "screenIndex": {
+   "path": "screen/index.8f9f329b9b6efa5d.json",
+   "bytes": 40539,
+   "sha256": "8f9f329b9b6efa5d4bcd533ca7e968313eed475aa23a634998cd64c9d4630f39"
+  },
+  "boards": [
+   {
+    "path": "boards/106_1.53c1b66be1862358.json",
+    "bytes": 168141,
+    "sha256": "53c1b66be1862358ab582ec3272b2d374ca76fd5195345fa2e61b25abb2b82dd",
+    "stop": "106_1",
+    "name": "Trg bana J. Jelačića",
+    "samples": 1317
+   },
+   {
+    "path": "boards/106_2.6d9c41da58edafff.json",
+    "bytes": 176256,
+    "sha256": "6d9c41da58edafff9f596e070f8f7d86aaea0f931e3e24c08e00f599291b78dc",
+    "stop": "106_2",
+    "name": "Trg bana J. Jelačića",
+    "samples": 1317
+   },
+   {
+    "path": "boards/98_1.32eca8fbebb3013a.json",
+    "bytes": 163093,
+    "sha256": "32eca8fbebb3013ad0ed1e91b90aaa94a1c07651bde180d135b55ee36381c7e7",
+    "stop": "98_1",
+    "name": "Črnomerec",
+    "samples": 1317
+   },
+   {
+    "path": "boards/208_24.9852666a4caf96e7.json",
+    "bytes": 194986,
+    "sha256": "9852666a4caf96e76b22591ce68e09645577cf227d5a39dc6ce9e54ca83628e5",
+    "stop": "208_24",
+    "name": "Dubrava",
+    "samples": 1317
+   },
+   {
+    "path": "boards/271_24.149714190feb4598.json",
+    "bytes": 58026,
+    "sha256": "149714190feb4598a7fcc0df438e24e576729ca9079465cdc654bf97994f600a",
+    "stop": "271_24",
+    "name": "Savski most",
+    "samples": 1317
+   },
+   {
+    "path": "boards/236_1.90119da8b3fe202d.json",
+    "bytes": 162454,
+    "sha256": "90119da8b3fe202d1980bad814c59da729ba0cb8606cff75ffadd9ce5a81fe21",
+    "stop": "236_1",
+    "name": "Kvaternikov trg",
+    "samples": 1317
+   },
+   {
+    "path": "boards/109_1.247d3f27a91ae168.json",
+    "bytes": 166287,
+    "sha256": "247d3f27a91ae168a1d2961579a2dee4e6f4d6c2b48ef4d31193c0adfe3b02c1",
+    "stop": "109_1",
+    "name": "Glavni kolodvor",
+    "samples": 1317
+   },
+   {
+    "path": "boards/245_1.60caa0ed3b7a2f9d.json",
+    "bytes": 167207,
+    "sha256": "60caa0ed3b7a2f9d567384972ed78f702e6b13320a79dd177d14e40aacd44ea4",
+    "stop": "245_1",
+    "name": "Ljubljanica",
+    "samples": 1317
+   }
+  ],
+  "voiceIndex": {
+   "path": "voice/index.70c91204497d94be.json",
+   "bytes": 1194,
+   "sha256": "70c91204497d94bedc47bfccb8575a27d4620ae39a77c052d451838f63169b54"
+  },
+  "exports": [
+   {
+    "path": "exports/series.c9750d8d6463b04a.csv",
+    "bytes": 963320,
+    "sha256": "c9750d8d6463b04a0ffb8083b2f23bb5aa58c8c5c56d2d0a77efd6e6f1fd7e57",
+    "name": "series",
+    "format": "csv",
+    "mediaType": "text/csv",
+    "title": "Stanje usluge i vozila po minuti",
+    "rows": 6721
+   },
+   {
+    "path": "exports/hourly.76fed113160317fa.csv",
+    "bytes": 5737,
+    "sha256": "76fed113160317fadb7bd72abb9d2f0cc655a081e662984b447c395bed90e14a",
+    "name": "hourly",
+    "format": "csv",
+    "mediaType": "text/csv",
+    "title": "Brojevi po satu",
+    "rows": 113
+   },
+   {
+    "path": "exports/routes-5min.84a03600ebe10f9f.csv",
+    "bytes": 10921833,
+    "sha256": "84a03600ebe10f9ff6021d7fe7936cfc4b45dec34f6c07c73a835dc9a5c565ed",
+    "name": "routes-5min",
+    "format": "csv",
+    "mediaType": "text/csv",
+    "title": "Vozila po liniji svakih pet minuta",
+    "rows": 206977
+   },
+   {
+    "path": "exports/bikes-5min.f6f38070c57465bd.csv",
+    "bytes": 659359,
+    "sha256": "f6f38070c57465bdeca59acfb5994de678e21f18e8718191b16979e920bf7af2",
+    "name": "bikes-5min",
+    "format": "csv",
+    "mediaType": "text/csv",
+    "title": "Bicikli po stanici svakih pet minuta",
+    "rows": 1345
+   },
+   {
+    "path": "exports/stations.1a094160d35ef2a6.csv",
+    "bytes": 11044,
+    "sha256": "1a094160d35ef2a6b8463f83d5f8506c36b79b0f20956a01b8d72192b055a451",
+    "name": "stations",
+    "format": "csv",
+    "mediaType": "text/csv",
+    "title": "Stanice BAJS-a",
+    "rows": 201
+   },
+   {
+    "path": "exports/sentences.21a8b2cf61084c75.csv",
+    "bytes": 602093,
+    "sha256": "21a8b2cf61084c759401401b9d6223bdcfdaa54b23811b7ac7ef7698db54ba18",
+    "name": "sentences",
+    "format": "csv",
+    "mediaType": "text/csv",
+    "title": "Rečenice zaslona po današnjim pravilima",
+    "rows": 6721
+   },
+   {
+    "path": "exports/events.0d392486941dae66.json",
+    "bytes": 9828,
+    "sha256": "0d392486941dae66ffa51f4a9a99b3d35a4d381cf99285a84bd54761d2092fc1",
+    "name": "events",
+    "format": "json",
+    "mediaType": "application/json",
+    "title": "Događaji snimke",
+    "rows": null
+   },
+   {
+    "path": "exports/closures.63772fcc7263e8bd.geojson",
+    "bytes": 113509,
+    "sha256": "63772fcc7263e8bd54e0b8b4d8299ae92482d9617de6e672abe3e43e7620d7c0",
+    "name": "closures",
+    "format": "geojson",
+    "mediaType": "application/geo+json",
+    "title": "Zatvorene ulice po inačici skupa",
+    "rows": null
+   },
+   {
+    "path": "exports/opis.5acbe46a4f939404.json",
+    "bytes": 36357,
+    "sha256": "5acbe46a4f939404f8d29d8687ed92100882093440690a194e0fb3d3deec90f7",
+    "name": "opis",
+    "format": "json",
+    "mediaType": "application/json",
+    "title": "Opis skupa",
+    "rows": null
+   }
+  ],
+  "opis": {
+   "path": "exports/opis.5acbe46a4f939404.json",
+   "bytes": 36357,
+   "sha256": "5acbe46a4f939404f8d29d8687ed92100882093440690a194e0fb3d3deec90f7"
+  },
+  "grid": null
+ },
+ "attribution": [
+  {
+   "id": "zet",
+   "text": "Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669",
+   "url": "http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669",
+   "licence": "Otvorena dozvola (NN 67/17)",
+   "adaptation": "položaji vozila izvedeni modelom kretanja iz snimljenih GTFS-RT okvira, 10-sekundni korak; sirovi okviri se ne objavljuju"
+  },
+  {
+   "id": "zet-rss",
+   "text": "ZET, obavijesti: naslov, vrijeme objave i poveznica na obavijest",
+   "url": "https://www.zet.hr/",
+   "licence": "uvjeti ponovne uporabe nisu objavljeni; upit ZET-u je otvoren",
+   "adaptation": null
+  },
+  {
+   "id": "nextbike",
+   "text": "nextbike (BAJS), GBFS: stanje stanica svake minute",
+   "url": "https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_hd/hr/",
+   "licence": "CC0 1.0",
+   "adaptation": "brojevi bicikala po stanici svakih pet minuta; zbroj bicikala i praznih stanica po minuti"
+  },
+  {
+   "id": "zagreb-closures",
+   "text": "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba'",
+   "url": "https://data.zagreb.hr/",
+   "licence": "Otvorena dozvola (OD), http://data.gov.hr/otvorena-dozvola",
+   "adaptation": "svaka snimljena inačica skupa, s krajem zatvaranja kako ga je ta inačica objavila"
+  },
+  {
+   "id": "dhmz",
+   "text": "Izvor: DHMZ, Otvorena dozvola; postaja Zagreb-Maksimir",
+   "url": "https://vrijeme.hr/hrvatska1_n.xml",
+   "licence": "Otvorena dozvola (NN 67/17)",
+   "adaptation": "temperatura i vrijeme po satu"
+  },
+  {
+   "id": "news",
+   "text": "Jutarnji list, Večernji list i N1: naslovi i poveznice uz atribuciju, bez teksta članaka",
+   "url": null,
+   "licence": "navod naslova s poveznicom na izvorni članak",
+   "adaptation": null
+  },
+  {
+   "id": "osm",
+   "text": "© OpenStreetMap contributors",
+   "url": "https://www.openstreetmap.org/copyright",
+   "licence": "ODbL 1.0",
+   "adaptation": "podloga karte i karta u snimkama zaslona"
+  },
+  {
+   "id": "kajima",
+   "text": "Kaj ima?: snimke javnog zaslona, objavljeni brojevi i stanje usluge izračunano istim pravilima nad snimljenim podacima",
+   "url": "https://github.com/matijarma/vidikovac",
+   "licence": "AGPL-3.0 (izvorni kod)",
+   "adaptation": null
+  }
+ ],
+ "notes": [
+  "Lokalni snimači rade od nedjelje 27. rujna u 22:07: za ranije minute brojevi koje je aplikacija objavila, bicikli i zatvorene ulice nemaju podatka.",
+  "U srijedu 30. rujna od 22:41 do 22:54 lokalni snimači nisu radili; ZET-ovi podaci snimljeni su bez prekida.",
+  "Aplikacija objavljuje stanje usluge od utorka 29. rujna u 23:17; za ranije minute stanje je izračunano naknadno, istim pravilima, iz snimljenih podataka.",
+  "Od nedjelje u 20:00 do ponoći vozila su snimljena prema starom voznom redu ZET-a, a smještena na mrežu novoga; na dionicama s dva kolosijeka smjer vozila zato može biti pogrešan.",
+  "Običan četvrtak 24. rujna nema snimljenih ZET-ovih podataka od ponoći do 02:00.",
+  "Običnom ponedjeljku 21. rujna u snimci nedostaju dva okvira.",
+  "Rečenice zaslona po današnjim pravilima izračunane su naknadno, samo iz predložaka aplikacije, bez jezičnog modela; zapis stvarnog zaslona postoji samo za snimljena razdoblja.",
+  "Vozila koja ulaze u spremište označena su kako ih označava i aplikacija.",
+  "Snimka završava u petak 2. listopada u 12:00."
+ ]
+}
