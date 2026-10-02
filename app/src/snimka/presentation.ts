@@ -1,5 +1,5 @@
-// Presentation mode (plan section 3.7): the button "Cijeli zaslon"
-// (aria-pressed) puts the stage section into fullscreen (the pattern of
+// Presentation mode (plan section 3.7): the icon button "Cijeli zaslon"
+// (its aria-label; aria-pressed) puts the stage section into fullscreen (the pattern of
 // app/src/kiosk.ts); fullscreenchange marks data-sn-presenting on the
 // stage; while presenting, the controls hide after three idle seconds
 // (data-sn-idle; a pointer or a key wakes them; never while the focus is
@@ -95,8 +95,12 @@ export function bindPresentation(stageRoot: HTMLElement, button: HTMLButtonEleme
     else delete stageRoot.dataset.snPresenting;
     if (button) {
       button.setAttribute('aria-pressed', presenting ? 'true' : 'false');
-      const words = button.querySelector<HTMLElement>('[data-sn-present-text]') ?? button;
-      words.textContent = presenting ? SN.present.exit : SN.present.enter;
+      const label = presenting ? SN.present.exit : SN.present.enter;
+      // v3: an icon button carries its name in aria-label (and the tooltip); a worded one swaps its words.
+      const words = button.querySelector<HTMLElement>('[data-sn-present-text]');
+      if (words) words.textContent = label;
+      else if (button.hasAttribute('aria-label')) { button.setAttribute('aria-label', label); button.title = label; }
+      else button.textContent = label;
     }
     idle.arm(presenting && !opts.reducedMotion);
     opts.onChange?.(presenting);

@@ -1,13 +1,14 @@
 // The latest headline within three hours, the latest notice (kept until the
 // next), the latest event within an hour (app/src/snimka/voices.ts); and the
-// feed's pure half: order, kinds, the fold per beat, the cap and the subject,
-// the companion's own voices, the timeline's lanes and the state band.
+// feed's pure half (Objave, v3): order, kinds, no companion or internal items,
+// dedupe by noticeId and its fallback, the fold per beat, the current item and
+// the log, the subject, the timeline's one marker row and the state band.
 import { describe, expect, it } from 'vitest';
 import type { NewsFile, NoticesFile, SnimkaEvent } from '../../shared/snimka';
-import { SNIMKA_WINDOW, type VoiceFile } from '../../shared/snimka';
-import { buildEvents, buildNews, buildNotices, buildVoiceDay, buildWindowSeries, MARKS, zg } from '../../e2e/snimka-fixtures';
+import { SNIMKA_WINDOW } from '../../shared/snimka';
+import { buildEvents, buildNews, buildNotices, buildWindowSeries, MARKS } from '../../e2e/snimka-fixtures';
 import {
-  buildVoices, companionVoices, COMPANION_GAP_S, feedMarkers, focusSubject, foldedUpTo, foldPress, mentionsSubject, stateBand, voicesUpTo, type VoiceItem,
+  buildVoices, chipKeys, feedAt, feedMarkers, focusSubject, foldedUpTo, foldPress, kickerOf, mentionsSubject, repeatedNotice, speaksInFeed, stateBand, type VoiceItem,
 } from '../../app/src/snimka/voices';
 import { ARTICLE_WINDOW_S, currentArticle, currentMarker, currentNotice, MARKER_WINDOW_S } from '../../app/src/snimka/voices';
 
@@ -70,35 +71,65 @@ describe('currentMarker', () => {
   });
 });
 
-// ---- the feed's pure half (v2) ----------------------------------------------------------------
+// ---- the feed's pure half (v3: Objave) -------------------------------------------------------------
 const fixtureFiles = { notices: buildNotices(), news: buildNews(), events: buildEvents().events };
 const press = (id: string, atSec: number, beat: string | null, extra: Partial<VoiceItem> = {}): VoiceItem => ({
-  id, atSec, kind: 'press', title: id, text: null, link: `https://n1info.hr/${id}`, source: { label: 'N1', url: 'https://n1info.hr/' }, focus: { kind: 'none' }, facts: [], mentions: {}, beat, ...extra,
+  id, atSec, kind: 'press', title: id, text: null, link: `https://n1info.hr/${id}`, source: { label: 'N1', url: 'https://n1info.hr/' }, focus: { kind: 'none' }, facts: [], mentions: {}, beat, tone: null, ...extra,
 });
 
 describe('buildVoices', () => {
   const items = buildVoices(fixtureFiles);
-  it('every notice, headline and event in time order, each with its kind', () => {
+  it('notices, headlines, chapters and what ZET and the court said, in time order, each with its kind and tone', () => {
     for (let i = 1; i < items.length; i++) expect(items[i]!.atSec).toBeGreaterThanOrEqual(items[i - 1]!.atSec);
     const kinds = new Map(items.map((i) => [i.id, i.kind]));
     expect(kinds.get('notice:10164')).toBe('zet');
     expect(kinds.get('news:v1')).toBe('press');
-    expect(kinds.get('event:sud')).toBe('court');
-    expect(kinds.get('event:prvo-jutro')).toBe('event');
+    expect(kinds.get('event:sud')).toBe('chapter');
+    expect(items.find((i) => i.id === 'event:sud')!.tone).toBe('court');
+    expect(kinds.get('event:prvo-jutro')).toBe('chapter');
+    expect(kinds.get('event:vozni-red-396')).toBe('zet');
+    expect(items.find((i) => i.id === 'news:v1')!.tone).toBeNull();
     // A notice published before the window is still a voice (it is what ZET said the day before).
     expect(items[0]!.id).toBe('notice:10164');
   });
-  it('a chapter that repeats a notice of the same minute speaks once, as the notice', () => {
-    expect(items.some((i) => i.id === 'event:linija-228')).toBe(false);
-    expect(items.find((i) => i.id === 'notice:10166')?.focus).toEqual({ kind: 'route', id: '228' });
-    expect(items.length).toBe(fixtureFiles.notices.items.length + fixtureFiles.news.items.length + fixtureFiles.events.length - 1);
+  it('no companion items and no recording-internal events; plain readings of the service stay out', () => {
+    expect(items.some((i) => (i.kind as string) === 'companion' || i.id.startsWith('companion:'))).toBe(false);
+    expect(items.some((i) => i.id === 'event:stanje-usluge' || i.id === 'event:zapisivaci')).toBe(false);
+    expect(items.some((i) => i.id === 'event:kraj-snimke')).toBe(false);
+    expect(speaksInFeed({ chapter: true, kind: 'recording', internal: true })).toBe(false);
+    expect(speaksInFeed({ chapter: false, kind: 'service' })).toBe(false);
+    expect(speaksInFeed({ chapter: false, kind: 'court' })).toBe(true);
   });
-  it('titles stay verbatim; a headline links its article and names its outlet', () => {
+  it('dedupe by noticeId: a chapter keeps its heading and takes the notice link; any other event gives way to the notice', () => {
+    expect(items.some((i) => i.id === 'notice:10166')).toBe(false);
+    const ch = items.find((i) => i.id === 'event:linija-228')!;
+    expect(ch.kind).toBe('chapter');
+    expect(ch.link).toBe('https://www.zet.hr/obavijesti/10166');
+    expect(ch.focus).toEqual({ kind: 'route', id: '228' });
+    expect(items.some((i) => i.id === 'event:puni-opseg')).toBe(false);
+    expect(items.some((i) => i.id === 'notice:10168')).toBe(true);
+  });
+  it('without a noticeId: within 60 minutes and the same title, or the notice linked among the sources', () => {
+    const notice = { id: 7, title: 'Promet ponovno u punom opsegu', text: null, link: 'https://www.zet.hr/obavijesti/7', pubSec: 1000, focus: { kind: 'none' as const }, facts: [], mentions: {} };
+    const base = { sources: [] as { label: string; url: string }[] };
+    expect(repeatedNotice({ ...base, atSec: 1000 + 3000, title: 'promet ponovno u punom opsegu ' }, [notice])?.id).toBe(7);
+    expect(repeatedNotice({ ...base, atSec: 1000 + 3700, title: 'Promet ponovno u punom opsegu' }, [notice])).toBeNull();
+    expect(repeatedNotice({ atSec: 1500, title: 'ZET: puni opseg', sources: [{ label: 'ZET', url: 'https://www.zet.hr/obavijesti/7' }] }, [notice])?.id).toBe(7);
+    expect(repeatedNotice({ atSec: 1500, title: 'Nešto drugo', sources: [] }, [notice])).toBeNull();
+    expect(repeatedNotice({ atSec: 99_999, title: 'x', sources: [], noticeId: 7 }, [notice])?.id).toBe(7);
+  });
+  it('titles stay verbatim; a headline links its article and names its outlet as its kicker', () => {
     const v1 = items.find((i) => i.id === 'news:v1')!;
     expect(v1.title).toBe('ZET uveo autobusnu liniju do Rebra');
     expect(v1.link).toBe('https://www.vecernji.hr/zagreb/primjer-2');
-    expect(v1.source).toEqual({ label: 'Večernji list', url: 'https://www.vecernji.hr/' });
-    expect(v1.beat).toBe('linija-228');
+    expect(kickerOf(v1)).toBe('Večernji list');
+    expect(kickerOf(items.find((i) => i.id === 'notice:10164')!)).toBe('ZET');
+    expect(kickerOf(items.find((i) => i.id === 'event:prvo-jutro')!)).toBe('Poglavlje');
+  });
+  it('chips: at most two, never on a headline', () => {
+    expect(chipKeys(items.find((i) => i.id === 'news:v1')!)).toEqual([]);
+    expect(chipKeys(items.find((i) => i.id === 'event:prvo-jutro')!)).toEqual(['seen', 'expected']);
+    expect(chipKeys(items.find((i) => i.id === 'notice:10164')!).length).toBe(2);
   });
   it('the subject of an item is its line, station or stop; a city, a place or a layer is none', () => {
     expect(focusSubject({ focus: { kind: 'route', id: '228' } })).toEqual({ kind: 'route', id: '228' });
@@ -134,73 +165,38 @@ describe('foldPress', () => {
   });
 });
 
-describe('voicesUpTo', () => {
+describe('feedAt', () => {
   const many = Array.from({ length: 20 }, (_, i) => press(`p${i}`, i * 60, null, i % 4 === 0 ? { mentions: { routes: ['228'] } } : {}));
-  it('newest first, cut at fourteen, the rest older; nothing after the clock', () => {
-    const at = voicesUpTo(many, 19 * 60);
-    expect(at.visible.length).toBe(14);
-    expect(at.visible[0]!.id).toBe('p19');
-    expect(at.visible[13]!.id).toBe('p6');
-    expect(at.older.map((i) => i.id)).toEqual(['p5', 'p4', 'p3', 'p2', 'p1', 'p0']);
-    expect(at.olderCount).toBe(6);
+  it('the latest at or before the instant is current, the rest the log, newest first; no cap; nothing after the clock', () => {
+    const at = feedAt(many, 19 * 60);
+    expect(at.current!.id).toBe('p19');
+    expect(at.log.length).toBe(19);
+    expect(at.log[0]!.id).toBe('p18');
+    expect(at.count).toBe(20);
     expect(at.hiddenCount).toBe(0);
-    expect(voicesUpTo(many, 5 * 60 - 1).visible.map((i) => i.id)).toEqual(['p4', 'p3', 'p2', 'p1', 'p0']);
-    expect(voicesUpTo(many, -1).visible).toEqual([]);
+    expect(feedAt(many, 5 * 60 - 1).current!.id).toBe('p4');
+    expect(feedAt(many, -1)).toEqual({ current: null, log: [], hiddenCount: 0, count: 0 });
   });
   it('a subject keeps only what speaks of it and counts what it left out', () => {
-    const at = voicesUpTo(many, 19 * 60, { subject: { kind: 'route', id: '228' } });
-    expect(at.visible.map((i) => i.id)).toEqual(['p16', 'p12', 'p8', 'p4', 'p0']);
+    const at = feedAt(many, 19 * 60, { kind: 'route', id: '228' });
+    expect([at.current!.id, ...at.log.map((i) => i.id)]).toEqual(['p16', 'p12', 'p8', 'p4', 'p0']);
     expect(at.hiddenCount).toBe(15);
-    expect(at.olderCount).toBe(0);
   });
-  it('on the fixture: the 228 subject keeps the notice and the headline about the line', () => {
-    const at = voicesUpTo(foldPress(buildVoices(fixtureFiles)), SNIMKA_WINDOW.toSec, { subject: { kind: 'route', id: '228' } });
-    expect(at.visible.map((i) => i.id)).toEqual(['news:v1', 'notice:10166']);
-  });
-});
-
-describe('companionVoices', () => {
-  const mon = buildVoiceDay('mon');
-  const thu = buildVoiceDay('thu');
-  it('speaks when the lead fact turns to a family not heard for two hours, at most once an hour', () => {
-    const voices = companionVoices([thu, mon]);
-    // Monday's first minute (07:30) is new; its bikes sentence at 07:32 is new too but within the hour; Thursday 07:30 is new again.
-    expect(voices.map((v) => v.atSec)).toEqual([zg(9, 28, 7, 30), zg(10, 1, 7, 30)]);
-    expect(voices[0]!.title).toBe('U pokretu su 2 vozila, po voznom redu oko 230.');
-    expect(voices[1]!.kind).toBe('companion');
-    for (let i = 1; i < voices.length; i++) expect(voices[i]!.atSec - voices[i - 1]!.atSec).toBeGreaterThanOrEqual(COMPANION_GAP_S);
-  });
-  it('the first live departure after hours of the timetable is a voice of its own', () => {
-    const day = (t0: number, minutes: [number, number][]): VoiceFile => ({
-      v: 2, place: '106_1', day: 'd', t0, step: 60, n: 600,
-      facts: [{ id: 'service:zet', kind: 'service', wording: 'silent', text: 'U pokretu su 3 vozila.' }, { id: 'dep:6', kind: 'departure', wording: 'live', text: 'Tramvaj 6 polazi za 4 min.' }],
-      rows: [], sentences: ['U pokretu su 3 vozila.', 'Tramvaj 6 polazi za 4 min.'],
-      minutes: Array.from({ length: 600 }, (_, m) => {
-        const which = minutes.find(([from]) => m >= from) ? minutes.filter(([from]) => m >= from).at(-1)![1] : 0;
-        return { at: t0 + m * 60, f: [which], r: [], lead: which, state: 'silent' as const, voice: 'all' as const, seen: 3, expected: 200, note: null };
-      }),
-    });
-    const evening = zg(9, 30, 12, 0);
-    const voices = companionVoices([day(evening, [[0, 0], [370, 1]])]);
-    expect(voices.map((v) => v.atSec)).toEqual([evening, evening + 370 * 60]);
-    expect(voices[1]!.title).toBe('Tramvaj 6 polazi za 4 min.');
-    // Back and forth within two hours is not news: the service sentence returning after a few minutes says nothing.
-    const flicker = companionVoices([day(evening, [[0, 0], [370, 1], [375, 0], [380, 1]])]);
-    expect(flicker.length).toBe(2);
+  it('on the fixture: the 228 subject keeps the chapter and the headline about the line', () => {
+    const at = feedAt(foldPress(buildVoices(fixtureFiles)), SNIMKA_WINDOW.toSec, { kind: 'route', id: '228' });
+    expect([at.current!.id, ...at.log.map((i) => i.id)]).toEqual(['news:v1', 'event:linija-228']);
   });
 });
 
 describe('feedMarkers and stateBand', () => {
-  it('chapters, notices with the court and ZET\'s own markers, and the press thinned to the first headline per beat', () => {
-    const events = fixtureFiles.events;
+  it('one row: the chapters as pins and what ZET and the court said as dots; no press marks', () => {
     const items = buildVoices(fixtureFiles);
-    const markers = feedMarkers(items, events);
+    const markers = feedMarkers(foldPress(items));
     const lane = (l: string) => markers.filter((m) => m.lane === l).map((m) => m.id);
-    expect(lane('chapter')).toEqual(events.filter((e) => e.chapter && e.id !== 'linija-228' && e.kind !== 'court').map((e) => `event:${e.id}`));
-    expect(lane('notice')).toEqual(expect.arrayContaining(['notice:10164', 'notice:10166', 'event:sud', 'event:feed-stoji-pon', 'event:vozni-red-396']));
-    expect(lane('press')).toEqual(['news:j1', 'news:j2', 'news:v1', 'news:n1', 'news:n2']);
-    const thinned = feedMarkers([press('a', 0, 'bajs'), press('b', 10, 'bajs'), press('c', 20, null), press('d', 30, null)]);
-    expect(thinned.map((m) => m.id)).toEqual(['a', 'c', 'd']);
+    expect(lane('chapter')).toEqual(fixtureFiles.events.filter((e) => e.chapter && !e.internal).map((e) => `event:${e.id}`));
+    expect(lane('notice')).toEqual(expect.arrayContaining(['notice:10164', 'notice:10168', 'event:feed-stoji-pon', 'event:vozni-red-396']));
+    expect(lane('press')).toEqual([]);
+    expect(new Set(markers.map((m) => m.lane)).size).toBe(2);
     for (const m of markers) expect(m.title.length).toBeGreaterThan(0);
   });
   it('the state band: consecutive runs of the judged state with the machine\'s since, none where it held', () => {

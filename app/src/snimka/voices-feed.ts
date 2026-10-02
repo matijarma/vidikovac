@@ -1,29 +1,35 @@
-// The voices feed (plan section 3.4): ZET, the court, the press, the chapters
-// and the companion itself in one time-ordered panel, newest on top, filling
-// as the clock passes. Each item is built once with the chips of its own
-// minute; passive play adds new items at most every 400 ms of wall time
-// (several due at once arrive together) and slides them in only without
-// reduced motion; a seek redraws at once without motion. The press is folded
-// one headline per beat per three hours; fourteen items show, the rest wait
-// under "Starije". A click on an item pauses the replay, moves it to the
-// item's minute and, when the item points at a line, a station or a stop,
-// makes that the subject; the feed then shows only what speaks of it, says
-// how many items it left out and offers "Sve teme".
+// Objave (decision V3-16): what ZET, the court and the press said, and the
+// recording's chapters, beside the map on the one clock. Two levels: the
+// current item (the latest at or before the instant: its kicker, its time,
+// the title at 16 px, a headline's title as its link, at most two chips and
+// only on ZET, court and chapter items, the folded headlines of its beat)
+// over a compact log (13 px rows: time · kicker · title, newest first, under
+// day headings, the chapters as heading rows). No cap: the log scrolls. A
+// click on a row or on the current item's time pauses the replay, moves it to
+// that minute, makes the item's line, station or stop the subject and, for a
+// headline, moves the map to its place (the director no longer follows the
+// press). With a subject one 44 px line says "Samo linija 228 · skriveno 39"
+// with "Prikaži sve". Passive play adds items at most every 400 ms of wall
+// time and slides the new current item in only without reduced motion; a
+// seek redraws at once. Probes: data-sn-feed-count, data-sn-feed-current,
+// data-sn-feed-subject.
+import type { Focus } from '../../../shared/snimka';
 import type { Subject } from './contracts';
 import type { SnimkaContext } from './context';
 import { chipsLabel, factChips, onStationData, stationData, type FactChip } from './facts';
-import { formatZagrebLocal, plural, zagrebDateTime } from './format';
+import { formatZagrebLocal, plural, zagrebClock, zagrebDateTime, zagrebDay } from './format';
 import { SN, fill } from './strings';
-import { voiceData } from './voice-data';
-import { buildVoices, companionVoices, focusSubject, foldPress, foldedUpTo, voicesUpTo, type VoiceItem } from './voices';
-import type { MountPanel } from './contracts';
+import { buildVoices, chipKeys, feedAt, focusSubject, foldPress, foldedUpTo, kickerOf, type VoiceItem } from './voices';
 
-export const FEED_MAX_VISIBLE = 14;
 /** Passive play adds new items at most this often (wall milliseconds). */
 export const FEED_CADENCE_MS = 400;
 
+export interface FeedOptions {
+  /** The map's flyTo, once the map is there (a headline's click moves the camera). */
+  flyTo?: (focus: Focus) => void;
+}
 
-/** The subject's name in the feed's header: "Linija 228", "Stanica Trg žrtava fašizma", "Stajalište Glavni kolodvor". */
+/** The subject's name in the feed: "Linija 228", "Stanica BAJS-a Trg žrtava fašizma", "Stajalište Glavni kolodvor". */
 export function subjectLabel(ctx: Pick<SnimkaContext, 'routes' | 'places' | 'manifest' | 'data'>, subject: Subject): string {
   if (subject.kind === 'route') {
     const route = ctx.routes.routes.find((r) => r.id === subject.id);
@@ -35,6 +41,17 @@ export function subjectLabel(ctx: Pick<SnimkaContext, 'routes' | 'places' | 'man
   }
   const place = ctx.places.places.find((p) => p.ref === subject.id);
   return fill(SN.subject.stop, { name: place?.name ?? subject.id });
+}
+
+/** "Samo linija 228 · skriveno 39": the subject's name in running text starts lower case. */
+export function filterLine(label: string, hidden: number): string {
+  return fill(SN.voices.filtered, { subject: label.charAt(0).toLocaleLowerCase('hr') + label.slice(1), n: hidden });
+}
+
+/** Whether a click on the item moves the map itself: a headline whose focus is a place, the city or a layer (a line,
+ *  a station or a stop becomes the subject, which the stage fits). */
+export function fliesTo(item: Pick<VoiceItem, 'kind' | 'focus'>): boolean {
+  return item.kind === 'press' && item.focus.kind !== 'none' && focusSubject(item) === null;
 }
 
 const subjectKey = (s: Subject | null): string => (s ? `${s.kind}:${s.id}` : '');
@@ -51,10 +68,8 @@ function spokenBy(times: readonly number[], atSec: number): number {
 }
 
 let feedIds = 0;
-const KIND_WORD = SN.voices.kind;
-const BEAT_WORD = SN.voices.beat as Record<string, string | undefined>;
 
-export const mountVoicesFeed: MountPanel = (ctx, root) => {
+export const mountVoicesFeed = (ctx: SnimkaContext, root: HTMLElement, opts: FeedOptions = {}): (() => void) => {
   const doc = ctx.doc ?? root.ownerDocument;
   const V = SN.voices;
   const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
@@ -68,54 +83,38 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
   const panel = el('section', 'sn-feed');
   const headingId = `sn-feed-h-${++feedIds}`;
   panel.setAttribute('aria-labelledby', headingId);
-  const header = el('header', 'sn-feed-head');
   const heading = el('h3', 'sn-feed-title', V.title);
   heading.id = headingId;
-  const lede = el('p', 'sn-feed-lede', V.lede);
   const filter = el('p', 'sn-feed-filter');
   filter.hidden = true;
   const filterText = el('span', 'sn-feed-filter-text');
-  const hiddenText = el('span', 'sn-feed-hidden');
   const clear = el('button', 'sn-feed-clear', V.clear);
   clear.type = 'button';
   clear.dataset.sn = 'feed-clear';
   clear.addEventListener('click', () => ctx.view.set({ subject: null }, 'feed'));
-  filter.append(filterText, ' ', hiddenText, ' ', clear);
-  header.append(heading, lede, filter);
+  filter.append(filterText, clear);
   const empty = el('p', 'sn-feed-empty', V.empty);
-  const list = el('ol', 'sn-feed-list');
-  const older = el('details', 'sn-feed-older');
-  const olderSummary = el('summary', 'sn-feed-older-summary');
-  const olderList = el('ol', 'sn-feed-list sn-feed-older-list');
-  older.append(olderSummary, olderList);
-  older.hidden = true;
-  panel.append(header, empty, list, older);
+  const current = el('article', 'sn-feed-current');
+  current.dataset.sn = 'feed-current';
+  current.hidden = true;
+  const log = el('ol', 'sn-feed-log');
+  panel.append(heading, filter, empty, current, log);
   root.replaceChildren(panel);
   root.dataset.snFeedCount = '0';
+  root.dataset.snFeedCurrent = '';
   root.dataset.snFeedSubject = '';
 
   // ---- the items ------------------------------------------------------------------------------
-  const base = buildVoices(ctx);
-  let items: VoiceItem[] = foldPress(base);
-  let times: number[] = items.map((i) => i.atSec);
-  const byId = new Map<string, VoiceItem>();
-  const indexItems = (): void => {
-    byId.clear();
-    for (const i of items) byId.set(i.id, i);
-  };
-  indexItems();
+  const items: VoiceItem[] = foldPress(buildVoices(ctx));
+  const times: number[] = items.map((i) => i.atSec);
 
-  interface Node { li: HTMLLIElement; chips: HTMLElement | null; fold: HTMLDetailsElement | null; foldSummary: HTMLElement | null; foldList: HTMLUListElement | null; foldShown: number; pending: boolean }
-  const nodes = new Map<string, Node>();
-
-  const chipsHtml = (host: HTMLElement, chips: FactChip[]): void => {
+  const chipsInto = (host: HTMLElement, chips: FactChip[]): void => {
     host.replaceChildren(...chips.map((c) => {
       const chip = el('span', 'sn-fact-chip', c.text);
       if (c.missing) chip.dataset.missing = 'true';
       if (c.retro) {
         chip.dataset.retro = 'true';
-        const tag = el('span', 'sn-fact-retro', SN.badge.retroShort);
-        chip.append(' ', tag);
+        chip.title = SN.badge.retroShort;
       }
       return chip;
     }));
@@ -126,10 +125,11 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
     ctx.clock.seek(item.atSec * 1000);
     const subject = focusSubject(item);
     if (subject) ctx.view.set({ subject }, 'feed');
+    if (fliesTo(item)) opts.flyTo?.(item.focus);
   };
 
-  const linkTo = (href: string, text: string): HTMLAnchorElement => {
-    const a = el('a', 'sn-feed-link', text);
+  const linkTo = (href: string, text: string, cls = 'sn-feed-link'): HTMLAnchorElement => {
+    const a = el('a', cls, text);
     a.href = href;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
@@ -137,93 +137,129 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
     return a;
   };
 
-  const build = (item: VoiceItem): Node => {
-    const li = el('li', `sn-feed-item sn-feed-tone-${item.kind}`);
-    li.dataset.kind = item.kind;
-    li.dataset.id = item.id;
-    li.dataset.at = String(item.atSec);
+  const foldText = (n: number): string => fill(plural(n, V.moreForms), { count: `+${n}` });
+
+  // ---- the current item ------------------------------------------------------------------------
+  let currentId = '';
+  let currentFold = -1;
+  let currentChips: { item: VoiceItem; host: HTMLElement; pending: boolean } | null = null;
+  const renderCurrent = (item: VoiceItem | null, atSec: number, animate: boolean): void => {
+    if (!item) {
+      current.hidden = true;
+      current.replaceChildren();
+      currentId = '';
+      currentChips = null;
+      return;
+    }
+    if (item.id === currentId) { renderCurrentFold(item, atSec); return; }
+    currentId = item.id;
+    currentFold = -1;
+    current.hidden = false;
+    current.dataset.id = item.id;
+    current.dataset.kind = item.kind;
+    current.dataset.at = String(item.atSec);
+    if (item.tone) current.dataset.tone = item.tone; else delete current.dataset.tone;
     const when = zagrebDateTime(item.atSec * 1000);
     const meta = el('p', 'sn-feed-meta');
-    meta.append(el('span', 'sn-feed-kind', KIND_WORD[item.kind]));
-    const beat = item.beat ? BEAT_WORD[item.beat] : undefined;
-    if (beat) meta.append(' ', el('span', 'sn-feed-beat', beat));
     const seek = el('button', 'sn-feed-seek');
     seek.type = 'button';
     seek.setAttribute('aria-label', fill(V.seek, { time: when }));
     const time = el('time', 'sn-feed-time', when);
     time.dateTime = `${formatZagrebLocal(item.atSec * 1000)}+02:00`;
     seek.append(time);
-    seek.addEventListener('click', (e) => { e.stopPropagation(); seekTo(item); });
-    meta.append(' ', seek);
+    seek.addEventListener('click', () => seekTo(item));
+    meta.append(el('span', 'sn-feed-kind', kickerOf(item)), seek);
     const title = el('p', 'sn-feed-headline');
     if (item.link) title.append(linkTo(item.link, item.title));
     else title.textContent = item.title;
-    li.append(meta, title);
-    if (item.text) li.append(el('p', 'sn-feed-text', item.text));
-    // The source line: the outlet of a headline, ZET for a notice (its title is the link), an event's first source as a
-    // link, and for the companion the mark of the retroactive voice (S-15).
-    const line = el('p', 'sn-feed-source');
-    if (item.kind === 'companion') line.textContent = SN.subtitle.markReplayed;
-    else if (item.kind === 'zet') line.textContent = SN.zet.source;
-    else if (item.kind === 'press') line.textContent = item.source?.label ?? '';
-    else if (item.source?.url) line.append(linkTo(item.source.url, item.source.label));
-    if (line.textContent) li.append(line);
-    let chips: HTMLElement | null = null;
-    let pending = false;
-    if (item.facts.length) {
-      const values = factChips(item.facts, ctx, item.atSec, { atPublish: item.kind === 'press' });
+    const parts: HTMLElement[] = [meta, title];
+    currentChips = null;
+    const keys = chipKeys(item);
+    if (keys.length) {
+      const values = factChips(keys, ctx, item.atSec);
       if (values.length) {
-        chips = el('p', 'sn-feed-chips');
-        chips.setAttribute('aria-label', chipsLabel({ atPublish: item.kind === 'press' }));
-        chipsHtml(chips, values);
-        pending = values.some((c) => c.pending);
-        li.append(chips);
+        const chips = el('p', 'sn-feed-chips');
+        chips.setAttribute('aria-label', chipsLabel());
+        chipsInto(chips, values);
+        currentChips = { item, host: chips, pending: values.some((c) => c.pending) };
+        parts.push(chips);
       }
     }
-    let fold: HTMLDetailsElement | null = null;
-    let foldSummary: HTMLElement | null = null;
-    let foldList: HTMLUListElement | null = null;
     if (item.folded?.length) {
-      fold = el('details', 'sn-feed-fold');
-      foldSummary = el('summary', 'sn-feed-fold-summary');
-      foldList = el('ul', 'sn-feed-fold-list');
-      fold.append(foldSummary, foldList);
+      const fold = el('details', 'sn-feed-fold');
+      fold.append(el('summary', 'sn-feed-fold-summary'), el('ul', 'sn-feed-fold-list'));
       fold.hidden = true;
-      li.append(fold);
+      parts.push(fold);
     }
-    // The whole item is a target for the pointer; the time button is its keyboard form. Links and the fold keep theirs.
-    li.addEventListener('click', (e) => {
-      const target = e.target as Element | null;
-      if (target?.closest('a, summary, details, button')) return;
-      seekTo(item);
-    });
-    return { li, chips, fold, foldSummary, foldList, foldShown: -1, pending };
-  };
-
-  const nodeOf = (item: VoiceItem): Node => {
-    let node = nodes.get(item.id);
-    if (!node) {
-      node = build(item);
-      nodes.set(item.id, node);
+    current.replaceChildren(...parts);
+    renderCurrentFold(item, atSec);
+    current.classList.remove('sn-feed-in');
+    if (animate) {
+      void current.offsetWidth;
+      current.classList.add('sn-feed-in');
     }
-    return node;
   };
-
-  const updateFold = (item: VoiceItem, node: Node, atSec: number): void => {
-    if (!node.fold) return;
+  const renderCurrentFold = (item: VoiceItem, atSec: number): void => {
+    const fold = current.querySelector<HTMLDetailsElement>('.sn-feed-fold');
+    if (!fold) return;
     const shown = foldedUpTo(item, atSec);
-    if (shown.length === node.foldShown) return;
-    node.foldShown = shown.length;
-    node.fold.hidden = shown.length === 0;
-    node.foldSummary!.textContent = fill(plural(shown.length, SN.voices.moreForms), { count: `+${shown.length}` });
-    node.foldList!.replaceChildren(...shown.map((f) => {
+    if (shown.length === currentFold) return;
+    currentFold = shown.length;
+    fold.hidden = shown.length === 0;
+    fold.querySelector('summary')!.textContent = foldText(shown.length);
+    fold.querySelector('ul')!.replaceChildren(...shown.map((f) => {
       const li = el('li', 'sn-feed-fold-item');
-      li.append(linkTo(f.link ?? '#', f.title), ' ', el('span', 'sn-feed-fold-meta', `${f.source?.label ?? ''}, ${zagrebDateTime(f.atSec * 1000)}`.replace(/^, /, '')));
+      li.append(linkTo(f.link ?? '#', f.title), ' ', el('span', 'sn-feed-fold-meta', `${f.source?.label ?? ''} · ${zagrebClock(f.atSec * 1000)}`.replace(/^ · /, '')));
       return li;
     }));
   };
 
-  /** Puts `wanted` into `host` in order, moving only what is out of place (moving a node restarts its animation). */
+  // ---- the log ---------------------------------------------------------------------------------
+  interface Row { li: HTMLLIElement; fold: HTMLElement | null; foldShown: number }
+  const rows = new Map<string, Row>();
+  const days = new Map<string, HTMLLIElement>();
+
+  const rowOf = (item: VoiceItem): Row => {
+    let row = rows.get(item.id);
+    if (row) return row;
+    const li = el('li', 'sn-feed-row');
+    li.dataset.id = item.id;
+    li.dataset.kind = item.kind;
+    li.dataset.at = String(item.atSec);
+    if (item.tone) li.dataset.tone = item.tone;
+    const button = el('button', item.kind === 'chapter' ? 'sn-feed-row-btn sn-feed-chapter-btn' : 'sn-feed-row-btn');
+    button.type = 'button';
+    const time = el('time', 'sn-feed-row-time', zagrebClock(item.atSec * 1000));
+    time.dateTime = `${formatZagrebLocal(item.atSec * 1000)}+02:00`;
+    button.append(time, el('span', 'sn-feed-row-kind', kickerOf(item)), el('span', 'sn-feed-row-title', item.title));
+    let fold: HTMLElement | null = null;
+    if (item.folded?.length) {
+      fold = el('span', 'sn-feed-row-fold');
+      fold.hidden = true;
+      button.append(fold);
+    }
+    button.addEventListener('click', () => seekTo(item));
+    if (item.kind === 'chapter') {
+      // A chapter is a heading of the log; its button seeks like any row.
+      const h = el('h4', 'sn-feed-chapter');
+      h.append(button);
+      li.append(h);
+    } else li.append(button);
+    row = { li, fold, foldShown: -1 };
+    rows.set(item.id, row);
+    return row;
+  };
+  const dayOf = (key: string, label: string): HTMLLIElement => {
+    let li = days.get(key);
+    if (!li) {
+      li = el('li', 'sn-feed-day', label);
+      li.dataset.day = key;
+      days.set(key, li);
+    }
+    return li;
+  };
+
+  /** Puts `wanted` into `host` in order, moving only what is out of place. */
   const place = (host: HTMLElement, wanted: readonly HTMLElement[]): void => {
     wanted.forEach((node, i) => {
       if (host.children[i] !== node) host.insertBefore(node, host.children[i] ?? null);
@@ -234,11 +270,9 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
   // ---- rendering ----------------------------------------------------------------------------------
   let shownCount = -1;
   let shownSubject = '\u0000';
-  let shownItems: VoiceItem[] = items;
   let lastRender = -Infinity;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let jumped = true;
-  /** The instant of the latest frame that waited for the cadence. */
   let latest = 0;
   let destroyed = false;
   const wall = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -246,34 +280,30 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
   const render = (atSec: number): void => {
     const subject = ctx.view.get().subject;
     const key = subjectKey(subject);
-    const at = voicesUpTo(items, atSec, { subject, maxVisible: FEED_MAX_VISIBLE });
-    const animate = !jumped && !ctx.reducedMotion && shownCount >= 0;
-    const wanted = at.visible.map((item) => {
-      const isNew = !list.contains(nodes.get(item.id)?.li ?? null);
-      const node = nodeOf(item);
-      updateFold(item, node, atSec);
-      if (isNew && animate) {
-        node.li.classList.add('sn-feed-in');
-        node.li.addEventListener('animationend', () => node.li.classList.remove('sn-feed-in'), { once: true });
-      } else if (!animate) node.li.classList.remove('sn-feed-in');
-      return node.li;
-    });
-    place(list, wanted);
-    older.hidden = at.olderCount === 0;
-    olderSummary.textContent = `${V.older} (${at.olderCount})`;
-    if (older.open) place(olderList, at.older.map((item) => { const node = nodeOf(item); updateFold(item, node, atSec); return node.li; }));
-    else olderList.replaceChildren();
-    empty.hidden = at.visible.length > 0;
-    filter.hidden = subject === null;
-    if (subject) {
-      filterText.textContent = fill(V.filtered, { subject: subjectLabel(ctx, subject), n: at.hiddenCount });
-      hiddenText.textContent = at.hiddenCount ? fill(plural(at.hiddenCount, SN.voices.hiddenForms), { count: at.hiddenCount }) : '';
+    const at = feedAt(items, atSec, subject);
+    const animate = !jumped && !ctx.reducedMotion && shownCount >= 0 && at.current?.id !== currentId;
+    renderCurrent(at.current, atSec, animate);
+    const wanted: HTMLElement[] = [];
+    let day = '';
+    for (const item of at.log) {
+      const label = zagrebDay(item.atSec * 1000);
+      if (label !== day) { day = label; wanted.push(dayOf(formatZagrebLocal(item.atSec * 1000).slice(0, 10), label)); }
+      const row = rowOf(item);
+      if (row.fold) {
+        const n = foldedUpTo(item, atSec).length;
+        if (n !== row.foldShown) { row.foldShown = n; row.fold.hidden = n === 0; row.fold.textContent = n ? foldText(n) : ''; }
+      }
+      wanted.push(row.li);
     }
-    root.dataset.snFeedCount = String(at.visible.length + at.olderCount);
+    place(log, wanted);
+    empty.hidden = at.count > 0;
+    filter.hidden = subject === null;
+    if (subject) filterText.textContent = filterLine(subjectLabel(ctx, subject), at.hiddenCount);
+    root.dataset.snFeedCount = String(at.count);
+    root.dataset.snFeedCurrent = at.current?.id ?? '';
     root.dataset.snFeedSubject = key;
     shownCount = spokenBy(times, atSec);
     shownSubject = key;
-    shownItems = items;
     lastRender = wall();
     jumped = false;
   };
@@ -283,9 +313,9 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
     const atSec = Math.floor(t / 1000);
     const count = spokenBy(times, atSec);
     const key = subjectKey(ctx.view.get().subject);
-    if (count === shownCount && key === shownSubject && items === shownItems && !jumped) return;
-    // A forward step of passive play waits for the cadence; anything else (a seek, the subject, new data) draws now.
-    const passive = !jumped && key === shownSubject && items === shownItems && count > shownCount;
+    if (count === shownCount && key === shownSubject && !jumped) return;
+    // A forward step of passive play waits for the cadence; anything else (a seek, the subject) draws now.
+    const passive = !jumped && key === shownSubject && count > shownCount;
     if (passive && wall() - lastRender < FEED_CADENCE_MS) {
       latest = atSec;
       if (timer === null) {
@@ -300,40 +330,12 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
     render(atSec);
   };
 
-  older.addEventListener('toggle', () => render(Math.floor(ctx.clock.now() / 1000)));
-
-  // ---- the companion's voices, as the voice days arrive ----------------------------------------------
-  const voice = voiceData(ctx);
-  let companionCount = 0;
-  const offVoice = voice.onLoad(() => {
-    const index = voice.index();
-    if (index) {
-      // Every day up to the clock's, one at a time, so the older companion voices are there too.
-      const nowSec = Math.floor(ctx.clock.now() / 1000);
-      const due = index.days.find((d) => d.t0 <= nowSec && voice.file(d.day) === undefined);
-      if (due) void voice.load(due.day);
-    }
-    const companion = companionVoices(voice.loaded());
-    if (companion.length === companionCount) return;
-    companionCount = companion.length;
-    for (const id of [...nodes.keys()]) if (id.startsWith('companion:')) nodes.delete(id);
-    items = foldPress(buildVoices(ctx, companion));
-    times = items.map((i) => i.atSec);
-    indexItems();
-    tick(ctx.clock.now());
-  });
-  void voice.loadIndex();
-
   // A station chip drawn before the stations arrived is drawn once more.
   const offStations = onStationData(ctx, () => {
-    for (const [id, node] of nodes) {
-      if (!node.pending || !node.chips) continue;
-      const item = byId.get(id);
-      if (!item) continue;
-      const values = factChips(item.facts, ctx, item.atSec, { atPublish: item.kind === 'press' });
-      chipsHtml(node.chips, values);
-      node.pending = values.some((c) => c.pending);
-    }
+    if (!currentChips?.pending) return;
+    const values = factChips(chipKeys(currentChips.item), ctx, currentChips.item.atSec);
+    chipsInto(currentChips.host, values);
+    currentChips.pending = values.some((c) => c.pending);
   });
 
   const offTick = ctx.clock.onTick((_, reason) => {
@@ -349,9 +351,9 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
     offFrames();
     offView();
     offTick();
-    offVoice();
     offStations();
     delete root.dataset.snFeedCount;
+    delete root.dataset.snFeedCurrent;
     delete root.dataset.snFeedSubject;
   };
 };

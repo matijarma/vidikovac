@@ -32,11 +32,13 @@ async function horizontalOverflow(page: Page): Promise<number> {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
-test.describe('/snimka/ instrument', () => {
-  test('opens on Monday 07:45 playing at ten minutes a second, and Zaustavi stops it with the instant and the speed in the address', async ({ page }) => {
+// ---- Bar and Stage (lane W3 of v3): the bar per V3-18, the stage's composition per V3-11, V3-12 and V3-19 ----
+
+test.describe('Bar', () => {
+  test('opens on Monday 07:45 playing at ten minutes a second; Pauziraj pauses with the instant in the status', async ({ page }) => {
     await open(page, '/snimka/');
     await expect(plateDay(page)).toHaveText('pon 28. 9.');
-    await expect(play(page)).toHaveText('Zaustavi');
+    await expect(play(page)).toHaveText('Pauziraj');
     await expect(status(page)).toHaveText('Snimka teče, deset minuta snimke u sekundi.');
     await expect(plateTime(page)).not.toHaveText('07:45', { timeout: 3000 });
     await play(page).click();
@@ -45,28 +47,158 @@ test.describe('/snimka/ instrument', () => {
     const stopped = await plateTime(page).textContent();
     await page.waitForTimeout(1200);
     await expect(plateTime(page)).toHaveText(stopped!);
-    await expect(status(page)).toHaveText(new RegExp(`^Zaustavljeno: pon 28\\. 9\\. u ${stopped}\\.$`));
+    await expect(status(page)).toHaveText(new RegExp(`^Pauzirano: pon 28\\. 9\\. u ${stopped}\\.$`));
     await expect(scrubber(page)).toHaveAttribute('aria-valuetext', `pon 28. 9. u ${stopped}`);
   });
 
-  test('Home and End on the scrubber reach the two ends of the 112 hours, with a matching aria-valuetext', async ({ page }) => {
+  test('the range lies over the fleet lane, the press lane and the state band are gone, one marker row', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45');
+    const range = (await scrubber(page).boundingBox())!;
+    const lane = (await page.locator('svg[data-sn="fleet-lane"]').boundingBox())!;
+    expect(Math.abs(range.y - lane.y)).toBeLessThan(2);
+    expect(Math.abs(range.height - lane.height)).toBeLessThan(2);
+    expect(lane.x).toBeGreaterThanOrEqual(range.x);
+    expect(lane.x + lane.width).toBeLessThanOrEqual(range.x + range.width + 1);
+    expect(lane.width).toBeGreaterThan(range.width * 0.95);
+    await expect(page.locator('.sn-tl-ticks, .sn-tl-band')).toHaveCount(0);
+    await expect(page.locator('[data-sn="marks"]')).toHaveCount(1);
+    expect(await page.locator('[data-sn="marks"] .sn-tl-pin').count()).toBeGreaterThan(5);
+    await expect(page.locator('.sn-tl-day')).toHaveText(['pon 28. 9.', 'uto 29. 9.', 'sri 30. 9.', 'čet 1. 10.', 'pet 2. 10.']);
+    await expect(page.locator('[data-sn="next-chapter"]')).toHaveText(/^Sljedeće: .+ · .+$/);
+    await expect(page.locator('[data-sn="present"]')).toHaveAccessibleName('Cijeli zaslon');
+  });
+
+  test('the speed names are unchanged and the four segments are equally wide', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45');
+    const segs = page.locator('.sn-tl-speed [data-speed]');
+    await expect(segs.locator('span:first-child')).toHaveText(['stvarno vrijeme', '1 min/s', '10 min/s', '1 h/s']);
+    const widths = await segs.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
+    for (const w of widths) expect(Math.abs(w - widths[0]!)).toBeLessThan(1);
+  });
+
+  test('a chapter pin seeks to its chapter; Poglavlja opens the agenda list', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-29T12:00');
+    await page.locator('[data-sn="marks"] .sn-tl-pin[data-id="event:prvo-jutro"]').click();
+    await expect(plateDay(page)).toHaveText('pon 28. 9.');
+    await expect(plateTime(page)).toHaveText('07:45');
+    await expect(play(page)).toHaveText('Pokreni');
+    await page.locator('[data-sn="agenda"]').click();
+    const pop = page.locator('[data-sn="agenda-pop"]');
+    await expect(pop).toBeVisible();
+    await expect(pop.locator('[aria-current="step"]')).toHaveAttribute('data-chapter', 'prvo-jutro');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(pop).toBeHidden();
+    await expect(plateTime(page)).not.toHaveText('07:45');
+  });
+
+  test('Home and End reach the two ends of the 112 hours; the keyboard map walks, steps and plays', async ({ page }) => {
     await open(page, '/snimka/?t=2026-09-29T06:30');
     await expect(scrubber(page)).toHaveAttribute('max', '6720');
     await scrubber(page).focus();
     await page.keyboard.press('Home');
     await expect(plateDay(page)).toHaveText('ned 27. 9.');
     await expect(plateTime(page)).toHaveText('20:00');
-    await expect(scrubber(page)).toHaveAttribute('aria-valuetext', 'ned 27. 9. u 20:00');
     await page.keyboard.press('End');
     await expect(plateDay(page)).toHaveText('pet 2. 10.');
     await expect(plateTime(page)).toHaveText('12:00');
-    await expect(scrubber(page)).toHaveValue('6720');
-    await expect(page).toHaveURL(/[?&]t=2026-10-02T12:00&brzina=600/);
-    await play(page).click();
-    await expect(play(page)).toHaveText('Zaustavi');
-    await expect(plateDay(page)).toHaveText('ned 27. 9.');
+    await open(page, '/snimka/?t=2026-09-28T07:45');
+    await play(page).focus();
+    await page.keyboard.press('KeyL');
+    await expect(plateTime(page)).not.toHaveText('07:45');
+    await page.keyboard.press('KeyJ');
+    await expect(plateTime(page)).toHaveText('07:45');
+    await page.keyboard.press('Comma');
+    await expect(plateTime(page)).toHaveText('07:44');
+    await stage(page).focus();
+    await page.keyboard.press('Space');
+    await expect(play(page)).toHaveText('Pauziraj');
+    await page.keyboard.press('Space');
+    await expect(play(page)).toHaveText('Pokreni');
   });
 
+  test('on a phone the bar is 64 px, sticks only once the stage reaches the top, and never covers the subtitle', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45', fixture, { width: 390, height: 844 });
+    const bar = page.locator('.sn-tl');
+    const box = (await bar.boundingBox())!;
+    expect(Math.abs(box.height - 64)).toBeLessThanOrEqual(1);
+    await expect(page.locator('.sn-tl-speed, .sn-tl-marks, .sn-tl-chapters, [data-sn="present"]')).toHaveCount(4);
+    for (const hidden of ['.sn-tl-speed', '.sn-tl-marks', '.sn-tl-chapters', '[data-sn="present"]']) await expect(page.locator(hidden)).toBeHidden();
+    await expect(page.locator('[data-sn="speed-select"]')).toBeVisible();
+    await expect(root(page)).not.toHaveAttribute('data-sn-bar-stuck', /.*/);
+    await page.evaluate(() => { const s = document.querySelector('[data-sn-stage]')!; window.scrollTo(0, s.getBoundingClientRect().top + window.scrollY); });
+    await expect(root(page)).toHaveAttribute('data-sn-bar-stuck', '');
+    expect(await page.locator('.sn-slot-timeline').evaluate((el) => getComputedStyle(el).position)).toBe('sticky');
+    const barBox = (await bar.boundingBox())!;
+    const sub = (await page.locator('[data-sn-slot="subtitle"]').boundingBox())!;
+    expect(sub.y + sub.height).toBeLessThanOrEqual(barBox.y);
+    const thumb = await scrubber(page).evaluate((el) => getComputedStyle(el.closest('.sn-tl')!).getPropertyValue('--sn-tl-thumb').trim());
+    expect(thumb).toBe('1.75rem');
+  });
+});
+
+test.describe('Stage', () => {
+  test('three chips that are the legend, with counts; no Živa mreža, no Zatvorene ulice, no group labels', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45');
+    const chips = page.locator('[data-sn="layers"] .sn-chip');
+    await expect(chips).toHaveCount(3);
+    await expect(chips.nth(0)).toHaveText(/^● Vozila (\d+|bez podatka)$/);
+    await expect(chips.nth(1)).toHaveText(/^● Običan dan (\d+|bez podatka)$/);
+    await expect(chips.nth(2)).toHaveText('◐ Bicikli');
+    await expect(page.locator('[data-sn="layers"]')).not.toContainText(/Živa mreža|Zatvorene ulice|Karta prati snimku/);
+    await expect(page.locator('.sn-chip-label, .sn-legend-words')).toHaveCount(0);
+    const compare = page.locator('[data-layer="compare"]');
+    await expect(compare).toHaveAttribute('aria-pressed', 'true');
+    await compare.click();
+    await expect(compare).toHaveAttribute('aria-pressed', 'false');
+    await expect(page).toHaveURL(/usporedba=0/);
+  });
+
+  test('the foot line says what applies: 1 h/s draws bikes only', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45');
+    const foot = page.locator('[data-sn="foot"]');
+    await page.locator('.sn-tl-speed [data-speed="3600"]').click();
+    await expect(foot).toHaveText('Pri satu u sekundi karta pokazuje samo bicikle; vozila se vide pri 10 min/s i sporije.');
+    await page.locator('.sn-tl-speed [data-speed="600"]').click();
+    await expect(foot).not.toHaveAttribute('data-sn-foot', 'speed');
+  });
+
+  test('the plate shows the chapter, and its chapter line is empty three hours after it', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:50');
+    await expect(page.locator('[data-sn="plate-chapter"]')).toHaveText('Prvo jutro');
+    await open(page, '/snimka/?t=2026-09-28T10:50');
+    await expect(page.locator('[data-sn="plate-chapter"]')).toHaveText('');
+  });
+
+  test('a seek from a tile brings the stage in under the sticky bar, never under it (scroll-margin-top)', async ({ page }) => {
+    await open(page, '/snimka/?t=2026-09-28T07:45');
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.evaluate(() => document.querySelector('[data-sn-stage]')!.scrollIntoView({ block: 'start', behavior: 'auto' }));
+    await expect.poll(() => page.evaluate(() => Math.round(document.querySelector('[data-sn-stage]')!.getBoundingClientRect().top))).toBeGreaterThanOrEqual(61);
+  });
+
+  test('autoplay still advances the clock at 1366 (the map box is in view), also in the lightweight mode', async ({ page }) => {
+    await open(page, '/snimka/?lagano=1');
+    await expect(plateTime(page)).not.toHaveText('07:45', { timeout: 4000 });
+  });
+
+  for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+    for (const scheme of ['light', 'dark'] as const) {
+      test(`axe @${viewport.width} (${scheme}) over the stage with Objave, the chips and the bar: no serious or critical violations`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme: scheme });
+        await open(page, '/snimka/?t=2026-09-30T12:00', fixture, viewport);
+        await expect(page.locator('.sn-feed-current')).toBeVisible();
+        if (viewport.width > 600) await page.locator('[data-sn="agenda"]').click();
+        await page.waitForLoadState('networkidle');
+        const results = await analyzeAtRest(page, () => new AxeBuilder({ page }).include('[data-sn-mount="stage"]').exclude('.sn-slot-deck').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze());
+        const blocking = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+        expect(blocking.map((v) => `${v.id}: ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+      });
+    }
+  }
+});
+
+test.describe('/snimka/ instrument', () => {
   test('a shared link opens paused at its minute; the Vozila face says the state with its retroactive mark', async ({ page }) => {
     await open(page, '/snimka/?t=2026-09-29T06:30');
     await expect(plateTime(page)).toHaveText('06:30');
@@ -89,66 +221,6 @@ test.describe('/snimka/ instrument', () => {
     await expect(page.locator('[data-sn="questions"]')).toHaveAttribute('data-sn-questions', 'ready');
     const topAfter = await page.evaluate(() => document.querySelector('#snimka')!.getBoundingClientRect().top + window.scrollY);
     expect(topAfter, 'the upgraded chips keep the hero compact').toBeLessThan(300);
-  });
-
-  test('the timeline shows the fleet lane, the state band and three tick lanes with the day labels', async ({ page }) => {
-    await open(page, '/snimka/?t=2026-09-28T07:45');
-    await expect(page.locator('.sn-tl-ticks')).toHaveCount(3);
-    await expect(page.locator('.sn-tl-ticks[data-lane="chapter"] .sn-tl-tick').first()).toHaveAttribute('title', /.+ · .+/);
-    expect(await page.locator('.sn-tl-ticks[data-lane="press"] .sn-tl-tick').count()).toBeGreaterThan(0);
-    expect(await page.locator('.sn-tl-band .sn-tl-seg-state').count()).toBeGreaterThan(3);
-    await expect(page.locator('.sn-tl-day')).toHaveText(['pon 28. 9.', 'uto 29. 9.', 'sri 30. 9.', 'čet 1. 10.', 'pet 2. 10.']);
-    await expect(page.locator('.sn-tl-lanes')).toHaveAttribute('aria-hidden', 'true');
-  });
-
-  test('one hour per second says the network draws, not the vehicles; the keys 1 to 4 pick the speeds', async ({ page }) => {
-    await open(page, '/snimka/?t=2026-09-28T07:45');
-    const note = page.locator('[data-sn="speed-note"]');
-    await expect(note).toBeHidden();
-    await page.locator('.sn-tl-speed [data-speed="3600"]').click();
-    await expect(page.locator('.sn-tl-speed [data-speed="3600"]')).toHaveAttribute('aria-pressed', 'true');
-    await expect(note).toHaveText('Pri brzini od sata u sekundi crtaju se linije s vozilima i bez njih, ne pojedina vozila.');
-    await expect(page).toHaveURL(/brzina=3600/);
-    await play(page).focus();
-    await page.keyboard.press('Digit2');
-    await expect(note).toBeHidden();
-    await expect(page).toHaveURL(/brzina=60/);
-  });
-
-  test('the keyboard map: J and L walk the chapters, comma and full stop step a minute (ten with Shift), Space plays', async ({ page }) => {
-    await open(page, '/snimka/?t=2026-09-28T07:45');
-    await play(page).focus();
-    await page.keyboard.press('KeyL');
-    await expect(plateTime(page)).not.toHaveText('07:45');
-    const next = await plateTime(page).textContent();
-    await page.keyboard.press('KeyJ');
-    await expect(plateTime(page)).toHaveText('07:45');
-    await page.keyboard.press('Comma');
-    await expect(plateTime(page)).toHaveText('07:44');
-    await page.keyboard.press('Shift+Period');
-    await expect(plateTime(page)).toHaveText('07:54');
-    expect(next).not.toBe('07:54');
-    await stage(page).focus();
-    await page.keyboard.press('Space');
-    await expect(play(page)).toHaveText('Zaustavi');
-    await page.keyboard.press('Space');
-    await expect(play(page)).toHaveText('Pokreni');
-  });
-
-  test('the chips stand in two labelled groups; Običan dan is on at the opening and leaves the address when turned off', async ({ page }) => {
-    await open(page, '/snimka/?t=2026-09-28T07:45');
-    await expect(page.getByRole('group', { name: 'Izvori' }).locator('.sn-chip')).toHaveText(['Vozila', 'BAJS', 'Zatvorene ulice', 'Običan dan']);
-    await expect(page.getByRole('group', { name: 'Kaj ima? izvodi' }).locator('.sn-chip')).toHaveText(['Živa mreža', 'Karta prati snimku']);
-    const chip = page.locator('[data-layer="compare"]');
-    await expect(chip).toHaveAttribute('aria-pressed', 'true');
-    // Monday against Monday 21 September (S-12).
-    await expect(page.locator('[data-sn="compare-note"]')).toHaveText('Običan dan je ponedjeljak 21. rujna u isto doba dana.');
-    await chip.click();
-    await expect(chip).toHaveAttribute('aria-pressed', 'false');
-    await expect(page).toHaveURL(/usporedba=0/);
-    await expect(page.locator('[data-sn="compare-note"]')).toBeHidden();
-    await open(page, '/snimka/?t=2026-09-29T07:45');
-    await expect(page.locator('[data-sn="compare-note"]')).toHaveText('Običan dan je četvrtak 24. rujna u isto doba dana.');
   });
 
   test('the map draws the recorded fleet at the instant behind the persisted host', async ({ page }) => {
@@ -254,6 +326,7 @@ test.describe('/snimka/ instrument', () => {
 });
 
 // The deck of v3 (decisions V3-14, V3-15): three faces against the normal day, the grammar, the phone row, axe.
+
 test.describe('Deck', () => {
   test('three faces, each against a normal day: the Vozila badge and glyph, the Mreža counts, the empty stations against Thursday', async ({ page }) => {
     await open(page, '/snimka/?t=2026-09-28T07:45');

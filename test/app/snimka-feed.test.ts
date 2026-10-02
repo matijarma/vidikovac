@@ -1,9 +1,12 @@
-// The voices feed on the page (app/src/snimka/voices-feed.ts): newest on top,
-// filling as the clock passes, each item with its kind word, tone, time,
-// title (headlines as external links), source line and chips; fourteen
-// visible and the rest under "Starije"; a click pauses, seeks and sets the
-// subject; the header names the subject with "Sve teme"; passive play adds
-// items at most every 400 ms, and slides them in only without reduced motion.
+// Objave on the page (app/src/snimka/voices-feed.ts, V3-16): two levels, the
+// current item (the latest at or before the instant: kicker, time, a 16 px
+// title that is a headline's link, at most two chips and only on ZET, court
+// and chapter items) over a compact log (time · kicker · title rows under
+// day headings, chapters as heading rows); a click pauses, seeks, sets the
+// subject and flies to a headline's place; the filter is one line "Samo
+// linija 228 · skriveno n" with "Prikaži sve"; passive play adds items at
+// most every 400 ms and slides the new current item in only without reduced
+// motion.
 import { Window } from 'happy-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SNIMKA_WINDOW, type HashedRef } from '../../shared/snimka';
@@ -46,95 +49,121 @@ function mount(at: number, o: { reducedMotion?: boolean; extraNews?: number; bar
   } as unknown as SnimkaContext;
   const root = page!.document.createElement('div') as unknown as HTMLElement;
   page!.document.body.append(root as never);
-  const off = mountVoicesFeed(ctx, root);
+  const flown: unknown[] = [];
+  const off = mountVoicesFeed(ctx, root, { flyTo: (f) => { flown.push(f); } });
   const emit = (t: number): void => { for (const fn of [...subs]) fn(t); };
-  return { ctx, clock, root, off, emit, setWall: (ms: number) => { wall = ms; } };
+  return { ctx, clock, root, off, emit, flown, setWall: (ms: number) => { wall = ms; } };
 }
-const ids = (root: HTMLElement): string[] => [...root.querySelectorAll<HTMLElement>('.sn-feed-list:not(.sn-feed-older-list) > .sn-feed-item')].map((li) => li.dataset.id!);
+const logIds = (root: HTMLElement): string[] => [...root.querySelectorAll<HTMLElement>('.sn-feed-log > .sn-feed-row')].map((li) => li.dataset.id!);
+/** The current item, then the log: the whole list newest first. */
+const ids = (root: HTMLElement): string[] => [root.dataset.snFeedCurrent!, ...logIds(root)].filter(Boolean);
 
 describe('mountVoicesFeed', () => {
-  it('says nobody has spoken before the first item, then fills newest on top with kind, tone, time and title', () => {
+  it('says nobody has spoken before the first item; then the latest is the current item over the log, newest first', () => {
     const early = mount(MARKS.windowStart, { bare: true });
     expect(early.root.querySelector<HTMLElement>('.sn-feed-empty')!.hidden).toBe(false);
     expect(early.root.querySelector('.sn-feed-empty')!.textContent).toBe('Do ovog trenutka nema objava.');
     expect(early.root.dataset.snFeedCount).toBe('0');
+    expect(early.root.querySelector<HTMLElement>('.sn-feed-current')!.hidden).toBe(true);
     early.off();
     const { root, off } = mount(zg(9, 29, 12, 0));
-    const shown = ids(root);
-    expect(shown[0]).toBe('news:v1');
-    expect(shown).toContain('notice:10166');
-    const times = [...root.querySelectorAll<HTMLElement>('.sn-feed-list > .sn-feed-item')].map((li) => Number(li.dataset.at));
-    for (let i = 1; i < times.length; i++) expect(times[i]).toBeLessThanOrEqual(times[i - 1]!);
-    const v1 = root.querySelector<HTMLElement>('[data-id="news:v1"]')!;
-    expect(v1.classList.contains('sn-feed-tone-press')).toBe(true);
-    expect(v1.querySelector('.sn-feed-kind')!.textContent).toBe('Mediji');
-    expect(v1.querySelector('.sn-feed-beat')!.textContent).toBe('Linija 228');
-    expect(v1.querySelector('.sn-feed-time')!.textContent).toBe('uto 29. 9. u 10:30');
-    expect(v1.querySelector('.sn-feed-seek')!.getAttribute('aria-label')).toBe('Idi na uto 29. 9. u 10:30');
-    const a = v1.querySelector<HTMLAnchorElement>('.sn-feed-headline a')!;
+    expect(root.querySelector('.sn-feed-title')!.textContent).toBe('Objave');
+    expect(root.dataset.snFeedCurrent).toBe('news:v1');
+    const current = root.querySelector<HTMLElement>('.sn-feed-current')!;
+    expect(current.dataset.id).toBe('news:v1');
+    expect(current.querySelector('.sn-feed-kind')!.textContent).toBe('Večernji list');
+    expect(current.querySelector('.sn-feed-time')!.textContent).toBe('uto 29. 9. u 10:30');
+    expect(current.querySelector('.sn-feed-seek')!.getAttribute('aria-label')).toBe('Idi na uto 29. 9. u 10:30');
+    const a = current.querySelector<HTMLAnchorElement>('.sn-feed-headline a')!;
     expect(a.getAttribute('href')).toBe('https://www.vecernji.hr/zagreb/primjer-2');
     expect(a.getAttribute('rel')).toBe('noopener noreferrer');
     expect(a.getAttribute('target')).toBe('_blank');
-    expect(a.textContent).toContain('ZET uveo autobusnu liniju do Rebra');
-    expect(v1.querySelector('.sn-feed-source')!.textContent).toBe('Večernji list');
-    expect(v1.querySelector('.sn-feed-chips')!.getAttribute('aria-label')).toBe('U minuti objave');
-    expect(v1.querySelector('.sn-feed-chips')!.textContent).toContain('linija 228: 2 od 4');
-    const court = mount(zg(9, 30, 12, 0));
-    expect(court.root.querySelector('[data-id="event:sud"]')!.classList.contains('sn-feed-tone-court')).toBe(true);
-    expect(court.root.querySelector('[data-id="event:sud"] .sn-feed-kind')!.textContent).toBe('Sud');
-    expect(court.root.querySelector('[data-id="notice:10166"] .sn-feed-kind')!.textContent).toBe('ZET');
-    // The chips before the live state carry the word for afterwards.
-    expect(court.root.querySelector('[data-id="event:pocetak"] .sn-fact-chip[data-retro="true"]')!.textContent).toContain('naknadno');
+    // No chips on a headline, no beat pill, no source line.
+    expect(current.querySelector('.sn-feed-chips')).toBeNull();
+    expect(current.querySelector('.sn-feed-beat, .sn-feed-source')).toBeNull();
+    const log = logIds(root);
+    expect(log).not.toContain('news:v1');
+    expect(log[0]).toBe('event:linija-228');
+    const times = [...root.querySelectorAll<HTMLElement>('.sn-feed-log > .sn-feed-row')].map((li) => Number(li.dataset.at));
+    for (let i = 1; i < times.length; i++) expect(times[i]).toBeLessThanOrEqual(times[i - 1]!);
+    expect(Number(root.dataset.snFeedCount)).toBe(log.length + 1);
+    off();
+  });
+  it('the log: day headings, chapters as heading rows that seek, rows of time · kicker · title', () => {
+    const { root, off, clock } = mount(zg(9, 29, 12, 0));
+    const days = [...root.querySelectorAll<HTMLElement>('.sn-feed-log > .sn-feed-day')].map((d) => d.textContent);
+    expect(days).toEqual(['uto 29. 9.', 'pon 28. 9.', 'ned 27. 9.']);
+    const chapter = root.querySelector<HTMLElement>('.sn-feed-row[data-id="event:prvo-jutro"]')!;
+    expect(chapter.querySelector('h4.sn-feed-chapter button')).not.toBeNull();
+    expect(chapter.querySelector('.sn-feed-row-kind')!.textContent).toBe('Poglavlje');
+    expect(chapter.querySelector('.sn-feed-row-time')!.textContent).toBe('07:45');
+    const notice = root.querySelector<HTMLElement>('.sn-feed-row[data-id="notice:10164"]')!;
+    expect(notice.dataset.tone).toBe('zet');
+    expect(notice.querySelector('.sn-feed-row-kind')!.textContent).toBe('ZET');
+    expect(root.querySelector<HTMLElement>('.sn-feed-row[data-id="news:j1"] .sn-feed-row-kind')!.textContent).toBe('Jutarnji list');
+    expect(root.querySelector<HTMLElement>('.sn-feed-row[data-id="news:j1"]')!.dataset.tone).toBeUndefined();
+    chapter.querySelector<HTMLButtonElement>('button')!.click();
+    expect(clock.now()).toBe(MARKS.monday0745 * 1000);
+    off();
+  });
+  it('chips: at most two, and only on ZET, court and chapter items; the court has its own tone', () => {
+    const court = mount(zg(9, 30, 11, 14));
+    const current = court.root.querySelector<HTMLElement>('.sn-feed-current')!;
+    expect(current.dataset.id).toBe('event:sud');
+    expect(current.dataset.tone).toBe('court');
+    expect(current.querySelector('.sn-feed-kind')!.textContent).toBe('Poglavlje');
+    const chips = current.querySelectorAll('.sn-fact-chip');
+    expect(chips.length).toBeGreaterThan(0);
+    expect(chips.length).toBeLessThanOrEqual(2);
     court.off();
-    off();
+    const press = mount(zg(9, 28, 12, 31));
+    expect(press.root.dataset.snFeedCurrent).toBe('news:j2');
+    expect(press.root.querySelector('.sn-feed-current .sn-fact-chip')).toBeNull();
+    press.off();
   });
-  it('fourteen visible, the rest under Starije, drawn when it opens', () => {
+  it('no cap: every item up to the clock is in the log, and the list scrolls', () => {
     const { root, off } = mount(zg(9, 28, 12, 0), { extraNews: 20 });
-    expect(ids(root).length).toBe(14);
-    const older = root.querySelector<HTMLDetailsElement>('.sn-feed-older')!;
-    expect(older.hidden).toBe(false);
     const total = Number(root.dataset.snFeedCount);
-    expect(older.querySelector('summary')!.textContent).toBe(`Starije (${total - 14})`);
-    expect(older.querySelectorAll('.sn-feed-item').length).toBe(0);
-    older.open = true;
-    older.dispatchEvent(new page!.Event('toggle') as unknown as Event);
-    expect(older.querySelectorAll('.sn-feed-item').length).toBe(total - 14);
+    expect(ids(root).length).toBe(total);
+    expect(total).toBeGreaterThan(20);
+    expect(root.querySelector('.sn-feed-older')).toBeNull();
     off();
   });
-  it('a click pauses, seeks to the item\'s minute and sets its line as the subject; Prikaži sve clears it', () => {
+  it('a click pauses, seeks, sets the subject; the filter is one line with Prikaži sve', () => {
     const { root, ctx, clock, off, emit } = mount(zg(9, 30, 12, 0));
     clock.play();
-    const v1 = root.querySelector<HTMLElement>('[data-id="news:v1"]')!;
-    v1.querySelector<HTMLElement>('.sn-feed-headline')!.click();
+    root.querySelector<HTMLButtonElement>('.sn-feed-row[data-id="news:v1"] button')!.click();
     expect(clock.playing()).toBe(false);
     expect(clock.now()).toBe(zg(9, 29, 10, 30) * 1000);
     expect(ctx.view.get().subject).toEqual({ kind: 'route', id: '228' });
     emit(clock.now());
     expect(root.dataset.snFeedSubject).toBe('route:228');
+    expect(root.dataset.snFeedCurrent).toBe('news:v1');
     const filter = root.querySelector<HTMLElement>('.sn-feed-filter')!;
     expect(filter.hidden).toBe(false);
-    expect(filter.querySelector('.sn-feed-filter-text')!.textContent).toMatch(/^Samo Linija 228 · skriveno \d+$/);
-    expect(ids(root)).toEqual(['news:v1', 'notice:10166']);
-    const hidden = Number(root.dataset.snFeedCount);
-    expect(hidden).toBe(2);
-    expect(filter.querySelector('.sn-feed-hidden')!.textContent).toMatch(/^\d+ stavk[aei] bez te teme$/);
+    expect(filter.querySelector('.sn-feed-filter-text')!.textContent).toMatch(/^Samo linija 228 · skriveno \d+$/);
+    expect(ids(root)).toEqual(['news:v1', 'event:linija-228']);
+    expect(filter.querySelector('.sn-feed-hidden')).toBeNull();
     filter.querySelector<HTMLButtonElement>('.sn-feed-clear')!.click();
+    expect(filter.querySelector<HTMLButtonElement>('.sn-feed-clear')!.textContent).toBe('Prikaži sve');
     expect(ctx.view.get().subject).toBeNull();
     expect(root.dataset.snFeedSubject).toBe('');
     expect(filter.hidden).toBe(true);
-    // A link keeps its own click: no seek.
-    const before = clock.now();
-    root.querySelector<HTMLElement>('[data-id="news:n1"] .sn-feed-headline a')?.dispatchEvent(new page!.MouseEvent('click', { bubbles: true, cancelable: true }) as unknown as Event);
-    expect(clock.now()).toBe(before);
     off();
   });
-  it('an item with no line keeps the subject as it was; the time button is the keyboard form of the click', () => {
-    const { root, ctx, clock, off } = mount(zg(9, 30, 12, 0));
-    ctx.view.set({ subject: { kind: 'route', id: '17' } });
-    ctx.view.set({ subject: null });
-    root.querySelector<HTMLButtonElement>('[data-id="event:prvo-jutro"] .sn-feed-seek')!.click();
-    expect(clock.now()).toBe(MARKS.monday0745 * 1000);
+  it('a headline about a place flies the map there; an item with no line keeps the subject as it was', () => {
+    const { root, ctx, clock, off, flown, emit } = mount(zg(9, 30, 12, 0));
+    root.querySelector<HTMLButtonElement>('.sn-feed-row[data-id="news:j2"] button')!.click();
+    expect(clock.now()).toBe(zg(9, 28, 12, 30) * 1000);
+    expect(flown).toEqual([{ kind: 'layer', layer: 'bikes' }]);
     expect(ctx.view.get().subject).toBeNull();
+    emit(clock.now());
+    // The current item's time button is the same click.
+    root.querySelector<HTMLButtonElement>('.sn-feed-current .sn-feed-seek')!.click();
+    expect(flown.length).toBe(2);
+    // A chapter does not move the camera (the director does), nor does a headline with no place.
+    root.querySelector<HTMLButtonElement>('.sn-feed-row[data-id="event:prvo-jutro"] button')!.click();
+    expect(flown.length).toBe(2);
     off();
   });
   it('passive play adds items at most every 400 ms, several at once, sliding in; a seek draws at once without motion', async () => {
@@ -151,10 +180,9 @@ describe('mountVoicesFeed', () => {
     await step(FEED_CADENCE_MS + 10);   // 09:03:06: four headlines are due and arrive together
     const batch = ids(root);
     expect(batch.slice(0, 4)).toEqual(['news:x3', 'news:x2', 'news:x1', 'news:x0']);
-    // The companion's own voice of Monday 07:30 arrived with its day file meanwhile.
-    expect(batch).toContain('companion:1790573400');
+    expect(batch.some((id) => id.startsWith('companion:'))).toBe(false);
     expect(first.every((id) => batch.includes(id))).toBe(true);
-    expect(root.querySelector('[data-id="news:x3"]')!.classList.contains('sn-feed-in')).toBe(true);
+    expect(root.querySelector('.sn-feed-current')!.classList.contains('sn-feed-in')).toBe(true);
     await step(100);                    // 09:04:06: one more is due, but the cadence holds it
     expect(ids(root)).toEqual(batch);
     await vi.advanceTimersByTimeAsync(FEED_CADENCE_MS);
@@ -163,7 +191,7 @@ describe('mountVoicesFeed', () => {
     clock.seek(zg(9, 30, 12, 0) * 1000);
     emit(clock.now());
     expect(ids(root)[0]).toBe('news:n1');
-    expect(root.querySelector('.sn-feed-list > .sn-feed-item.sn-feed-in:first-child')).toBeNull();
+    expect(root.querySelector('.sn-feed-current')!.classList.contains('sn-feed-in')).toBe(false);
     off();
   });
   it('under reduced motion nothing slides', () => {
@@ -179,9 +207,7 @@ describe('mountVoicesFeed', () => {
   });
   it('the folded headlines read in Croatian whatever their number', () => {
     expect(plural(1, SN.voices.moreForms).replace('{count}', '+1')).toBe('+1 sličan naslov');
-    expect(plural(3, SN.voices.moreForms).replace('{count}', '+3')).toBe('+3 slična naslova');
-    expect(plural(1, SN.voices.hiddenForms).replace('{count}', '1')).toBe('1 stavka bez te teme');
-    expect(plural(3, SN.voices.hiddenForms).replace('{count}', '3')).toBe('3 stavke bez te teme');
-    expect(plural(7, SN.voices.hiddenForms).replace('{count}', '7')).toBe('7 stavki bez te teme');
+    expect(plural(2, SN.voices.moreForms).replace('{count}', '+2')).toBe('+2 slična naslova');
+    expect(plural(5, SN.voices.moreForms).replace('{count}', '+5')).toBe('+5 sličnih naslova');
   });
 });

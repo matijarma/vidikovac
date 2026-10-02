@@ -111,57 +111,8 @@
 .sn-panel-station[aria-pressed='true'] { font-weight: var(--weight-bold); box-shadow: inset 3px 0 0 var(--tone-bike); }
 .sn-panel-station-n { font-variant-numeric: tabular-nums; color: var(--tone-text-muted); white-space: nowrap; }
 
-/* ---- the timeline bar ---------------------------------------------------------------------------------------- */
-.sn-tl { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "controls scrub tail"; align-items: center; gap: var(--sp-1) var(--sp-4); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); border: 1px solid var(--tone-glass-stroke); font-variant-numeric: tabular-nums; }
-@supports (backdrop-filter: blur(8px)) { .sn-tl { backdrop-filter: blur(8px); } }
-.sn-tl-controls { grid-area: controls; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
-.sn-tl-play { min-inline-size: 7rem; }
-.sn-tl-chapters { display: inline-flex; gap: var(--sp-1); }
-.sn-tl-chapter { inline-size: var(--target); padding: 0; font-size: var(--type-head); line-height: 1; }
-.sn-tl-speed { display: flex; gap: 0.125rem; padding: 0.125rem; border-radius: var(--r-md); background: var(--tone-surface-2); }
-.sn-tl-seg { min-block-size: var(--target); padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; touch-action: manipulation; }
-.sn-tl-seg[aria-pressed='true'] { background: var(--tone-surface-1); color: var(--tone-text-primary); font-weight: var(--weight-bold); box-shadow: var(--tone-shadow-soft); }
-@media (hover: hover) { .sn-tl-seg:not([aria-pressed='true']):hover { color: var(--tone-text-primary); } }
-.sn-tl-pick { display: none; }
-.sn-tl-select { min-block-size: var(--target); padding-inline: var(--sp-3); font: inherit; font-size: var(--type-control); font-weight: var(--weight-bold); border-radius: var(--r-md); background: var(--tone-surface-2); border: 1px solid transparent; color: var(--tone-text-primary); }
-.sn-tl-scrub { grid-area: scrub; display: grid; min-inline-size: 0; }
-.sn-tl-range { inline-size: 100%; min-block-size: var(--target); margin: 0; accent-color: var(--tone-action-brand); cursor: pointer; }
-/* The lanes sit under the native range, inset by half its thumb so a tick lines up with the thumb's centre. */
-.sn-tl-lanes { position: relative; display: grid; gap: 2px; margin-inline: 0.5rem; }
-.sn-tl-fleet { position: relative; block-size: 1.5rem; }
-.sn-tl-svg { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
-.sn-tl-svg path { vector-effect: non-scaling-stroke; }
-.sn-tl-expected { fill: color-mix(in oklab, var(--tone-text-muted) 22%, transparent); stroke: none; }
-.sn-tl-seen { fill: none; stroke: var(--tone-action-brand); stroke-width: 1.5px; stroke-linejoin: round; }
-.sn-tl-band { position: relative; block-size: 0.375rem; border-radius: 2px; background: var(--tone-surface-2); overflow: hidden; }
-.sn-tl-seg-state { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: calc(var(--w) * 100%); }
-.sn-tl-state-normal { background: color-mix(in oklab, var(--tone-state-success) 45%, var(--tone-surface-1)); }
-.sn-tl-state-reduced { background: color-mix(in oklab, var(--tone-state-warning) 75%, var(--tone-surface-1)); }
-.sn-tl-state-silent { background: var(--tone-state-danger); }
-.sn-tl-state-unknown { background: var(--tone-surface-3); }
-.sn-tl-state-none { background: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1px, transparent 1px 3px); }
-.sn-tl-ticks { position: relative; block-size: 0.375rem; }
-.sn-tl-tick { position: absolute; inset-block: 0; inset-inline-start: var(--x); inline-size: 1px; background: var(--tone-text-primary); }
-.sn-tl-ticks[data-lane='notice'] .sn-tl-tick { background: var(--tone-text-muted); }
-.sn-tl-ticks[data-lane='press'] .sn-tl-tick { background: var(--tone-text-subtle); }
-.sn-tl-daylines { position: absolute; inset: 0; pointer-events: none; }
-.sn-tl-dayline { position: absolute; inset-block: 0; inset-inline-start: var(--x); inline-size: 1px; background: var(--tone-stroke-strong); }
-.sn-tl-cursor { position: absolute; inset-block: -0.125rem; inset-inline: 0; pointer-events: none; will-change: transform; }
-.sn-tl-cursor::before { content: ''; position: absolute; inset-block: 0; inset-inline-start: -1px; inline-size: 2px; background: var(--tone-text-primary); }
-.sn-tl-dayrow { position: relative; block-size: 1rem; margin-inline: 0.5rem; }
-.sn-tl-days { position: absolute; inset: 0; }
-.sn-tl-day { position: absolute; inset-inline-start: var(--x); font-size: var(--type-meta); color: var(--tone-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.sn-tl-tail { grid-area: tail; display: flex; align-items: center; gap: var(--sp-2); }
-.sn-tl-present { font-size: var(--type-control); }
-.sn-tl-present-glyph { font-size: 1.1em; line-height: 1; }
-/* The status line is the bar's spoken word (role status); the plate already shows the instant, so it is not drawn twice. */
-.sn-tl-status { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
-.sn-tl-reduced { grid-column: 1 / -1; margin: 0; font-size: var(--type-meta); }
+/* The timeline bar moved to snimka-stage.css in v3 (lane W3 owns the sn-tl- prefix). */
 
-/* Narrower: the controls over the scrubber. */
-@media (max-width: 75rem) {
-  .sn-tl { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "controls tail" "scrub scrub"; }
-}
 /* A phone: the deck's panels join the swipe row (stage.css), the speed is a native select, the day labels shorten. */
 @media (max-width: 40rem) {
   /* The deck's cards join the swipe row (stage.css): Mreža first, then Vozila and Bicikli, the feed after them; ~78vw
@@ -171,18 +122,6 @@
   .sn-deck-item[data-panel='mreza'] { order: -3; }
   .sn-deck-item[data-panel='vozila'] { order: -2; }
   .sn-deck-item[data-panel='bicikli'] { order: -1; }
-  .sn-tl { border-radius: var(--r-lg) var(--r-lg) 0 0; padding: var(--sp-2); gap: var(--sp-1) var(--sp-2); }
-  .sn-tl-speed { display: none; }
-  .sn-tl-pick { display: block; }
-  .sn-tl-controls { flex-wrap: nowrap; gap: var(--sp-1); }
-  .sn-tl-play { min-inline-size: 0; flex: 1 1 5rem; padding-inline: var(--sp-2); }
-  .sn-tl-select { padding-inline: var(--sp-2); max-inline-size: 7rem; }
-  .sn-tl-present { inline-size: var(--target); padding: 0; }
-  .sn-tl-present-text { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .sn-tl-fleet { block-size: 1rem; }
-  .sn-tl-ticks { block-size: 0.25rem; }
-  .sn-tl-day { font-size: 0; }
-  .sn-tl-day::after { content: attr(data-short); font-size: 0.65rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -191,8 +130,8 @@
   .sn-ro-fig[data-spot], .sn-ro-twins[data-spot] { box-shadow: none; transition: none; }
 }
 @media (forced-colors: active) {
-  .sn-panel-seg, .sn-tl-seg-state, .sn-panel-key, .sn-ro-bar2-track { forced-color-adjust: none; }
+  .sn-panel-seg, .sn-panel-key, .sn-ro-bar2-track { forced-color-adjust: none; }
 }
 @media print {
-  .sn-tl, .sn-panel-close { display: none; }
+  .sn-panel-close { display: none; }
 }

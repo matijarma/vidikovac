@@ -37,14 +37,15 @@ describe('factChips', () => {
   it('reads the series at the minute: counts with their words, the state lower-case', () => {
     const { ctx: c } = ctx();
     const m = seriesMinute(series, MARKS.thursday0745);
+    // v3: the closures left the stage, and their chip with them (V3-2).
     const chips = factChips(['seen', 'expected', 'state', 'bikes', 'bikesEmpty', 'closures', 'temp'], c, MARKS.thursday0745);
-    expect(chips.map((x) => x.key)).toEqual(['seen', 'expected', 'state', 'bikes', 'bikesEmpty', 'closures', 'temp']);
+    expect(chips.map((x) => x.key)).toEqual(['seen', 'expected', 'state', 'bikes', 'bikesEmpty', 'temp']);
     expect(chips[0]!.text).toBe(`u pokretu ${series.seen.all[m]!.toLocaleString('hr-HR')}`);
     expect(chips[1]!.text).toMatch(/^po voznom redu \d/);
     expect(chips[3]!.text).toMatch(/^\d[\d.]* (bicikl|bicikla|bicikala)$/);
     expect(chips[2]!.text).toBe('stanje: uobičajeno');
     expect(chips[2]!.retro).toBe(false);
-    expect(chips[6]!.text).toMatch(/^\d+ °C$/);
+    expect(chips[5]!.text).toMatch(/^\d+ °C$/);
     expect(chips.every((x) => !x.missing)).toBe(true);
   });
   it('a minute the recording does not have reads "bez podatka", never 0, and is marked missing', () => {
@@ -66,6 +67,10 @@ describe('factChips', () => {
   it('a line: its count against the timetable, the word for none when it ran nothing, the gap as missing', () => {
     const { ctx: c } = ctx();
     expect(texts(factChips(['route:228'], c, zg(9, 29, 12, 0)))).toEqual(['linija 228: 2 od 4 vozila']);
+    // More vehicles than the timetable had never reads "4 od 2" (R3).
+    const b64 = (v: number): string => Buffer.from([v]).toString('base64');
+    const over = { ...c, routes: { v: 2, t0: zg(9, 29, 12, 0), step: 300, n: 1, net: '396+395', routes: [{ id: '228', shortName: '228', type: 3 }], seen: [b64(4)], expected: [b64(2)] } } as typeof c;
+    expect(texts(factChips(['route:228'], over, zg(9, 29, 12, 0)))).toEqual(['linija 228: 4 vozila (po voznom redu 2)']);
     expect(texts(factChips(['route:228'], c, zg(9, 28, 12, 0)))).toEqual(['linija 228: nijedno vozilo']);
     const gap = factChips(['route:228'], c, MARKS.frameGapFrom + 60);
     expect(gap).toEqual([{ key: 'route:228', text: 'linija 228: bez podatka', retro: false, missing: true }]);

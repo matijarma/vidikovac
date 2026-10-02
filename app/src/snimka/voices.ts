@@ -3,11 +3,10 @@
 // headline (three hours of life, then the card says there is none) and the
 // event marker (one hour). Pure functions over the dataset's lists, sorted
 // here once per call so the order of the files never matters.
-import type { FactKey, Focus, Mentions, NewsFile, NoticesFile, SeriesFile, SnimkaEvent, VoiceFile } from '../../../shared/snimka';
+import type { FactKey, Focus, Mentions, NewsFile, NoticesFile, SeriesFile, SnimkaEvent } from '../../../shared/snimka';
 import type { SeriesLike, Subject, TimelineMarker } from './contracts';
 import { runsOf, stateClass, type StateClass } from './strip';
 import { SN } from './strings';
-import { factFamily, leadFact, voiceSentence } from './voice-data';
 
 export type NewsItem = NewsFile['items'][number];
 export type Notice = NoticesFile['items'][number];
@@ -46,70 +45,111 @@ export function currentMarker(events: readonly SnimkaEvent[], atSec: number, win
   return latestBefore(events, atSec, (e) => e.atSec, windowSec);
 }
 
-// ---- the feed (v2, plan section 3.4) -------------------------------------------------
+// ---- the feed: Objave (v3, decision V3-16) ---------------------------------------------
 //
-// Every voice of the recording as one time-ordered list: ZET's notices, the
-// court, the press, the chapters and markers, and the companion itself. Pure:
-// the feed (voices-feed.ts) builds the list once and asks what is visible at
-// the clock; the timeline (V3) draws feedMarkers(); the state band is here
-// because it is the same reading of the series the chips make.
+// What ZET, the court and the press said, and the recording's chapters, as one
+// time-ordered list. The app's own sentences are not here (the subtitle is the
+// app's voice), nor the recording-internal events (the dossier tells those), nor
+// the plain readings of the service (a state the app computed is not an
+// announcement). An event that repeats a ZET notice speaks once: a chapter keeps
+// its heading and takes the notice's link, any other event gives way to the
+// notice. The feed (voices-feed.ts) shows the latest item as the current one over
+// a compact log; the timeline draws feedMarkers() as one row.
 
-export type VoiceKind = 'zet' | 'court' | 'press' | 'event' | 'companion';
+export type VoiceKind = 'zet' | 'court' | 'press' | 'chapter';
 
 export interface VoiceItem {
   id: string;
   atSec: number;
   kind: VoiceKind;
-  /** Verbatim: a headline, a notice, an event's title, the companion's sentence. */
+  /** Verbatim: a headline, a notice, an event's title. */
   title: string;
   text: string | null;
   /** The title's own link (a headline, a notice), opened outside the page. */
   link: string | null;
-  /** The source line: an outlet with its home, ZET's notice, an event's first source. */
+  /** Who said it: an outlet with its home for a headline, ZET for a notice, an event's first source. */
   source: { label: string; url: string | null } | null;
   focus: Focus;
   facts: FactKey[];
   mentions: Mentions;
   beat: string | null;
+  /** The tone of the row's mark: ZET (transit) or the court; null for the press and the plain chapters. */
+  tone: 'zet' | 'court' | null;
   /** Set by foldPress on the first headline of a beat: the later ones of the same three hours. */
   folded?: VoiceItem[];
 }
 
 const byTime = (a: VoiceItem, b: VoiceItem): number => a.atSec - b.atSec || a.id.localeCompare(b.id);
 const sameWords = (a: string, b: string): boolean => a.trim().toLocaleLowerCase('hr') === b.trim().toLocaleLowerCase('hr');
-/** An event that repeats a notice's title within this long is the notice's own chapter: the notice speaks once. */
+/** An event without a noticeId repeats a notice when it falls this close to it and says the same words or links it. */
 export const DUPLICATE_WITHIN_S = 3600;
 
-/** The feed's items from the context's lists (and the companion's own voices), sorted by time. */
-export function buildVoices(
-  files: { notices: Pick<NoticesFile, 'items'>; news: Pick<NewsFile, 'items' | 'outlets'>; events: readonly SnimkaEvent[] },
-  companion: readonly VoiceItem[] = [],
-): VoiceItem[] {
+/** The ZET notice an event repeats: by its noticeId, else within an hour with the same title or the notice's link among
+ *  the event's sources; null when it repeats none. */
+export function repeatedNotice(e: Pick<SnimkaEvent, 'atSec' | 'title' | 'sources' | 'noticeId'>, notices: readonly Notice[]): Notice | null {
+  if (e.noticeId !== undefined) return notices.find((n) => n.id === e.noticeId) ?? null;
+  return notices.find((n) => Math.abs(n.pubSec - e.atSec) <= DUPLICATE_WITHIN_S
+    && (sameWords(n.title, e.title) || (n.link !== null && e.sources.some((s) => s.url === n.link)))) ?? null;
+}
+
+/** Whether an event belongs in Objave: never a recording-internal one; a chapter always; otherwise only what ZET or the
+ *  court said (a plain reading of the service is the app's own and stays out). */
+export function speaksInFeed(e: Pick<SnimkaEvent, 'chapter' | 'kind' | 'internal'>): boolean {
+  if (e.internal) return false;
+  return e.chapter || e.kind === 'zet' || e.kind === 'court';
+}
+
+/** The feed's items from the context's lists, sorted by time. */
+export function buildVoices(files: { notices: Pick<NoticesFile, 'items'>; news: Pick<NewsFile, 'items' | 'outlets'>; events: readonly SnimkaEvent[] }): VoiceItem[] {
   const out: VoiceItem[] = [];
+  const absorbed = new Set<number>();
+  const chapters: { item: VoiceItem; notice: Notice }[] = [];
+  for (const e of files.events) {
+    if (!speaksInFeed(e)) continue;
+    const notice = repeatedNotice(e, files.notices.items);
+    if (notice && !e.chapter) continue;
+    const first = e.sources[0];
+    const item: VoiceItem = {
+      id: `event:${e.id}`, atSec: e.atSec, kind: e.chapter ? 'chapter' : e.kind === 'court' ? 'court' : 'zet', title: e.title, text: e.text, link: null,
+      source: first ? { label: first.label, url: first.url } : null, focus: e.focus, facts: e.facts, mentions: e.mentions, beat: null,
+      tone: e.kind === 'court' ? 'court' : e.kind === 'zet' ? 'zet' : null,
+    };
+    if (notice) { absorbed.add(notice.id); chapters.push({ item, notice }); }
+    out.push(item);
+  }
+  // A chapter that repeats a notice keeps its heading and carries the notice's link and words.
+  for (const { item, notice } of chapters) {
+    item.link = notice.link;
+    item.text = item.text ?? notice.text;
+    item.tone = 'zet';
+  }
   for (const n of files.notices.items) {
+    if (absorbed.has(n.id)) continue;
     out.push({
       id: `notice:${n.id}`, atSec: n.pubSec, kind: 'zet', title: n.title, text: n.text, link: n.link,
-      source: { label: SN.voices.kind.zet, url: n.link }, focus: n.focus, facts: n.facts, mentions: n.mentions, beat: null,
+      source: { label: SN.voices.kind.zet, url: n.link }, focus: n.focus, facts: n.facts, mentions: n.mentions, beat: null, tone: 'zet',
     });
   }
   for (const a of files.news.items) {
     const outlet = files.news.outlets[a.outlet];
     out.push({
       id: `news:${a.id}`, atSec: a.pubSec, kind: 'press', title: a.title, text: null, link: a.link,
-      source: { label: outlet?.name ?? a.outlet, url: outlet?.home ?? null }, focus: a.focus, facts: a.facts, mentions: a.mentions, beat: a.beat,
+      source: { label: outlet?.name ?? a.outlet, url: outlet?.home ?? null }, focus: a.focus, facts: a.facts, mentions: a.mentions, beat: a.beat, tone: null,
     });
   }
-  for (const e of files.events) {
-    const duplicate = files.notices.items.some((n) => Math.abs(n.pubSec - e.atSec) <= DUPLICATE_WITHIN_S && sameWords(n.title, e.title));
-    if (duplicate) continue;
-    const first = e.sources[0];
-    out.push({
-      id: `event:${e.id}`, atSec: e.atSec, kind: e.kind === 'court' ? 'court' : 'event', title: e.title, text: e.text, link: null,
-      source: first ? { label: first.label, url: first.url } : null, focus: e.focus, facts: e.facts, mentions: e.mentions, beat: null,
-    });
-  }
-  out.push(...companion);
   return out.sort(byTime);
+}
+
+/** The row's kicker: the outlet of a headline, "ZET", "Sud", "Poglavlje". */
+export function kickerOf(item: Pick<VoiceItem, 'kind' | 'source'>): string {
+  if (item.kind === 'press') return item.source?.label ?? SN.voices.kind.press;
+  return SN.voices.kind[item.kind];
+}
+
+/** At most two chips, and only on what ZET, the court or a chapter said (a headline's chips were noise, R3). */
+export const MAX_CHIPS = 2;
+export function chipKeys(item: Pick<VoiceItem, 'kind' | 'facts'>): FactKey[] {
+  return item.kind === 'press' ? [] : item.facts.slice(0, MAX_CHIPS);
 }
 
 /** The subject an item points at (a line, a station, a stop), or null for the city, a place, a layer or nothing. */
@@ -128,8 +168,8 @@ export function mentionsSubject(item: Pick<VoiceItem, 'focus' | 'mentions'>, sub
 }
 
 /** One headline per beat per three hours stays in the feed; the later ones of the same beat within three hours of it
- *  fold under it (item.folded). Headlines without a beat, and every other kind, pass as they are. A new list; the
- *  input is not changed. */
+ *  fold under it (item.folded, read "+2 slična naslova"). Headlines without a beat, and every other kind, pass as they
+ *  are. A new list; the input is not changed. */
 export function foldPress(items: readonly VoiceItem[], windowS = ARTICLE_WINDOW_S): VoiceItem[] {
   const out: VoiceItem[] = [];
   const heads = new Map<string, VoiceItem>();
@@ -144,31 +184,30 @@ export function foldPress(items: readonly VoiceItem[], windowS = ARTICLE_WINDOW_
   return out;
 }
 
-export interface VoicesAt {
-  /** Newest first, at most maxVisible. */
-  visible: VoiceItem[];
-  /** The rest at or before the instant, newest first ("Starije"). */
-  older: VoiceItem[];
+export interface FeedAt {
+  /** The latest item at or before the instant that the subject keeps: the one on top. */
+  current: VoiceItem | null;
+  /** Every other such item, newest first: the log. */
+  log: VoiceItem[];
   /** Items at or before the instant that the subject left out. */
   hiddenCount: number;
-  olderCount: number;
+  /** current + log. */
+  count: number;
 }
 
-/** What the feed shows at `atSec`: the items at or before it (a folded headline counts once, as its head), the
- *  subject's filter applied, newest first, cut at maxVisible. */
-export function voicesUpTo(items: readonly VoiceItem[], atSec: number, o: { subject?: Subject | null; maxVisible?: number } = {}): VoicesAt {
-  const max = o.maxVisible ?? 14;
+/** What Objave shows at `atSec`: the items at or before it (a folded headline counts once, as its head), the subject's
+ *  filter applied; the newest is the current item, the rest the log, newest first. No cap: the log scrolls. */
+export function feedAt(items: readonly VoiceItem[], atSec: number, subject: Subject | null = null): FeedAt {
   const shown: VoiceItem[] = [];
   let hiddenCount = 0;
   for (const item of items) {
     if (item.atSec > atSec) continue;
-    if (o.subject && !mentionsSubject(item, o.subject)) { hiddenCount += 1; continue; }
+    if (subject && !mentionsSubject(item, subject)) { hiddenCount += 1; continue; }
     shown.push(item);
   }
   shown.sort((a, b) => byTime(b, a));
-  const visible = shown.slice(0, max);
-  const older = shown.slice(max);
-  return { visible, older, hiddenCount, olderCount: older.length };
+  const [current = null, ...log] = shown;
+  return { current, log, hiddenCount, count: shown.length };
 }
 
 /** The folded headlines of an item published at or before the instant. */
@@ -176,67 +215,15 @@ export function foldedUpTo(item: VoiceItem, atSec: number): VoiceItem[] {
   return (item.folded ?? []).filter((f) => f.atSec <= atSec);
 }
 
-// ---- the companion's own voice -----------------------------------------------------------
+// ---- the timeline's marker row and the state tint ------------------------------------------
 
-/** A family of the lead fact must have been silent this long to be news. */
-export const COMPANION_QUIET_S = 2 * 3600;
-/** At most one companion voice per replay hour. */
-export const COMPANION_GAP_S = 3600;
-
-/** The moments the companion's voice changed its subject: the lead fact's family (its kind, a departure split by its
- *  wording) changes to one not heard for two hours, at most one per replay hour. Minutes in time order over the
- *  given day files (any order, gaps allowed). */
-export function companionVoices(days: readonly VoiceFile[], o: { quietS?: number; gapS?: number } = {}): VoiceItem[] {
-  const quiet = o.quietS ?? COMPANION_QUIET_S;
-  const gap = o.gapS ?? COMPANION_GAP_S;
-  const out: VoiceItem[] = [];
-  const heard = new Map<string, number>();
-  let previous: string | null = null;
-  let lastOut = -Infinity;
-  for (const file of [...days].sort((a, b) => a.t0 - b.t0)) {
-    for (const minute of file.minutes) {
-      if (!minute) continue;
-      const fact = leadFact(file, minute);
-      const sentence = voiceSentence(file, minute);
-      if (!fact || !sentence) continue;
-      const family = factFamily(fact);
-      const last = heard.get(family);
-      const isNew = family !== previous && (last === undefined || minute.at - last >= quiet);
-      if (isNew && minute.at - lastOut >= gap) {
-        out.push({
-          id: `companion:${minute.at}`, atSec: minute.at, kind: 'companion', title: sentence, text: null, link: null, source: null,
-          focus: { kind: 'none' }, facts: ['seen', 'expected', 'state'], mentions: {}, beat: null,
-        });
-        lastOut = minute.at;
-      }
-      heard.set(family, minute.at);
-      previous = family;
-    }
-  }
-  return out;
-}
-
-// ---- the timeline's lanes and the state band ----------------------------------------------
-
-/** The tick lanes of the timeline: chapters; ZET's notices, the court and ZET's own markers; the press, thinned to the
- *  first headline of each beat. The companion has no lane (the feed is its accessible form). */
-export function feedMarkers(items: readonly VoiceItem[], events: readonly Pick<SnimkaEvent, 'id' | 'chapter' | 'kind'>[] = []): TimelineMarker[] {
-  const chapters = new Set(events.filter((e) => e.chapter).map((e) => `event:${e.id}`));
-  const zetEvents = new Set(events.filter((e) => !e.chapter && e.kind === 'zet').map((e) => `event:${e.id}`));
-  const beats = new Set<string>();
+/** The timeline's one marker row: the chapters as numbered pins and what ZET and the court said as dots. The press has no
+ *  marks (73 unthinned ticks said nothing, R3); the feed is the row's accessible form. */
+export function feedMarkers(items: readonly VoiceItem[]): TimelineMarker[] {
   const out: TimelineMarker[] = [];
   for (const item of [...items].sort(byTime)) {
-    if (item.kind === 'press') {
-      if (item.beat !== null) {
-        if (beats.has(item.beat)) continue;
-        beats.add(item.beat);
-      }
-      out.push({ atSec: item.atSec, lane: 'press', id: item.id, title: item.title });
-    } else if (item.kind === 'zet' || item.kind === 'court' || zetEvents.has(item.id)) {
-      out.push({ atSec: item.atSec, lane: 'notice', id: item.id, title: item.title });
-    } else if (item.kind === 'event' && (chapters.size === 0 || chapters.has(item.id))) {
-      out.push({ atSec: item.atSec, lane: 'chapter', id: item.id, title: item.title });
-    }
+    if (item.kind === 'chapter') out.push({ atSec: item.atSec, lane: 'chapter', id: item.id, title: item.title });
+    else if (item.kind === 'zet' || item.kind === 'court') out.push({ atSec: item.atSec, lane: 'notice', id: item.id, title: item.title });
   }
   return out;
 }

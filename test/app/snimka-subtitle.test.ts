@@ -1,21 +1,24 @@
-// The subtitle band (app/src/snimka/subtitle.ts): the hold of 1,200 ms at
-// any speed with an injected wall clock, the latest line winning at expiry,
-// the same text being no change, the observed readings sampled per replay
-// minute at 600x, and on the page the record ("Zapis") inside a run and
-// today's rules ("Po današnjim pravilima pisalo bi") between runs.
+// The subtitle band (app/src/snimka/subtitle.ts, V3-17): the hold of 2,500 ms
+// at any speed with an injected wall clock, the latest line winning at
+// expiry, the same text being no change, the observed readings sampled per
+// replay minute at 600x, only service sentences at 60x and faster, readings
+// with the screen's "•" glyphs skipped, and on the page the record ("zapis")
+// inside a run, today's rules ("izračun") between runs, never a "none" line
+// (the last one stays, dimmed) and the link to #zaslon.
 import { Window } from 'happy-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SNIMKA_WINDOW, type HashedRef, type ScreenRun } from '../../shared/snimka';
 import { createReplayClock } from '../../app/src/snimka/clock';
 import { createViewStore, type SnimkaContext } from '../../app/src/snimka/context';
 import type { FrameLoop } from '../../app/src/snimka/frames';
-import { createSubtitleSelector, mountSubtitle, observedIndexAt, SUBTITLE_HOLD_MS, subtitleLineAt, type SubtitleLine } from '../../app/src/snimka/subtitle';
+import { createSubtitleSelector, isSentence, isServiceFamily, mountSubtitle, observedIndexAt, SUBTITLE_HOLD_MS, subtitleLineAt, type SubtitleLine } from '../../app/src/snimka/subtitle';
 import { buildSnimkaFixture, buildVoiceDay, MARKS, zg } from '../../e2e/snimka-fixtures';
 
 const line = (text: string, source: SubtitleLine['source'] = 'replayed'): SubtitleLine => ({ source, text });
 
 describe('createSubtitleSelector', () => {
-  it('shows the first line at once and holds every line 1,200 ms; the latest offer wins at expiry', () => {
+  it('shows the first line at once and holds every line 2,500 ms; the latest offer wins at expiry', () => {
+    expect(SUBTITLE_HOLD_MS).toBe(2500);
     let wall = 0;
     const s = createSubtitleSelector({ holdMs: SUBTITLE_HOLD_MS, now: () => wall });
     expect(s.offer(line('a'))).toBe(true);
@@ -24,10 +27,10 @@ describe('createSubtitleSelector', () => {
     wall = 900;
     expect(s.offer(line('c'))).toBe(false);
     expect(s.shown()?.text).toBe('a');
-    expect(s.dueIn()).toBe(300);
-    wall = 1199;
+    expect(s.dueIn()).toBe(1600);
+    wall = 2499;
     expect(s.flush()).toBe(false);
-    wall = 1200;
+    wall = 2500;
     expect(s.flush()).toBe(true);
     expect(s.shown()?.text).toBe('c');
     expect(s.dueIn()).toBeNull();
@@ -47,7 +50,7 @@ describe('createSubtitleSelector', () => {
     s.offer(line('b'));
     expect(s.dueIn()).toBeNull();
     // The same words from another source are another line.
-    wall = 7000;
+    wall = 8000;
     expect(s.offer(line('b', 'observed'))).toBe(true);
   });
   it('ten minutes of wall at 600x with a sentence changing every replay minute: at most one change per hold', () => {
@@ -62,14 +65,16 @@ describe('createSubtitleSelector', () => {
       if (s.flush()) changes += 1;
     }
     expect(changes).toBeLessThanOrEqual(Math.ceil(600_000 / SUBTITLE_HOLD_MS) + 1);
-    expect(changes).toBeGreaterThan(450);
+    expect(changes).toBeGreaterThan(200);
+    // Ten seconds of wall: at most four changes.
+    expect(Math.ceil(10_000 / SUBTITLE_HOLD_MS)).toBeLessThanOrEqual(4);
     console.info(`[subtitle] 10 wall minutes at 600x, a new sentence every replay minute: ${changes} changes`);
   });
 });
 
 describe('the line at an instant', () => {
   const run: Pick<ScreenRun, 'readings'> = {
-    readings: [0, 20, 40, 60, 80, 100, 130].map((s) => ({ at: 1_000_020 + s, sentence: `r${s}`, kicker: null, kickerText: null, fact: null, family: 'other', rows: [], pills: null, mapNote: null, fleet: null })),
+    readings: [0, 20, 40, 60, 80, 100, 130].map((s) => ({ at: 1_000_020 + s, sentence: `r${s}`, kicker: null, kickerText: null, fact: null, family: 'other' as const, rows: [], pills: null, mapNote: null, fleet: null })),
   };
   it('below 600x the latest reading; at 600x and faster the first reading of the replay minute', () => {
     // 1_000_020 is 20 s into a minute (1_000_000 = 16666 min + 40 s; the minute starts at 999_960).
@@ -81,14 +86,37 @@ describe('the line at an instant', () => {
     expect(observedIndexAt(run, t, 3600)).toBe(first);
     expect(observedIndexAt(run, 1_000_020 - 1, 60)).toBe(-1);
   });
-  it('the record where a run is shown, today\'s rules elsewhere, the word for none, and nothing while loading', () => {
+  it('the record where a run is shown, today\'s rules elsewhere, none where neither speaks, and nothing while loading', () => {
     const mon = buildVoiceDay('mon');
     const voice = { file: mon, minute: mon.minutes[7 * 60 + 45]!, i: 7 * 60 + 45 };
-    expect(subtitleLineAt({ run: run as ScreenRun, voice, tSec: 1_000_100, speed: 60 })).toEqual({ source: 'observed', text: 'r80' });
-    expect(subtitleLineAt({ run: null, voice, tSec: 0, speed: 60 })).toEqual({ source: 'replayed', text: 'U pokretu su 2 vozila, po voznom redu oko 230.' });
-    expect(subtitleLineAt({ run: null, voice: null, tSec: 0, speed: 60 })).toEqual({ source: 'none', text: null });
-    expect(subtitleLineAt({ run: 'loading', voice, tSec: 0, speed: 60 })).toBeNull();
-    expect(subtitleLineAt({ run: null, voice: 'loading', tSec: 0, speed: 60 })).toBeNull();
+    expect(subtitleLineAt({ run: run as ScreenRun, voice, tSec: 1_000_100, speed: 1 })).toEqual({ source: 'observed', text: 'r80' });
+    expect(subtitleLineAt({ run: null, voice, tSec: 0, speed: 1 })).toEqual({ source: 'replayed', text: 'U pokretu su 2 vozila, po voznom redu oko 230.' });
+    expect(subtitleLineAt({ run: null, voice: null, tSec: 0, speed: 1 })).toEqual({ source: 'none', text: null });
+    expect(subtitleLineAt({ run: 'loading', voice, tSec: 0, speed: 1 })).toBeNull();
+    expect(subtitleLineAt({ run: null, voice: 'loading', tSec: 0, speed: 1 })).toBeNull();
+  });
+  it('at 60x and faster only service sentences: the service, departures, outages', () => {
+    expect(['service', 'outage', 'departure-live', 'departure-timetable'].every(isServiceFamily)).toBe(true);
+    expect(['bikes', 'solar', 'weather', 'event', 'other', null].some(isServiceFamily)).toBe(false);
+    const service = { ...run, readings: run.readings.map((r) => ({ ...r, family: 'service' as const })) };
+    // An observed sunset at 600x does not reach the band; the service does.
+    expect(subtitleLineAt({ run: run as ScreenRun, voice: null, tSec: 1_000_100, speed: 600 })).toBeNull();
+    expect(subtitleLineAt({ run: run as ScreenRun, voice: null, tSec: 1_000_100, speed: 1 })).not.toBeNull();
+    expect(subtitleLineAt({ run: service as ScreenRun, voice: null, tSec: 1_000_100, speed: 600 })?.source).toBe('observed');
+    // The replayed voice: Monday's 07:47 leads with bikes (held back at speed), 07:45 with the service.
+    const mon = buildVoiceDay('mon');
+    const at = (m: number) => ({ file: mon, minute: mon.minutes[m]!, i: m });
+    expect(subtitleLineAt({ run: null, voice: at(7 * 60 + 47), tSec: 0, speed: 600 })).toBeNull();
+    expect(subtitleLineAt({ run: null, voice: at(7 * 60 + 47), tSec: 0, speed: 1 })?.text).toBe('Na stanicama je 1.500 bicikala.');
+    expect(subtitleLineAt({ run: null, voice: at(7 * 60 + 45), tSec: 0, speed: 60 })?.text).toBe('U pokretu su 2 vozila, po voznom redu oko 230.');
+  });
+  it('a reading with the screen\'s dot glyphs is no sentence', () => {
+    expect(isSentence('••••·••••')).toBe(false);
+    expect(isSentence('Tramvaj 6 polazi •')).toBe(false);
+    expect(isSentence('')).toBe(false);
+    expect(isSentence('Promet je uobičajen.')).toBe(true);
+    const dots = { readings: run.readings.map((r) => ({ ...r, sentence: '••••·••••' })) };
+    expect(subtitleLineAt({ run: dots as ScreenRun, voice: null, tSec: 1_000_100, speed: 1 })).toBeNull();
   });
 });
 
@@ -149,13 +177,18 @@ describe('mountSubtitle', () => {
     mark.click();
     expect(band.dataset.open).toBe('true');
     expect(mark.getAttribute('aria-expanded')).toBe('true');
-    // A minute neither the record nor the voice covers: the word for none.
+    // A minute neither the record nor the voice covers: never a "none" line; the last sentence stays, dimmed.
     clock.seek(zg(9, 28, 12, 0) * 1000);
     sub.update(clock.now());
     await vi.advanceTimersByTimeAsync(SUBTITLE_HOLD_MS + 50);
-    expect(band.dataset.snSubSource).toBe('none');
-    expect(root.querySelector('.sn-sub-text')!.textContent).toBe('Za ovu minutu nema rečenice.');
-    expect(root.querySelector<HTMLElement>('.sn-sub-head')!.hidden).toBe(true);
+    expect(band.dataset.snSubSource).toBe('observed');
+    expect(band.dataset.snSubDim).toBe('true');
+    expect(root.querySelector('.sn-sub-text')!.textContent).toBe('Tramvaj 6 prema Črnomercu polazi u 07:52 po voznom redu.');
+    expect(root.textContent).not.toContain('nema rečenice');
+    // The link to the Zaslon section.
+    const more = root.querySelector<HTMLAnchorElement>('.sn-sub-more')!;
+    expect(more.getAttribute('href')).toBe('#zaslon');
+    expect(more.textContent).toBe('Što je pisalo na zaslonu →');
     sub.destroy();
   });
 });

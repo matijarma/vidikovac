@@ -1,13 +1,15 @@
-// The timeline bar (app/src/snimka/timeline.ts): the three tick lanes from
-// the dataset (chapters; ZET's notices with the court; the press), the day
-// labels (Sunday's four hours left unlabelled), the thinned fleet lane that
-// keeps a gap a gap, the 6,720-minute scrubber and the keyboard map.
+// The timeline bar (app/src/snimka/timeline.ts, V3-18): the range laid over
+// the fleet lane, the silhouette tinted by state with the dashed edge before
+// the app published its own, the rug, one marker row (numbered chapter pins
+// that seek, ZET/court dots; no press) from the fixed markersFor, the next
+// chapter line, the ← → tooltips, the Poglavlja popover, the fullscreen
+// icon, the day labels, the 6,720-minute scrubber and the keyboard map.
 import { Window } from 'happy-dom';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SNIMKA_WINDOW } from '../../shared/snimka';
 import { createReplayClock } from '../../app/src/snimka/clock';
 import { createLayerStore, createViewStore, type SnimkaContext } from '../../app/src/snimka/context';
-import { bandRuns, bindKeys, dayMarks, LANES, mountTimeline, thin, timelineMarkers } from '../../app/src/snimka/timeline';
+import { bandRuns, bindKeys, chapterTargets, dayMarks, markersFor, mountTimeline, nextLine, rugRuns, thin } from '../../app/src/snimka/timeline';
 import { MARKS, buildEvents, buildNews, buildNotices, buildWindowSeries } from '../../e2e/snimka-fixtures';
 
 const START = SNIMKA_WINDOW.fromSec * 1000;
@@ -17,16 +19,22 @@ const events = buildEvents().events;
 const notices = buildNotices();
 const news = buildNews();
 
-describe('timelineMarkers', () => {
-  const markers = timelineMarkers({ events, notices, news });
-  it('puts the chapters, the notices with the court and the press on their own lanes, in time order', () => {
-    expect(LANES).toEqual(['chapter', 'notice', 'press']);
-    expect(markers.filter((m) => m.lane === 'chapter').map((m) => m.id)).toEqual(events.filter((e) => e.chapter).map((e) => e.id));
-    const noticeIds = markers.filter((m) => m.lane === 'notice').map((m) => m.id);
-    expect(noticeIds).toEqual(expect.arrayContaining(notices.items.map((n) => `zet-${n.id}`)));
-    for (const e of events.filter((x) => x.kind === 'court' && !x.chapter)) expect(noticeIds).toContain(e.id);
-    expect(markers.filter((m) => m.lane === 'press')).toHaveLength(news.items.length);
+describe('markersFor', () => {
+  it('no longer throws: one row of chapter pins and ZET/court dots from the feed, in time order, no press', () => {
+    const markers = markersFor({ events, notices, news });
+    expect(markers.filter((m) => m.lane === 'chapter').map((m) => m.id)).toEqual(events.filter((e) => e.chapter && !e.internal).map((e) => `event:${e.id}`));
+    expect(markers.filter((m) => m.lane === 'notice').map((m) => m.id)).toEqual(expect.arrayContaining(['notice:10164', 'notice:10168']));
+    expect(markers.filter((m) => m.lane === 'press')).toEqual([]);
     expect(markers.every((m, i) => i === 0 || markers[i - 1]!.atSec <= m.atSec)).toBe(true);
+  });
+  it('the next chapter line and the ← → targets', () => {
+    const ch = events.filter((e) => e.chapter && !e.internal).sort((a, b) => a.atSec - b.atSec);
+    expect(nextLine(ch, MARKS.monday0745)).toBe('Sljedeće: 18:42 · ZET šalje podatke bez ijednog vozila');
+    expect(nextLine(ch, MARKS.feedEmptyFrom)).toBe('Sljedeće: uto 29. 9. u 06:28 · ZET-ovi podaci se ne mijenjaju');
+    expect(nextLine(ch, SNIMKA_WINDOW.toSec)).toBeNull();
+    const clockChapters = ch.map((e) => ({ at: e.atSec * 1000, title: e.title }));
+    expect(chapterTargets(clockChapters, MARKS.monday0745 * 1000)).toEqual({ prev: 'Početak štrajka', next: 'ZET šalje podatke bez ijednog vozila' });
+    expect(chapterTargets(clockChapters, MARKS.monday0745 * 1000 + 5000).prev).toBe('Prvo jutro');
   });
 });
 
@@ -41,7 +49,14 @@ describe('dayMarks, thin and the band', () => {
     expect(thin([1, 5, 2, null, 3, null, null, null, null, null, 7], 5)).toEqual([5, null, 7]);
     expect(thin(series.seen.all).length).toBe(series.n / 5);
   });
-  it('the state band falls back to the series runs and covers every minute', () => {
+  it('the rug marks the minutes ZET sent no vehicles or its data stood still', () => {
+    const rug = rugRuns(series);
+    expect(rug.length).toBeGreaterThan(0);
+    const m = (sec: number) => Math.floor((sec - series.t0) / 60);
+    expect(rug.some((r) => r.from <= m(MARKS.feedFrozenFrom) && m(MARKS.feedFrozenFrom) < r.to)).toBe(true);
+    expect(rug.some((r) => r.from <= m(MARKS.thursday0745) && m(MARKS.thursday0745) < r.to)).toBe(false);
+  });
+  it('the state runs cover every minute', () => {
     const runs = bandRuns(series);
     expect(runs[0]!.from).toBe(0);
     expect(runs.reduce((a, r) => a + (r.to - r.from), 0)).toBe(series.n);
@@ -65,9 +80,10 @@ describe('mountTimeline and bindKeys', () => {
   function context() {
     const chapters = events.filter((e) => e.chapter).map((e) => ({ at: e.atSec * 1000, title: e.title, id: e.id }));
     const clock = createReplayClock({ start: START, end: END, at: MARKS.monday0745 * 1000, now: () => 0, chapters });
-    return { clock, series, events, notices, news, doc: document, reducedMotion: false, layers: createLayerStore(), view: createViewStore() } as unknown as SnimkaContext;
+    const frames = { subscribe: () => () => {}, kick() {}, destroy() {} };
+    return { clock, frames, series, events, notices, news, manifest: { serviceLiveFromSec: MARKS.serviceLive }, doc: document, reducedMotion: false, layers: createLayerStore(), view: createViewStore() } as unknown as SnimkaContext;
   }
-  it('draws the controls, the 6,720-minute scrubber, the fleet lane, the band, three tick lanes and five day labels', () => {
+  it('the range lies over the fleet lane; the silhouette is tinted by state; one marker row; equal speed names', () => {
     const ctx = context();
     const root = document.createElement('div');
     document.body.append(root);
@@ -75,31 +91,86 @@ describe('mountTimeline and bindKeys', () => {
     const range = root.querySelector<HTMLInputElement>('[data-sn="scrubber"]')!;
     expect(range.max).toBe('6720');
     expect(range.getAttribute('aria-valuetext')).toBe('pon 28. 9. u 07:45');
+    // The lane is the track: the range and the fleet lane share one box.
+    const track = root.querySelector<HTMLElement>('[data-sn="track"]')!;
+    expect(range.parentElement).toBe(track);
+    expect(track.querySelector('svg[data-sn="fleet-lane"]')).not.toBeNull();
+    expect(root.querySelector('.sn-tl-band, .sn-tl-ticks, .sn-tl-cursor')).toBeNull();
+    const tints = [...root.querySelectorAll('.sn-tl-svg rect.sn-tl-tint')].map((r) => r.getAttribute('class'));
+    expect(tints.some((c) => c!.includes('sn-tl-tint-silent'))).toBe(true);
+    expect(tints.some((c) => c!.includes('sn-tl-tint-normal'))).toBe(true);
+    expect(root.querySelector('.sn-tl-svg g')!.getAttribute('clip-path')).toMatch(/^url\(#/);
+    expect(root.querySelector('.sn-tl-retro')!.textContent).toBe('izračunano naknadno');
+    expect(root.querySelector('.sn-tl-retro-edge')).not.toBeNull();
+    expect(root.querySelector('[data-sn="rug"]')!.getAttribute('title')).toBe('ZET ne šalje podatke ili se ne osvježavaju');
+    // One marker row: numbered pins, ZET/court dots.
+    const marks = root.querySelector<HTMLElement>('[data-sn="marks"]')!;
+    const pins = [...marks.querySelectorAll<HTMLButtonElement>('button.sn-tl-pin')];
+    expect(pins.length).toBe(events.filter((e) => e.chapter && !e.internal).length);
+    expect(pins.map((p) => p.textContent).slice(0, 3)).toEqual(['1', '2', '3']);
+    expect(pins[0]!.getAttribute('aria-label')).toBe('Idi na: Večer prije');
+    expect(marks.querySelectorAll('.sn-tl-dot').length).toBeGreaterThan(0);
+    expect(root.querySelectorAll('[data-sn="marks"]').length).toBe(1);
+    // A pin seeks.
+    ctx.clock.play();
+    pins[3]!.click();
+    expect(ctx.clock.playing()).toBe(false);
+    expect(ctx.clock.now()).toBe(MARKS.monday0745 * 1000);
+    // Play and pause words, the next line, the ← → tooltips, the speeds unchanged in words.
     expect(root.querySelector('[data-sn="play"]')!.textContent).toBe('Pokreni');
-    expect(root.querySelectorAll('.sn-tl-speed [data-speed]')).toHaveLength(4);
+    tl.update(MARKS.monday0745 * 1000 + 60_000);
+    expect(root.querySelector('[data-sn="next-chapter"]')!.textContent).toBe('Sljedeće: 18:42 · ZET šalje podatke bez ijednog vozila');
+    expect(root.querySelector<HTMLButtonElement>('button[data-sn="next"]')!.title).toBe('Idi na: ZET šalje podatke bez ijednog vozila');
+    expect(root.querySelector<HTMLButtonElement>('button[data-sn="prev"]')!.title).toBe('Idi na: Prvo jutro');
+    expect([...root.querySelectorAll('.sn-tl-speed [data-speed] > span:first-child')].map((x) => x.textContent)).toEqual(['stvarno vrijeme', '1 min/s', '10 min/s', '1 h/s']);
     expect(root.querySelector('.sn-tl-speed [data-speed="600"]')!.getAttribute('aria-pressed')).toBe('true');
-    expect([...root.querySelectorAll<HTMLElement>('.sn-tl-ticks')].map((l) => l.dataset.lane)).toEqual(['chapter', 'notice', 'press']);
-    expect(root.querySelector('.sn-tl-lanes')!.getAttribute('aria-hidden')).toBe('true');
-    const ticks = root.querySelectorAll<HTMLElement>('.sn-tl-ticks[data-lane="chapter"] .sn-tl-tick');
-    expect(ticks.length).toBe(events.filter((e) => e.chapter).length);
-    expect(ticks[0]!.title).toMatch(/^\S+ \d+\. \d+\. \d\d:\d\d · /);
+    // Fullscreen is a 44 px icon with its name in aria-label.
+    const present = root.querySelector<HTMLButtonElement>('[data-sn="present"]')!;
+    expect(present.getAttribute('aria-label')).toBe('Cijeli zaslon');
+    expect(present.textContent).toBe('⛶');
     expect([...root.querySelectorAll('.sn-tl-day')].map((d) => d.textContent)).toEqual(['pon 28. 9.', 'uto 29. 9.', 'sri 30. 9.', 'čet 1. 10.', 'pet 2. 10.']);
-    expect(root.querySelector('.sn-tl-svg path.sn-tl-seen')!.getAttribute('d')!.length).toBeGreaterThan(10);
     tl.update(END);
     expect(range.value).toBe('6720');
-    expect(root.querySelector<HTMLElement>('.sn-tl-cursor')!.style.transform).toBe('translateX(100.000%)');
     // Scrubbing pauses and seeks.
     ctx.clock.play();
     range.value = '60';
     range.dispatchEvent(new Event('input'));
     expect(ctx.clock.playing()).toBe(false);
     expect(ctx.clock.now()).toBe(START + 60 * 60_000);
-    // The speed buttons set the clock.
     root.querySelector<HTMLButtonElement>('.sn-tl-speed [data-speed="3600"]')!.click();
     expect(ctx.clock.speed()).toBe(3600);
     expect(root.querySelector<HTMLSelectElement>('[data-sn="speed-select"]')!.value).toBe('3600');
     tl.destroy();
     expect(root.querySelector('.sn-tl')).toBeNull();
+  });
+  it('Poglavlja opens the agenda as a popover: aria-current on the chapter, arrows move, Enter opens, Escape closes', () => {
+    const ctx = context();
+    const root = document.createElement('div');
+    document.body.append(root);
+    const opened: string[] = [];
+    const tl = mountTimeline(ctx, root, undefined, { openChapter: (id) => opened.push(id) });
+    const button = root.querySelector<HTMLButtonElement>('[data-sn="agenda"]')!;
+    const pop = root.querySelector<HTMLElement>('[data-sn="agenda-pop"]')!;
+    expect(button.textContent).toBe('Poglavlja');
+    expect(pop.hidden).toBe(true);
+    button.click();
+    expect(pop.hidden).toBe(false);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    const steps = [...pop.querySelectorAll<HTMLButtonElement>('.sn-agenda-step')];
+    expect(steps.length).toBe(events.filter((e) => e.chapter && !e.internal).length);
+    const current = pop.querySelector<HTMLButtonElement>('[aria-current="step"]')!;
+    expect(current.dataset.chapter).toBe('prvo-jutro');
+    expect(document.activeElement).toBe(current);
+    current.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(steps[steps.indexOf(current) + 1]);
+    (document.activeElement as HTMLButtonElement).click();
+    expect(opened).toEqual(['bez-vozila']);
+    expect(pop.hidden).toBe(true);
+    button.click();
+    pop.querySelector('.sn-agenda-step')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(pop.hidden).toBe(true);
+    expect(document.activeElement).toBe(button);
+    tl.destroy();
   });
   it('the keyboard map steps, walks the chapters, picks a speed and leaves a text field alone', () => {
     const ctx = context();

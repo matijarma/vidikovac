@@ -133,7 +133,7 @@ export function factChips(keys: readonly FactKey[], ctx: FactsContext, atSec: nu
     else if (key === 'expected') count(key, SN.facts.expected, at(s.expected.all, m));
     else if (key === 'bikes') count(key, SN.facts.bikes, at(s.bikes?.total, m));
     else if (key === 'bikesEmpty') count(key, SN.facts.bikesEmpty, at(s.bikes?.empty, m));
-    else if (key === 'closures') count(key, SN.facts.closures, at(s.closures?.active, m));
+    // v3: the closures left the stage (V3-2); their chip goes with them.
     else if (key === 'state') {
       const state = at(s.service.state, m);
       const held = at(s.service.hold, m) !== null;
@@ -162,7 +162,8 @@ export function factChips(keys: readonly FactKey[], ctx: FactsContext, atSec: nu
       if (sample.seen === null) push(key, `${head}: ${SN.facts.none}`, true);
       else if (sample.seen === 0) push(key, fill(SN.facts.routeNone, { route: short }), false);
       else if (sample.expected === null) push(key, `${head}: ${num(sample.seen)}`, false);
-      else push(key, fill(SN.facts.route, { route: short, seen: num(sample.seen), expected: num(sample.expected) }), false);
+      // More vehicles than the timetable had never reads "4 od 2" (R3): the count, then the timetable in brackets.
+      else push(key, fill(sample.seen > sample.expected ? SN.facts.routeOver : SN.facts.route, { route: short, seen: num(sample.seen), expected: num(sample.expected) }), false);
     } else if (key.startsWith('station:')) {
       const id = key.slice('station:'.length);
       const data = stationData(ctx);
