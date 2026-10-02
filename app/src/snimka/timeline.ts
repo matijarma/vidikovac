@@ -51,13 +51,17 @@ export function markersFor(ctx: SnimkaContext): TimelineMarker[] {
   return timelineMarkers(ctx);
 }
 
-/** The state band's runs: V4's stateBand when it answers in runs, else runsOf/stateClass over the series. */
+/** The state band's runs in series minutes: V4's stateBand when it answers in runs (its from and to are epoch seconds,
+ *  so they are turned back into minute indices here), else runsOf/stateClass over the series. */
 export function bandRuns(series: SeriesLike): Run<StateClass>[] {
   const own = (voices as Record<string, unknown>).stateBand;
   if (typeof own === 'function') {
     try {
       const got: unknown = (own as (s: SeriesLike) => unknown)(series);
-      if (Array.isArray(got) && got.every((r) => r && typeof r === 'object' && typeof (r as Run<string>).from === 'number' && typeof (r as Run<string>).to === 'number' && typeof (r as Run<string>).cls === 'string')) return got as Run<StateClass>[];
+      if (Array.isArray(got) && got.every((r) => r && typeof r === 'object' && typeof (r as Run<string>).from === 'number' && typeof (r as Run<string>).to === 'number' && typeof (r as Run<string>).cls === 'string')) {
+        const minute = (sec: number): number => Math.round((sec - series.t0) / series.step);
+        return (got as Run<StateClass>[]).map((r) => ({ from: minute(r.from), to: minute(r.to), cls: r.cls }));
+      }
     } catch { /* fall back */ }
   }
   return runsOf<StateClass>(series.n, (m) => stateClass(series as SeriesFile, m));
