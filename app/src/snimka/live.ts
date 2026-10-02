@@ -1,10 +1,14 @@
-// The card "I danas": the one live read of the page (decision S-10). When
-// the card first comes into view it reads the application's public summary,
-// fetch('/api/teaser') once per page view with a four-second limit, and says
-// the city's state now in the same words the recording used, labelled "uživo,
-// nije snimka". Nothing is counted or sent; the card, its links and its
-// method line stand whether or not the read succeeds. This is the only file
-// under app/src/snimka/ that may name /api/teaser (test/app/pages.test.ts).
+// The band "I danas" (plan v3, decision V3-25): the one live read of the page
+// (decision S-10), a slim band after Što snimka pokazuje. When the band first
+// comes into view it reads the application's public summary, fetch('/api/teaser')
+// once per page view with a four-second limit, and says the city's state now
+// in the words of the recording ("Sada, u 20:14: u pokretu 351 vozilo, po
+// voznom redu 450. Uobičajena večer."), then the same minute of Monday 28
+// September from the window series ("U ponedjeljak 28. 9. u 20:14: u pokretu
+// 3."; "bez podatka" where the recording has no number, never 0). Nothing is
+// counted or sent; the band and its links stand whether or not the read
+// succeeds. This is the only file under app/src/snimka/ that may name
+// /api/teaser (test/app/pages.test.ts).
 //
 // Numbers only for a judged state (normal, reduced, silent) with whole
 // counts; every other answer (down, unconfirmed, unknown, loading, no
@@ -13,7 +17,9 @@
 import { aboutExpected, resetServiceStateMemory, serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { escapeHtml } from '../ui/dom/escape';
-import { count, duration, num, zagrebClock } from './format';
+import type { SeriesFile } from '../../../shared/snimka';
+import type { SnimkaContext } from './context';
+import { count, duration, num, parseZagrebLocal, zagrebClock, zagrebTimeOfDay } from './format';
 import { SN, fill } from './strings';
 
 export const TEASER_URL = '/api/teaser';
@@ -74,6 +80,19 @@ export function liveLines(r: LiveReading, nowMs: number = Date.now()): string[] 
   return r.ageS === null || r.ageS <= 300 ? [now] : [now, fill(SN.live.age, { age: duration(r.ageS * 1000) })];
 }
 
+/** Midnight of Monday 28 September in Zagreb (epoch ms): the first day of the strike, the band's "then". */
+export const MONDAY_MS = parseZagrebLocal('2026-09-28T00:00')!;
+
+/** "U ponedjeljak 28. 9. u {time}: u pokretu {n}." at the Zagreb time of day of `nowMs`, from the window series;
+ *  "bez podatka" where the recording has no number for the minute (never 0). */
+export function mondayLine(series: Pick<SeriesFile, 't0' | 'n' | 'seen'>, nowMs: number): string {
+  const time = zagrebClock(nowMs);
+  const atSec = (MONDAY_MS + zagrebTimeOfDay(nowMs)) / 1000;
+  const m = Math.floor((atSec - series.t0) / 60);
+  const seen = m >= 0 && m < series.n ? series.seen.all[m] : null;
+  return typeof seen === 'number' ? fill(SN.live.then, { time, n: num(seen) }) : fill(SN.live.thenMissing, { time });
+}
+
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 /** Calls `fn` once when `el` first comes into view; returns the teardown. */
 export type Observe = (el: HTMLElement, fn: () => void) => () => void;
@@ -117,41 +136,43 @@ export async function fetchLive(fetchImpl: FetchLike, now: () => number, timeout
   }
 }
 
-/** Draws the card into `root` and reads the summary once when it comes into view. `data-sn-live` is `pending`, then
+/** Draws the band into `root` and reads the summary once when it comes into view. `data-sn-live` is `pending`, then
  *  `numbers` or `unavailable`. */
-export function mountLive(root: HTMLElement, deps: LiveDeps = {}): () => void {
+export function mountLive(root: HTMLElement, ctx: Pick<SnimkaContext, 'series'>, deps: LiveDeps = {}): () => void {
   const doc = root.ownerDocument;
   const fetchImpl = deps.fetchImpl ?? ((input: string, init?: RequestInit) => fetch(input, init));
   const now = deps.now ?? (() => Date.now());
   const observe = deps.observe ?? observeOnce;
   let disposed = false;
   const L = SN.live;
-  const card = doc.createElement('article');
-  card.className = 'sn-live-card';
-  card.setAttribute('aria-labelledby', 'sn-live-h');
-  card.innerHTML =
-    `<p class="sn-live-kicker">${escapeHtml(L.kicker)}</p>` +
-    `<h3 id="sn-live-h" class="sn-live-title">${escapeHtml(L.title)}</h3>` +
-    `<p class="sn-live-lede">${escapeHtml(L.lede)}</p>` +
+  const band = doc.createElement('div');
+  band.className = 'sn-live-band';
+  band.innerHTML =
+    `<p class="sn-live-head"><span class="sn-live-kicker">${escapeHtml(L.kicker)}</span> <span class="sn-live-lede">${escapeHtml(L.lede)}</span></p>` +
+    '<div class="sn-live-lines">' +
     '<div class="sn-live-now" data-sn="live-now" aria-live="polite"><span class="skeleton sn-live-skeleton"></span></div>' +
-    `<p class="sn-live-links"><a class="btn btn-ghost sn-live-link" href="/">${escapeHtml(L.app)}</a> <a class="btn btn-ghost sn-live-link" href="/statistika/">${escapeHtml(L.stats)}</a></p>` +
-    `<p class="st-method sn-live-method">${escapeHtml(L.method)}</p>`;
-  root.replaceChildren(card);
+    '<p class="sn-live-then" data-sn="live-then"></p>' +
+    '</div>' +
+    `<p class="sn-live-links"><a class="st-link sn-live-link" href="/">${escapeHtml(L.app)}</a> <a class="st-link sn-live-link" href="/statistika/">${escapeHtml(L.stats)}</a></p>`;
+  root.replaceChildren(band);
   root.removeAttribute('aria-busy');
   root.dataset.snLive = 'pending';
-  const out = card.querySelector<HTMLElement>('[data-sn="live-now"]')!;
+  const out = band.querySelector<HTMLElement>('[data-sn="live-now"]')!;
+  const then = band.querySelector<HTMLElement>('[data-sn="live-then"]')!;
   out.setAttribute('aria-busy', 'true');
 
   const stop = observe(root, () => {
     void fetchLive(fetchImpl, now, deps.timeoutMs).then((reading) => {
       if (disposed) return;
-      out.replaceChildren(...liveLines(reading, now()).map((line, i) => {
+      const at = now();
+      out.replaceChildren(...liveLines(reading, at).map((line, i) => {
         const p = doc.createElement('p');
         p.className = i === 0 ? 'sn-live-line' : 'sn-live-age';
         p.textContent = line;
         return p;
       }));
       out.removeAttribute('aria-busy');
+      then.textContent = mondayLine(ctx.series, at);
       root.dataset.snLive = reading.kind;
     });
   });
