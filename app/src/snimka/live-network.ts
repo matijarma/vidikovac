@@ -71,17 +71,32 @@ export function aliveStates(routes: RoutesLike, atSec: number, lookback = LOOKBA
   return out;
 }
 
-/** How many routes the timetable runs in the sample holding `atSec` (expected > 0, 255 excluded); 0 outside the file. */
-export function scheduledCount(routes: RoutesLike, atSec: number): number {
+/**
+ * The one definition of "scheduled" on the page (decision V3-30): the routes the timetable runs in the sample
+ * holding `atSec` (expected > 0, 255 excluded) together with every route alive at that instant (a vehicle in the
+ * last three samples), so "linije s vozilom: {alive} od {scheduled}" can never say more alive than scheduled. The
+ * Mreža face, the minimaps' captions and the depth's line chips all read it from here; 0 outside the file.
+ * `states` is the aliveStates of the same instant when the caller already has it.
+ */
+export function scheduledCount(routes: RoutesLike, atSec: number, states: RouteStates = aliveStates(routes, atSec)): number {
   const slot = routeSlotAt(routes, atSec);
   if (slot < 0) return 0;
   const { expected } = rowsOf(routes);
   let n = 0;
-  for (const row of expected) {
-    const e = row[slot] ?? ROUTES_MISSING;
-    if (e !== ROUTES_MISSING && e > 0) n += 1;
+  for (let i = 0; i < routes.routes.length; i++) {
+    const e = expected[i]?.[slot] ?? ROUTES_MISSING;
+    if ((e !== ROUTES_MISSING && e > 0) || states.get(routes.routes[i]!.id) === 'alive') n += 1;
   }
   return n;
+}
+
+/** The lines with a vehicle and the scheduled lines (scheduledCount) at one instant, or null outside the file. */
+export function networkCounts(routes: RoutesLike, atSec: number): { alive: number; scheduled: number; states: RouteStates } | null {
+  if (routeSlotAt(routes, atSec) < 0) return null;
+  const states = aliveStates(routes, atSec);
+  let alive = 0;
+  for (const state of states.values()) if (state === 'alive') alive += 1;
+  return { alive, scheduled: scheduledCount(routes, atSec, states), states };
 }
 
 const stopRoutesCache = new WeakMap<Pick<Network, 'stops' | 'shapes'>, StopRoutes>();
