@@ -50,8 +50,11 @@ export const SN = {
   kpi: {
     silent: 'sati gotovo bez vozila',
     silentSub: 'od {from} do {to}',
-    peak: 'vozila u ponedjeljak u 07:45',
+    /** The Monday tile's label after its figure, by Croatian plural (one, few, many). */
+    peak: ['vozilo u ponedjeljak u 07:45', 'vozila u ponedjeljak u 07:45', 'vozila u ponedjeljak u 07:45'],
     peakSub: 'običan četvrtak u isto doba: {normal}',
+    /** New for the read-through (lane V5): the Monday tile's line against the weekday-matched normal day (decision S-12). */
+    peakDaySub: '{day}, običan dan u isto doba: {normal}',
     bikes: 'praznih stanica BAJS-a od {stations}',
     bikesSub: 'najviše {day} u {time}; bicikala sa {from} na {to}',
     return: 'minuta povratka',
@@ -123,6 +126,25 @@ export const SN = {
     dataPath: 'ZET šalje {entities}, u spremištu {depot}, parkirano {parked}, u pokretu {seen}, zaslon je rekao {published}',
     linesCount: '{alive} od {scheduled} linija po voznom redu ima vozilo',
     label: 'Brojke u ovom trenutku',
+    // New for the read-through (lane V3): the state rules in words (worker/twin/service.ts), the rail sentence of
+    // the Stanje depth, the depths' titles and their two states.
+    rules: {
+      title: 'Kako aplikacija određuje stanje',
+      reduced: 'Smanjeno: u pokretu je manje od polovice vozila po voznom redu, ili su tramvaji ili autobusi zasebno ispod 40 % svojega voznog reda, pet minuta zaredom.',
+      silent: 'Gotovo bez vozila: u pokretu su najviše dva vozila ili desetina voznog reda, deset minuta zaredom.',
+      lift: 'Iz stanja gotovo bez vozila izlazi se kad je u pokretu barem četvrtina voznog reda tri minute zaredom.',
+      normal: 'Uobičajeno: barem 70 % voznog reda, a tramvaji i autobusi svaki barem 60 % svojega, pet minuta zaredom.',
+      hold: 'Bez procjene: kad je po voznom redu manje od 20 vozila ili kad ZET-ovi podaci stoje.',
+    },
+    rail: 'Vlakova nema na karti: snimka bilježi ZET-ova vozila. Na zaslonu se vlak pojavio s nadogradnjom od 29. rujna.',
+    dataPathTitle: 'Od ZET-ovih podataka do zaslona',
+    vehicles: 'Vozila u pokretu i po voznom redu',
+    stations: 'Stanice od najpraznije, u ovom trenutku',
+    stationsBikes: 'Bicikala',
+    stationsCapacity: 'Mjesta',
+    weatherSource: 'DHMZ, Zagreb-Maksimir, po satu',
+    loading: 'Učitava se.',
+    failed: 'Ovaj se dio snimke trenutačno ne može učitati.',
   },
   layers: {
     label: 'Slojevi',
@@ -210,9 +232,13 @@ export const SN = {
     atPublish: 'U minuti objave',
     seek: 'Premjesti snimku na {time}',
     more: '{count} naslova iste teme',
+    /** New for the read-through (lane V4): voices.more by Croatian plural (one, few, many). */
+    moreForms: ['{count} naslov iste teme', '{count} naslova iste teme', '{count} naslova iste teme'],
     showAll: 'Prikaži sve',
     filtered: 'Tema: {subject}',
     hidden: '{count} stavki bez te teme',
+    /** New for the read-through (lane V4): voices.hidden by Croatian plural (one, few, many). */
+    hiddenForms: ['{count} stavka bez te teme', '{count} stavke bez te teme', '{count} stavki bez te teme'],
     clear: 'Sve teme',
     beat: {
       najava: 'Najava',
@@ -357,6 +383,12 @@ export const SN = {
     bus: 'Autobusi',
     weather: 'Temperatura i vrijeme',
   },
+  // New for the read-through (lane V3): the heatmap's ramp words, its blank cell and its table's first column.
+  heatmap: {
+    ramp: ['nijedno vozilo', 'do četvrtine', 'do polovice', 'do tri četvrtine', 'puni vozni red'],
+    missing: 'bez podatka',
+    route: 'Linija',
+  },
   alternatives: {
     title: 'Što je ostalo kad tramvaja nije bilo',
     lede: 'Bicikli, vlakovi, jedna autobusna linija i ono što su mediji zabilježili. Sve iz snimke, s izvorom.',
@@ -373,13 +405,26 @@ export const SN = {
     line228Method: 'Vozila linije 228 u pokretu po satu od utorka 29. rujna, iz snimljenih položaja po liniji; obavijest ZET-a 10166.',
     press: 'Što su mediji zabilježili',
     pressLede: 'Taksi, volonteri, škole i gužve: naslovi s poveznicom na izvorni članak.',
+    // New for the read-through (lane V5): a row button's name ("Pokaži na karti: Stanica 3"), line 228's table twin
+    // and readout, and the empty states.
+    showOnMapNamed: '{action}: {name}',
+    line228Hour: 'Sat',
+    line228Seen: 'najviše vozila u pokretu',
+    line228Expected: 'po voznom redu',
+    line228Value: '{n} u pokretu',
+    line228Summary: 'Najviše {n} vozila linije 228 u pokretu u jednom satu.',
+    line228Notice: 'Obavijest ZET-a 10166',
+    railNone: 'U zapisima zaslona nema rečenice o vlaku.',
+    bikesNone: 'U ponedjeljak se nijedna stanica nije ispraznila nakon 05:00.',
+    pressNone: 'Za ove teme nema odabranog naslova.',
+    pressMeta: '{outlet} · {time}',
   },
   reckoning: {
     title: 'Što se vidjelo',
     lede: 'Brojevi izračunati iz ove snimke. Ispod svakog piše kako.',
     silent: 'Koliko dugo gotovo bez vozila',
     silentMethod: 'Minute u stanju „gotovo bez vozila”, zbrojene po danima, iz stanja usluge izračunanog nad snimljenim podacima.',
-    peak: 'Četiri jutra u 07:45',
+    peak: 'Pet jutara u 07:45',
     peakMethod: 'Vozila u pokretu u 07:45 svakog dana i običnog četvrtka 24. rujna u isto doba.',
     bikes: 'Bicikli kao zamjena',
     bikesMethod: 'Najmanji zbroj bicikala i najveći broj praznih stanica po danu, iz podataka nextbikea svake minute.',
@@ -416,6 +461,14 @@ export const SN = {
     feedLongest: 'najdulje {duration}, od {from}',
     liveRows: 'Redovi s polaskom uživo',
     liveRowsValue: '{live} od {rows} redova s polaskom',
+    // New for the read-through (lane V5): the peak card with five mornings and two normal days, the lines card's
+    // Monday row and the bikes card's figure.
+    peakFive: 'Jutra u 07:45',
+    peakFiveMethod: 'Vozila u pokretu u 07:45 svakog jutra snimke i dvaju običnih dana u isto doba: ponedjeljka 21. i četvrtka 24. rujna.',
+    normalDay: '{day}, običan dan',
+    linesMonday: 'U ponedjeljak 28. rujna',
+    linesNone: 'nijedna',
+    bikesDrained: 'bicikala manje na stanicama, od najvećeg zbroja do najmanjeg',
     families: {
       'departure-timetable': 'Polazak po voznom redu',
       'departure-live': 'Polazak uživo',
@@ -474,6 +527,14 @@ export const SN = {
     reproText: 'Skup je izgrađen iz snimki naredbom npm run build:snimka na predaji {commit}; ugovor podataka i opis cjevovoda su u docs/snimka-2026-10.md, a sažetak svake datoteke u manifestu.',
     promise: 'Prijava Gradu obećava otvorene podatke u oba smjera: Grad daje, a Kaj ima? vraća ono što izvede. Ovo je prvi takav skup.',
     notIncluded: 'Nisu u preuzimanjima: naslovi medija i tekst ZET-ovih obavijesti (samo poveznice), sirovi ZET-ovi okviri (nikad) i bilo koja brojka o ljudima (nema ih).',
+    // New for the read-through (lane V5): a download's stable link (the catalogue's alias), the forms of "{rows} redaka",
+    // the catalogue entry, the pipeline brief and the commit link.
+    latest: 'Stalna poveznica',
+    latestNamed: 'Stalna poveznica: {title}',
+    rowForms: ['redak', 'retka', 'redaka'],
+    catalogEntry: 'Skup u popisu otvorenih podataka',
+    brief: 'Opis cjevovoda',
+    commit: 'Predaja {commit}',
   },
   live: {
     title: 'I danas',

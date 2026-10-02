@@ -15,7 +15,7 @@ import type { PanelId, Subject } from './contracts';
 import { num, zagrebDateTime } from './format';
 import { mountHeatmap } from './heatmap';
 import { el } from './panels';
-import { dataPathText, SN3 } from './readouts';
+import { dataPathText } from './readouts';
 import { routeSample } from './route-series';
 import { SN, fill } from './strings';
 import { areaPath, comparisonColumn, linePath, PLOT_H, runsOf, stateClass, type StateClass } from './strip';
@@ -103,12 +103,12 @@ function stanje(ctx: SnimkaContext, host: HTMLElement): () => void {
   const bandBox = el(doc, 'div', { class: 'sn-panel-plot sn-panel-plot-band', 'aria-hidden': 'true' }, band, cursor);
   const legend = el(doc, 'ul', { class: 'st-legend sn-panel-legend' },
     ...(['normal', 'reduced', 'silent', 'unknown', 'none'] as const).map((c) => key(doc, `sn-panel-state-${c}`, STATE_WORD[c])));
-  const rules = el(doc, 'ul', { class: 'sn-panel-rules' }, ...[SN3.rules.reduced, SN3.rules.silent, SN3.rules.lift, SN3.rules.normal, SN3.rules.hold].map((t) => el(doc, 'li', { text: t })));
+  const rules = el(doc, 'ul', { class: 'sn-panel-rules' }, ...[SN.readout.rules.reduced, SN.readout.rules.silent, SN.readout.rules.lift, SN.readout.rules.normal, SN.readout.rules.hold].map((t) => el(doc, 'li', { text: t })));
   const pathLine = el(doc, 'p', { class: 'sn-panel-datapath', 'data-sn': 'data-path', hidden: true });
   const table = tableDetails(`${SN.strip.state}, ${SN.strip.table}`, [SN.strip.hour, SN.strip.state],
     hourly(s, (m) => [STATE_WORD[stateClass(s, m)]]), SN.strip.table);
-  host.replaceChildren(bandBox, legend, el(doc, 'h4', { class: 'sn-panel-subhead', text: SN3.dataPathTitle }), pathLine,
-    el(doc, 'h4', { class: 'sn-panel-subhead', text: SN3.rules.title }), rules, el(doc, 'p', { class: 'sn-panel-note', text: SN3.rail }), table);
+  host.replaceChildren(bandBox, legend, el(doc, 'h4', { class: 'sn-panel-subhead', text: SN.readout.dataPathTitle }), pathLine,
+    el(doc, 'h4', { class: 'sn-panel-subhead', text: SN.readout.rules.title }), rules, el(doc, 'p', { class: 'sn-panel-note', text: SN.readout.rail }), table);
   let lastMinute = -1;
   const offPath = ctx.frames.subscribe((t) => {
     const m = Math.floor(t / 60_000);
@@ -154,7 +154,7 @@ function vozila(ctx: SnimkaContext, host: HTMLElement): () => void {
   const all = comparisonColumn(ctx, s, (c) => c.seen.all);
   const tram = comparisonColumn(ctx, s, (c) => c.seen.tram);
   const bus = comparisonColumn(ctx, s, (c) => c.seen.bus);
-  const table = tableDetails(`${SN3.vehicles}, ${SN.strip.table}`, [SN.strip.hour, SN.readout.moving, SN.readout.expected, SN.readout.normal, SN.strip.tram, SN.strip.bus],
+  const table = tableDetails(`${SN.readout.vehicles}, ${SN.strip.table}`, [SN.strip.hour, SN.readout.moving, SN.readout.expected, SN.readout.normal, SN.strip.tram, SN.strip.bus],
     hourly(s, (m) => [cell(s.seen.all[m]), cell(s.expected.all[m]), cell(all[m]), cell(s.seen.tram[m]), cell(s.seen.bus[m])]), SN.strip.table);
   host.replaceChildren(
     legend, one(s.seen.all, s.expected.all, all, true),
@@ -185,7 +185,7 @@ function routeDepth(ctx: SnimkaContext, host: HTMLElement, subject: Extract<Subj
   const clear = el(doc, 'button', { type: 'button', class: 'btn-ghost sn-panel-clear', text: SN.subject.clear });
   clear.addEventListener('click', () => ctx.view.set({ subject: null }, 'user'));
   if (!cols) {
-    host.replaceChildren(title, el(doc, 'p', { class: 'sn-panel-note', text: SN3.failed }), clear);
+    host.replaceChildren(title, el(doc, 'p', { class: 'sn-panel-note', text: SN.readout.failed }), clear);
     return () => {};
   }
   // The comparison day's same line aligned by time of day, per sample, the weekday-matched day (S-12).
@@ -293,9 +293,9 @@ function bicikli(ctx: SnimkaContext, host: HTMLElement): () => void {
       parts.push(el(doc, 'h4', { class: 'sn-panel-subhead', text: label }), p.root);
     }
   }
-  const status = el(doc, 'p', { class: 'sn-panel-note', text: SN3.loading });
-  const stationList = el(doc, 'ol', { class: 'sn-panel-stations', 'aria-label': SN3.stations });
-  parts.push(el(doc, 'h4', { class: 'sn-panel-subhead', text: SN3.stations }), status, stationList);
+  const status = el(doc, 'p', { class: 'sn-panel-note', text: SN.readout.loading });
+  const stationList = el(doc, 'ol', { class: 'sn-panel-stations', 'aria-label': SN.readout.stations });
+  parts.push(el(doc, 'h4', { class: 'sn-panel-subhead', text: SN.readout.stations }), status, stationList);
   host.replaceChildren(...parts);
   const offCursor = cursors(ctx, list);
   let gone = false;
@@ -330,7 +330,7 @@ function bicikli(ctx: SnimkaContext, host: HTMLElement): () => void {
     draw(ctx.clock.now(), true);
     offFrames = ctx.frames.subscribe((t) => draw(t));
     offView = ctx.view.onChange(() => draw(ctx.clock.now(), true));
-  }, () => { if (!gone) status.textContent = SN3.failed; });
+  }, () => { if (!gone) status.textContent = SN.readout.failed; });
   return () => { gone = true; offCursor(); offFrames(); offView(); };
 }
 
@@ -369,7 +369,7 @@ function vrijeme(ctx: SnimkaContext, host: HTMLElement): () => void {
   const rows: string[][] = [];
   for (let h = 0; h < hr.n; h++) rows.push([zagrebDateTime((hr.t0 + h * 3600) * 1000), temps[h] === null || temps[h] === undefined ? SN.strip.noValue : `${num(Math.round(temps[h]!))} °C`, hr.weather[h] ?? SN.strip.noValue]);
   const table = tableDetails(`${SN.strip.weather}, ${SN.strip.table}`, [SN.strip.hour, SN.strip.weather, SN.panel.weather], rows, SN.strip.table);
-  host.replaceChildren(el(doc, 'p', { class: 'sn-panel-caption', text: `${SN.strip.weather} · ${SN3.weatherSource}` }), p.root, table);
+  host.replaceChildren(el(doc, 'p', { class: 'sn-panel-caption', text: `${SN.strip.weather} · ${SN.readout.weatherSource}` }), p.root, table);
   return cursors(ctx, [{ cursor: p.cursor, t0: hr.t0, seconds: hr.n * 3600 }]);
 }
 
@@ -382,7 +382,7 @@ export function mountPanelDepth(ctx: SnimkaContext, id: PanelId, host: HTMLEleme
   try {
     return build(ctx, host);
   } catch {
-    host.replaceChildren(el(ctx.doc, 'p', { class: 'sn-panel-note', text: SN3.failed }));
+    host.replaceChildren(el(ctx.doc, 'p', { class: 'sn-panel-note', text: SN.readout.failed }));
     return () => {};
   }
 }

@@ -6,23 +6,10 @@
 import { SNIMKA_API, type ExportRef, type SnimkaManifest } from '../../../shared/snimka';
 import { escapeHtml } from '../ui/dom/escape';
 import type { Mount } from './context';
-import { count, type Forms } from './format';
+import { count } from './format';
 import { SN, fill } from './strings';
 
 const O = SN.open;
-
-/** Strings Appendix B lacks (new for the read-through; the orchestrator may move them into strings.ts). */
-export const OPEN_TEXT = {
-  /** The second, stable link of a download (the alias the catalogue uses). */
-  latest: 'Stalna poveznica',
-  latestNamed: 'Stalna poveznica: {title}',
-  /** The forms of "{rows} redaka" for one and a few rows. */
-  rowForms: ['redak', 'retka', 'redaka'] as Forms,
-  catalogEntry: 'Skup u popisu otvorenih podataka',
-  brief: 'Opis cjevovoda',
-  commit: 'Predaja {commit}',
-} as const;
-const T = OPEN_TEXT;
 
 const KB = 1000;
 const MB = 1000 * 1000;
@@ -48,7 +35,7 @@ export function downloadsOf(manifest: Pick<SnimkaManifest, 'files'>): Download[]
     const size = sizeWords(ref.bytes);
     return {
       name: ref.name, title: ref.title, format, size,
-      rows: ref.rows === null ? null : count(ref.rows, T.rowForms),
+      rows: ref.rows === null ? null : count(ref.rows, O.rowForms),
       href: `${SNIMKA_API}${ref.path}`,
       latest: `${SNIMKA_API}exports/latest/${ref.name}.${ref.format}`,
       text: fill(O.download, { title: ref.title, format, size }),
@@ -92,7 +79,7 @@ function downloadsList(manifest: SnimkaManifest): string {
     .map((d) => `<li class="sn-open-item" data-export="${escapeHtml(d.name)}">` +
       `<a class="sn-open-file" href="${escapeHtml(d.href)}" download>${escapeHtml(d.text)}</a>` +
       `<span class="sn-open-meta">${d.rows ? `<span class="sn-open-rows">${escapeHtml(d.rows)}</span>` : ''}` +
-      `<a class="sn-open-latest" href="${escapeHtml(d.latest)}" aria-label="${escapeHtml(fill(T.latestNamed, { title: d.title }))}">${escapeHtml(T.latest)}</a></span></li>`)
+      `<a class="sn-open-latest" href="${escapeHtml(d.latest)}" aria-label="${escapeHtml(fill(O.latestNamed, { title: d.title }))}">${escapeHtml(O.latest)}</a></span></li>`)
     .join('');
   return `<h3 class="sn-open-h">${escapeHtml(O.downloads)}</h3><ul class="sn-open-list" data-sn="downloads">${items}</ul>` +
     `<p class="sn-open-licence">${escapeHtml(O.licence)}</p>`;
@@ -102,7 +89,7 @@ export const mountOpen: Mount = (ctx, root) => {
   const m = ctx.manifest;
   const commit = shortCommit(m.build.commit);
   const commitLink = /^[0-9a-f]{7,40}$/.test(m.build.commit)
-    ? ` <a class="st-link" href="${REPO}/commit/${escapeHtml(m.build.commit)}" rel="noopener noreferrer" target="_blank">${escapeHtml(fill(T.commit, { commit }))}<span class="visually-hidden"> ${escapeHtml(SN.news.newTab)}</span><span aria-hidden="true">↗</span></a>`
+    ? ` <a class="st-link" href="${REPO}/commit/${escapeHtml(m.build.commit)}" rel="noopener noreferrer" target="_blank">${escapeHtml(fill(O.commit, { commit }))}<span class="visually-hidden"> ${escapeHtml(SN.news.newTab)}</span><span aria-hidden="true">↗</span></a>`
     : '';
   const wrap = ctx.doc.createElement('div');
   wrap.className = 'sn-open-body';
@@ -110,9 +97,9 @@ export const mountOpen: Mount = (ctx, root) => {
     signalsTable() +
     `<div class="sn-open-cols"><div class="sn-open-downloads">${downloadsList(m)}</div>` +
     '<div class="sn-open-notes">' +
-    `<p class="sn-open-catalog">${escapeHtml(O.catalog)} <a class="st-link" href="/open/catalog.json">${escapeHtml(O.catalogLink)}</a> · <a class="st-link" href="/open/#snimka-2026-09">${escapeHtml(T.catalogEntry)}</a></p>` +
+    `<p class="sn-open-catalog">${escapeHtml(O.catalog)} <a class="st-link" href="/open/catalog.json">${escapeHtml(O.catalogLink)}</a> · <a class="st-link" href="/open/#snimka-2026-09">${escapeHtml(O.catalogEntry)}</a></p>` +
     `<h3 class="sn-open-h">${escapeHtml(O.repro)}</h3>` +
-    `<p class="sn-open-repro" data-sn="repro">${escapeHtml(fill(O.reproText, { commit }))}${commitLink} <a class="st-link" href="${REPO}/blob/main/docs/snimka-2026-10.md" rel="noopener noreferrer" target="_blank">${escapeHtml(T.brief)}<span class="visually-hidden"> ${escapeHtml(SN.news.newTab)}</span><span aria-hidden="true">↗</span></a></p>` +
+    `<p class="sn-open-repro" data-sn="repro">${escapeHtml(fill(O.reproText, { commit }))}${commitLink} <a class="st-link" href="${REPO}/blob/main/docs/snimka-2026-10.md" rel="noopener noreferrer" target="_blank">${escapeHtml(O.brief)}<span class="visually-hidden"> ${escapeHtml(SN.news.newTab)}</span><span aria-hidden="true">↗</span></a></p>` +
     `<p class="sn-open-promise">${escapeHtml(O.promise)}</p>` +
     `<p class="sn-open-excluded">${escapeHtml(O.notIncluded)}</p>` +
     '</div></div>';

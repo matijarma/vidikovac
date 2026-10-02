@@ -10,8 +10,9 @@ import { SNIMKA_WINDOW, type HashedRef } from '../../shared/snimka';
 import { createReplayClock } from '../../app/src/snimka/clock';
 import { createViewStore, type SnimkaContext } from '../../app/src/snimka/context';
 import type { FrameLoop } from '../../app/src/snimka/frames';
-import { FEED_CADENCE_MS, FEED_COPY, mountVoicesFeed } from '../../app/src/snimka/voices-feed';
+import { FEED_CADENCE_MS, mountVoicesFeed } from '../../app/src/snimka/voices-feed';
 import { plural } from '../../app/src/snimka/format';
+import { SN } from '../../app/src/snimka/strings';
 import { buildSnimkaFixture, MARKS, zg } from '../../e2e/snimka-fixtures';
 
 const fixture = buildSnimkaFixture();
@@ -177,10 +178,10 @@ describe('mountVoicesFeed', () => {
     off();
   });
   it('the folded headlines read in Croatian whatever their number', () => {
-    expect(plural(1, FEED_COPY.more).replace('{count}', '+1')).toBe('+1 naslov iste teme');
-    expect(plural(3, FEED_COPY.more).replace('{count}', '+3')).toBe('+3 naslova iste teme');
-    expect(plural(1, FEED_COPY.hidden).replace('{count}', '1')).toBe('1 stavka bez te teme');
-    expect(plural(3, FEED_COPY.hidden).replace('{count}', '3')).toBe('3 stavke bez te teme');
-    expect(plural(7, FEED_COPY.hidden).replace('{count}', '7')).toBe('7 stavki bez te teme');
+    expect(plural(1, SN.voices.moreForms).replace('{count}', '+1')).toBe('+1 naslov iste teme');
+    expect(plural(3, SN.voices.moreForms).replace('{count}', '+3')).toBe('+3 naslova iste teme');
+    expect(plural(1, SN.voices.hiddenForms).replace('{count}', '1')).toBe('1 stavka bez te teme');
+    expect(plural(3, SN.voices.hiddenForms).replace('{count}', '3')).toBe('3 stavke bez te teme');
+    expect(plural(7, SN.voices.hiddenForms).replace('{count}', '7')).toBe('7 stavki bez te teme');
   });
 });

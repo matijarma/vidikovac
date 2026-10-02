@@ -12,7 +12,7 @@
 import type { Subject } from './contracts';
 import type { SnimkaContext } from './context';
 import { chipsLabel, factChips, onStationData, stationData, type FactChip } from './facts';
-import { formatZagrebLocal, plural, zagrebDateTime, type Forms } from './format';
+import { formatZagrebLocal, plural, zagrebDateTime } from './format';
 import { SN, fill } from './strings';
 import { voiceData } from './voice-data';
 import { buildVoices, companionVoices, focusSubject, foldPress, foldedUpTo, voicesUpTo, type VoiceItem } from './voices';
@@ -22,11 +22,6 @@ export const FEED_MAX_VISIBLE = 14;
 /** Passive play adds new items at most this often (wall milliseconds). */
 export const FEED_CADENCE_MS = 400;
 
-// New for the read-through (Appendix B has the plural form only; Croatian needs the singular and the paucal):
-export const FEED_COPY = {
-  hidden: ['{count} stavka bez te teme', '{count} stavke bez te teme', SN.voices.hidden] as Forms,
-  more: ['{count} naslov iste teme', SN.voices.more, SN.voices.more] as Forms,
-} as const;
 
 /** The subject's name in the feed's header: "Linija 228", "Stanica Trg žrtava fašizma", "Stajalište Glavni kolodvor". */
 export function subjectLabel(ctx: Pick<SnimkaContext, 'routes' | 'places' | 'manifest' | 'data'>, subject: Subject): string {
@@ -220,7 +215,7 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
     if (shown.length === node.foldShown) return;
     node.foldShown = shown.length;
     node.fold.hidden = shown.length === 0;
-    node.foldSummary!.textContent = fill(plural(shown.length, FEED_COPY.more), { count: `+${shown.length}` });
+    node.foldSummary!.textContent = fill(plural(shown.length, SN.voices.moreForms), { count: `+${shown.length}` });
     node.foldList!.replaceChildren(...shown.map((f) => {
       const li = el('li', 'sn-feed-fold-item');
       li.append(linkTo(f.link ?? '#', f.title), ' ', el('span', 'sn-feed-fold-meta', `${f.source?.label ?? ''}, ${zagrebDateTime(f.atSec * 1000)}`.replace(/^, /, '')));
@@ -272,7 +267,7 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
     filter.hidden = subject === null;
     if (subject) {
       filterText.textContent = fill(V.filtered, { subject: subjectLabel(ctx, subject) });
-      hiddenText.textContent = at.hiddenCount ? fill(plural(at.hiddenCount, FEED_COPY.hidden), { count: at.hiddenCount }) : '';
+      hiddenText.textContent = at.hiddenCount ? fill(plural(at.hiddenCount, SN.voices.hiddenForms), { count: at.hiddenCount }) : '';
     }
     root.dataset.snFeedCount = String(at.visible.length + at.olderCount);
     root.dataset.snFeedSubject = key;

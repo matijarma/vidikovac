@@ -21,24 +21,6 @@ const A = SN.alternatives;
 const HOUR_S = 3600;
 const DAY_S = 86_400;
 
-/** Strings Appendix B lacks (new for the read-through; the orchestrator may move them into strings.ts). */
-export const ALTERNATIVES_TEXT = {
-  /** The aria-label of a row's button: "Pokaži na karti: Stanica 3". */
-  showOnMapNamed: '{action}: {name}',
-  /** The column head of line 228's table twin and its readout. */
-  line228Hour: 'Sat',
-  line228Seen: 'najviše vozila u pokretu',
-  line228Expected: 'po voznom redu',
-  line228Value: '{n} u pokretu',
-  line228Summary: 'Najviše {n} vozila linije 228 u pokretu u jednom satu.',
-  line228Notice: 'Obavijest ZET-a 10166',
-  railNone: 'U zapisima zaslona nema rečenice o vlaku.',
-  bikesNone: 'U ponedjeljak se nijedna stanica nije ispraznila nakon 05:00.',
-  pressNone: 'Za ove teme nema odabranog naslova.',
-  pressMeta: '{outlet} · {time}',
-} as const;
-const T = ALTERNATIVES_TEXT;
-
 /** Monday 28 September 05:00 Zagreb: the first morning without trams, from which the stations are watched. */
 export const MONDAY_FIVE_S = Date.UTC(2026, 8, 28, 5, 0) / 1000 - ZAGREB_OFFSET_S;
 /** Tuesday 29 September 00:00 Zagreb: line 228 is drawn from here (its first trips ran that morning). */
@@ -170,7 +152,7 @@ function el<K extends keyof HTMLElementTagNameMap>(doc: Document, tag: K, cls?: 
 
 function bikesTable(ctx: SnimkaContext, rows: readonly EmptiedStation[]): HTMLElement {
   const doc = ctx.doc;
-  if (rows.length === 0) return empty(T.bikesNone);
+  if (rows.length === 0) return empty(A.bikesNone);
   const wrap = el(doc, 'div', 'st-table sn-small-table sn-alt-table');
   const scroll = el(doc, 'div', 'st-table-scroll');
   scroll.tabIndex = 0;
@@ -190,7 +172,7 @@ function bikesTable(ctx: SnimkaContext, rows: readonly EmptiedStation[]): HTMLEl
     const action = el(doc, 'td');
     const button = el(doc, 'button', 'btn-quiet sn-alt-show', A.showOnMap);
     button.type = 'button';
-    button.setAttribute('aria-label', fill(T.showOnMapNamed, { action: A.showOnMap, name: r.name }));
+    button.setAttribute('aria-label', fill(A.showOnMapNamed, { action: A.showOnMap, name: r.name }));
     button.addEventListener('click', () => {
       ctx.view.set({ subject: { kind: 'station', id: r.id } }, 'user');
       showOnStage(ctx, r.emptySec);
@@ -213,7 +195,7 @@ function railBlock(index: ScreenIndex | null, failed: boolean): HTMLElement {
     return sk;
   }
   const days = railByDay(index);
-  if (!days.some((d) => d.count > 0)) return empty(T.railNone);
+  if (!days.some((d) => d.count > 0)) return empty(A.railNone);
   const list = document.createElement('ul');
   list.className = 'sn-alt-days';
   list.innerHTML = days
@@ -230,19 +212,19 @@ function line228Block(ctx: SnimkaContext): HTMLElement[] {
   const ticks = hours.flatMap((h, i) => (i % 12 === 0 ? [{ index: i, label: `${zagrebDay(h.hourSec * 1000)} ${zagrebClock(h.hourSec * 1000)}` }] : []));
   const chart = columns({
     values: hours.map((h) => h.seen), names, ticks, label: A.line228,
-    valueText: (v) => fill(T.line228Value, { n: num(v) }),
-    summary: fill(T.line228Summary, { n: num(max) }),
+    valueText: (v) => fill(A.line228Value, { n: num(v) }),
+    summary: fill(A.line228Summary, { n: num(max) }),
     nullText: SN.strip.noValue,
   });
   chart.classList.add('sn-alt-cols');
-  const twin = tableDetails(A.line228, [T.line228Hour, T.line228Seen, T.line228Expected],
+  const twin = tableDetails(A.line228, [A.line228Hour, A.line228Seen, A.line228Expected],
     hours.map((h, i) => [names[i]!, h.seen === null ? SN.strip.noValue : num(h.seen), h.expected === null ? SN.strip.noValue : num(h.expected)]));
   const out: HTMLElement[] = [chart, twin];
   const notice = ctx.notices.items.find((n) => n.id === 10166);
   if (notice) {
     const p = document.createElement('p');
     p.className = 'sn-alt-source';
-    p.innerHTML = `<a class="st-link" href="${escapeHtml(notice.link)}" rel="noopener noreferrer" target="_blank">${escapeHtml(T.line228Notice)}<span class="visually-hidden"> ${escapeHtml(SN.news.newTab)}</span><span aria-hidden="true">↗</span></a>`;
+    p.innerHTML = `<a class="st-link" href="${escapeHtml(notice.link)}" rel="noopener noreferrer" target="_blank">${escapeHtml(A.line228Notice)}<span class="visually-hidden"> ${escapeHtml(SN.news.newTab)}</span><span aria-hidden="true">↗</span></a>`;
     out.push(p);
   }
   return out;
@@ -250,14 +232,14 @@ function line228Block(ctx: SnimkaContext): HTMLElement[] {
 
 function pressBlock(ctx: SnimkaContext): HTMLElement {
   const groups = pressByBeat(ctx.news);
-  if (groups.length === 0) return empty(T.pressNone);
+  if (groups.length === 0) return empty(A.pressNone);
   const beats = SN.voices.beat as Record<string, string>;
   const wrap = document.createElement('div');
   wrap.className = 'sn-alt-press';
   wrap.innerHTML = groups
     .map((g) => `<section class="sn-alt-beat" data-beat="${escapeHtml(g.beat)}" aria-label="${escapeHtml(beats[g.beat] ?? g.beat)}"><h4>${escapeHtml(beats[g.beat] ?? g.beat)}</h4><ul class="sn-alt-links">` +
       g.items.map((i) => `<li><a class="sn-alt-link" href="${escapeHtml(i.link)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i.title)}<span class="visually-hidden"> ${escapeHtml(SN.news.newTab)}</span></a>` +
-        `<span class="sn-alt-meta">${escapeHtml(fill(T.pressMeta, { outlet: ctx.news.outlets[i.outlet]?.name ?? i.outlet, time: zagrebDateTime(i.pubSec * 1000) }))}</span></li>`).join('') +
+        `<span class="sn-alt-meta">${escapeHtml(fill(A.pressMeta, { outlet: ctx.news.outlets[i.outlet]?.name ?? i.outlet, time: zagrebDateTime(i.pubSec * 1000) }))}</span></li>`).join('') +
       '</ul></section>')
     .join('');
   return wrap;

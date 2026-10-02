@@ -8,8 +8,9 @@ import { describe, expect, it } from 'vitest';
 import { FROZEN_AFTER_S as SHARED_FROZEN_AFTER_S, ROUTES_STEP_S, SNIMKA_COMPARISONS, SNIMKA_WINDOW, type Col, type RoutesFile, type ScreenIndex, type SeriesFile, type SnimkaState } from '../../shared/snimka';
 import { ROUTES_MISSING, encodeRoutes } from '../../shared/snimka-codec';
 import {
-  FROZEN_AFTER_S, GHOST_SETTLED_MIN, RECKONING_TEXT, bikeDrain, feedAlerts, frozenAt, ghostExcess, ghostSeries, feedHealth, ghostInflation, heroTiles, linesByDay, longestSilent, midnightOf, minutesText, peakAt0745, renderHero, renderReckoning, returnDuration, sentenceFamilies, silentMinutes,
+  FROZEN_AFTER_S, GHOST_SETTLED_MIN, bikeDrain, feedAlerts, frozenAt, ghostExcess, ghostSeries, feedHealth, ghostInflation, heroTiles, linesByDay, longestSilent, midnightOf, minutesText, peakAt0745, renderHero, renderReckoning, returnDuration, sentenceFamilies, silentMinutes,
 } from '../../app/src/snimka/reckoning';
+import { SN } from '../../app/src/snimka/strings';
 import { MARKS, buildComparisonSeries, buildRoutes, buildWindowSeries } from '../../e2e/snimka-fixtures';
 
 const T0 = SNIMKA_WINDOW.fromSec; // Sun 27 Sep 20:00 Zagreb
@@ -310,6 +311,18 @@ describe('the hero tiles over the fixture strike', () => {
     expect(tiles.peak!.value).toBe(String(series.seen.all[(MARKS.monday0745 - series.t0) / 60]));
     expect(tiles.peak!.sub).toBe(`običan četvrtak u isto doba: ${comparison.seen.all[465]}`);
   });
+  it('names the Monday figure with its Croatian plural form, never "1 vozila"', () => {
+    const at = (MARKS.monday0745 - series.t0) / 60;
+    const label = (n: number): string => {
+      const s = buildWindowSeries();
+      (s.seen.all as (number | null)[])[at] = n;
+      return heroTiles(s, comparison).find((t) => t.key === 'peak')!.label;
+    };
+    expect(label(1)).toBe('vozilo u ponedjeljak u 07:45');
+    expect(label(3)).toBe('vozila u ponedjeljak u 07:45');
+    expect(label(12)).toBe('vozila u ponedjeljak u 07:45');
+    expect(label(21)).toBe('vozilo u ponedjeljak u 07:45');
+  });
   it('the return: the first held ten at 18:21 to the normal state at 20:20', () => {
     expect(tiles.return!.value).toBe('119');
     expect(tiles.return!.sub).toBe('srijeda, od 18:21 do 20:20');
@@ -403,7 +416,7 @@ describe('the Monday tile against the weekday-matched normal day', () => {
     const peak = heroTiles(series, thursday, { series: monday, fromSec: SNIMKA_COMPARISONS[1].fromSec }).find((t) => t.key === 'peak')!;
     const normal = monday.seen.all[(SNIMKA_COMPARISONS[1].fromSec + 7 * 3600 + 45 * 60 - monday.t0) / 60]!;
     expect(peak.sub).toBe(`pon 21. 9., običan dan u isto doba: ${normal}`);
-    expect(RECKONING_TEXT.peakDaySub).toContain('{day}');
+    expect(SN.kpi.peakDaySub).toContain('{day}');
   });
   it('the peak card lists the five mornings and both normal days', () => {
     const series = buildWindowSeries();

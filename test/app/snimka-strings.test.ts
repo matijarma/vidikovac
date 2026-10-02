@@ -26,8 +26,10 @@ function marked(): Map<string, string[]> {
 
 describe('every string of /snimka/', () => {
   it('has a key, is trimmed, and is a whole sentence or label', () => {
-    // The brief's 138 strings, the v2 plan's Appendix B and the few the shell added for the read-through.
-    expect(LEAVES.length).toBeGreaterThanOrEqual(380);
+    // The brief's 138 strings, the v2 plan's Appendix B, the few the shell added for the read-through and the
+    // lanes' own strings the integrator moved in (readout.rules, heatmap.*, alternatives.*, reckoning.*, open.*,
+    // the plural forms of kpi.peak, voices.moreForms and voices.hiddenForms).
+    expect(LEAVES.length).toBeGreaterThanOrEqual(471);
     for (const [key, text] of LEAVES) {
       expect(text, key).toBe(text.trim());
       expect(text, key).not.toBe('');

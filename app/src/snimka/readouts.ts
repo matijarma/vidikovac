@@ -14,31 +14,6 @@ import { aliveStates, routeSlotAt } from './live-network';
 import { el } from './panels';
 import { SN, fill } from './strings';
 
-/**
- * Strings the plan's Appendix B lacks, in its style (new for the read-through; the integrator may move them
- * into strings.ts under `readout.*`): the state rules in words (worker/twin/service.ts), the rail sentence of
- * the Stanje depth, the depths' titles and their two states.
- */
-export const SN3 = {
-  rules: {
-    title: 'Kako aplikacija određuje stanje',
-    reduced: 'Smanjeno: u pokretu je manje od polovice vozila po voznom redu, ili su tramvaji ili autobusi zasebno ispod 40 % svojega voznog reda, pet minuta zaredom.',
-    silent: 'Gotovo bez vozila: u pokretu su najviše dva vozila ili desetina voznog reda, deset minuta zaredom.',
-    lift: 'Iz stanja gotovo bez vozila izlazi se kad je u pokretu barem četvrtina voznog reda tri minute zaredom.',
-    normal: 'Uobičajeno: barem 70 % voznog reda, a tramvaji i autobusi svaki barem 60 % svojega, pet minuta zaredom.',
-    hold: 'Bez procjene: kad je po voznom redu manje od 20 vozila ili kad ZET-ovi podaci stoje.',
-  },
-  rail: 'Vlakova nema na karti: snimka bilježi ZET-ova vozila. Na zaslonu se vlak pojavio s nadogradnjom od 29. rujna.',
-  dataPathTitle: 'Od ZET-ovih podataka do zaslona',
-  vehicles: 'Vozila u pokretu i po voznom redu',
-  stations: 'Stanice od najpraznije, u ovom trenutku',
-  stationsBikes: 'Bicikala',
-  stationsCapacity: 'Mjesta',
-  weatherSource: 'DHMZ, Zagreb-Maksimir, po satu',
-  loading: 'Učitava se.',
-  failed: 'Ovaj se dio snimke trenutačno ne može učitati.',
-} as const;
-
 const NV = SN.facts.none;
 const nv = (v: number | null | undefined): string => (v === null || v === undefined ? NV : num(v));
 
@@ -269,7 +244,7 @@ export function readoutSpecs(ctx: SnimkaContext, depth: DepthMounter = () => () 
   spec('vrijeme', SN.panel.weather, (face) => {
     const parts = faceParts(face, SN.panel.weather, 'vrijeme');
     fig.vrijeme = parts.fig;
-    set(parts.sub, SN3.weatherSource);
+    set(parts.sub, SN.readout.weatherSource);
     let last = '';
     return (t) => {
       const key = String(Math.floor(t / 3_600_000));

@@ -411,22 +411,6 @@ export function feedAlerts(s: SeriesFile): { alerts: number; cancelled: number; 
   return any ? { alerts, cancelled, hours: Math.round(s.n / 60) } : null;
 }
 
-/** Strings this lane needs that Appendix B lacks (new for the read-through; the orchestrator may move them into
- *  strings.ts under the same keys). */
-export const RECKONING_TEXT = {
-  /** kpi.peakDaySub: the Monday tile's line against the weekday-matched normal day (decision S-12). */
-  peakDaySub: '{day}, običan dan u isto doba: {normal}',
-  /** reckoning.peakFive: the peak card now holds five mornings and two normal days. */
-  peakFive: 'Jutra u 07:45',
-  peakFiveMethod: 'Vozila u pokretu u 07:45 svakog jutra snimke i dvaju običnih dana u isto doba: ponedjeljka 21. i četvrtka 24. rujna.',
-  /** The normal day's row in the peak card: "pon 21. 9., običan dan". */
-  normalDay: '{day}, običan dan',
-  linesMonday: 'U ponedjeljak 28. rujna',
-  /** The bikes card's figure: v1 labelled it with kpi.bikes, which v2 turned into the empty-stations tile. */
-  bikesDrained: 'bicikala manje na stanicama, od najvećeg zbroja do najmanjeg',
-  linesNone: 'nijedna',
-} as const;
-
 /** The normal day to set against a morning: its series and its first instant (for the day's name). */
 export interface PeakComparison { series: SeriesFile; fromSec: number }
 
@@ -451,9 +435,9 @@ export function heroTiles(s: SeriesFile, comparison: SeriesFile | null, peakComp
     {
       key: 'peak',
       value: monday?.seen !== null && monday?.seen !== undefined ? num(monday.seen) : none,
-      label: SN.kpi.peak,
+      label: plural(monday?.seen ?? 0, SN.kpi.peak),
       sub: peakComparison
-        ? fill(RECKONING_TEXT.peakDaySub, { day: zagrebDay(peakComparison.fromSec * 1000), normal: peak.normal === null ? none : num(peak.normal) })
+        ? fill(SN.kpi.peakDaySub, { day: zagrebDay(peakComparison.fromSec * 1000), normal: peak.normal === null ? none : num(peak.normal) })
         : fill(SN.kpi.peakSub, { normal: peak.normal === null ? none : num(peak.normal) }),
     },
     {
@@ -551,12 +535,12 @@ function peakCard(s: SeriesFile, comparison: SeriesFile | null, normals: readonl
   const normalRows = normals.length > 0
     ? normals.map((c) => {
       const v = peakAt0745(s, c.series).normal;
-      return { key: `normal-${c.id}`, label: fill(RECKONING_TEXT.normalDay, { day: zagrebDay(c.fromSec * 1000) }), value: v, text: text(v) };
+      return { key: `normal-${c.id}`, label: fill(R.normalDay, { day: zagrebDay(c.fromSec * 1000) }), value: v, text: text(v) };
     })
     : [{ key: 'normal', label: R.peakCompare, value: r.normal, text: text(r.normal) }];
   const items = [...r.days.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.seen, text: text(d.seen, d.frozen) })), ...normalRows];
-  const title = normals.length > 0 ? RECKONING_TEXT.peakFive : R.peak;
-  return card({ id: 'vidjelo-jutra', title, body: [nullableBars(items, title)], method: normals.length > 0 ? RECKONING_TEXT.peakFiveMethod : R.peakMethod });
+  const title = normals.length > 0 ? R.peakFive : R.peak;
+  return card({ id: 'vidjelo-jutra', title, body: [nullableBars(items, title)], method: normals.length > 0 ? R.peakFiveMethod : R.peakMethod });
 }
 
 const LINIJA: Forms = ['linija', 'linije', 'linija'];
@@ -568,7 +552,7 @@ function linesCard(routes: RoutesLike): HTMLElement {
   if (days.length === 0) body.push(empty(SN.strip.noValue));
   else {
     body.push(nullableBars(days.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.count, text: fill(R.linesValue, { count: num(d.count), total: num(d.total) }) })), R.lines));
-    if (monday) body.push(facts([[RECKONING_TEXT.linesMonday, monday.shortNames.length > 0 ? `${count(monday.shortNames.length, LINIJA)}: ${monday.shortNames.join(', ')}` : RECKONING_TEXT.linesNone]]));
+    if (monday) body.push(facts([[R.linesMonday, monday.shortNames.length > 0 ? `${count(monday.shortNames.length, LINIJA)}: ${monday.shortNames.join(', ')}` : R.linesNone]]));
   }
   const el = card({ id: 'vidjelo-linije', title: R.lines, body, method: R.linesMethod });
   el.dataset.card = 'lines';
@@ -588,7 +572,7 @@ function alertsCard(s: SeriesFile): HTMLElement {
 function bikesCard(s: SeriesFile): HTMLElement {
   const r = bikeDrain(s);
   const body = r
-    ? [figure(num(r.maxTotal - r.minTotal), RECKONING_TEXT.bikesDrained),
+    ? [figure(num(r.maxTotal - r.minTotal), R.bikesDrained),
       smallTable(R.bikes, [R.day, R.bikesMin, R.bikesEmptyMax], r.byDay.map((d) => [zagrebDay(d.day * 1000), d.minTotal === null ? SN.strip.noValue : num(d.minTotal), d.maxEmpty === null ? SN.strip.noValue : num(d.maxEmpty)]))]
     : [empty(SN.strip.noValue)];
   return card({ id: 'vidjelo-bicikli', title: R.bikes, body, method: R.bikesMethod });

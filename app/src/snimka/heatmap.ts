@@ -26,14 +26,6 @@ export const STRIKE_TO_SEC = Date.UTC(2026, 8, 30, 18, 0) / 1000 - ZAGREB_OFFSET
 export const CELL_W = 6;
 export const ROW_H = 24;
 
-/** Strings Appendix B lacks (new for the read-through). */
-export const SN_HM = {
-  ramp: ['nijedno vozilo', 'do četvrtine', 'do polovice', 'do tri četvrtine', 'puni vozni red'],
-  missing: 'bez podatka',
-  route: 'Linija',
-  tips: 'Pokazivač nad ćelijom pokazuje brojke; redak linije otvara njezinu krivulju.',
-} as const;
-
 /** One cell: a ratio in [0, 1], 'off' where nothing was scheduled, null where the recording has nothing. */
 export type HeatCell = number | 'off' | null;
 
@@ -151,7 +143,7 @@ export function cellText(model: Pick<HeatModel, 't0'>, row: HeatRow, h: number):
   const cell = row.cells[h] ?? null;
   const where = { short: row.label, day: zagrebDay(sec * 1000), hour: hourLabel(sec) };
   const head = `${row.kind === 'aggregate' ? row.label : `linija ${row.label}`}, ${where.day} u ${where.hour}`;
-  if (cell === null) return `${head}: ${SN_HM.missing}`;
+  if (cell === null) return `${head}: ${SN.heatmap.missing}`;
   if (cell === 'off') return `${head}: ${SN.strip.linesNone}`;
   if (row.kind === 'aggregate') return `${head}: ${num(Math.round(row.seen[h] ?? 0))} od ${num(Math.round(row.expected[h] ?? 0))}`;
   return fill(SN.strip.linesCell, { ...where, seen: num(Math.round(row.seen[h] ?? 0)), expected: num(Math.round(row.expected[h] ?? 0)) });
@@ -174,9 +166,9 @@ export function dayTable(model: HeatModel, rows: readonly HeatRow[]): { head: st
       const cell = row.cells[h];
       if (typeof cell === 'number') { sum += cell; c += 1; } else if (cell === 'off') off = true;
     }
-    return c ? `${num(Math.round((sum / c) * 100))} %` : off ? SN.strip.linesNone : SN_HM.missing;
+    return c ? `${num(Math.round((sum / c) * 100))} %` : off ? SN.strip.linesNone : SN.heatmap.missing;
   })]);
-  return { head: [SN_HM.route, ...days.map((d) => d.label)], body };
+  return { head: [SN.heatmap.route, ...days.map((d) => d.label)], body };
 }
 
 // ---- the DOM ------------------------------------------------------------------------------------
@@ -246,9 +238,9 @@ function axis(doc: Document, model: HeatModel): HTMLElement {
 
 function legend(doc: Document): HTMLElement {
   const ul = el(doc, 'ul', { class: 'st-legend sn-hm-legend' });
-  SN_HM.ramp.forEach((word, i) => ul.append(el(doc, 'li', {}, el(doc, 'span', { class: `sn-hm-key sn-hm-key-c${i}`, 'aria-hidden': 'true' }), word)));
+  SN.heatmap.ramp.forEach((word, i) => ul.append(el(doc, 'li', {}, el(doc, 'span', { class: `sn-hm-key sn-hm-key-c${i}`, 'aria-hidden': 'true' }), word)));
   ul.append(el(doc, 'li', {}, el(doc, 'span', { class: 'sn-hm-key sn-hm-key-off', 'aria-hidden': 'true' }), SN.strip.linesNone));
-  ul.append(el(doc, 'li', {}, el(doc, 'span', { class: 'sn-hm-key sn-hm-key-none', 'aria-hidden': 'true' }), SN_HM.missing));
+  ul.append(el(doc, 'li', {}, el(doc, 'span', { class: 'sn-hm-key sn-hm-key-none', 'aria-hidden': 'true' }), SN.heatmap.missing));
   return ul;
 }
 
