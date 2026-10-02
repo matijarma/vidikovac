@@ -67,7 +67,7 @@ describe('Area D through the Worker', () => {
     const body = (await response.json()) as { '@type': string; 'dct:license': string; 'dcat:dataset': { 'dct:identifier': string }[] };
     expect(body['@type']).toBe('dcat:Catalog');
     expect(body['dct:license']).toBe('https://data.gov.hr/otvorena-dozvola');
-    expect(body['dcat:dataset'].map((d) => d['dct:identifier'])).toEqual(['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo']);
+    expect(body['dcat:dataset'].map((d) => d['dct:identifier'])).toEqual(['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo', 'snimka-2026-09']);
   });
 
   it('GET /hitno through the whole Worker carries no-transform, so the edge serves the page as rendered', async () => {

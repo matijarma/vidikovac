@@ -5,8 +5,8 @@
 // colour of its own.
 import { OPEN_STYLE } from '../hitno/style.generated';
 import { escapeHtml } from './html';
-import { OPEN_DATASETS, OPEN_LICENCE, PUBLISHER, type OpenDataset } from './catalog';
-import { formatZagrebDateTime } from './time';
+import { ARCHIVE_DATASETS, OPEN_DATASETS, OPEN_LICENCE, PUBLISHER, type OpenArchiveDataset, type OpenDataset } from './catalog';
+import { formatZagrebDateTime, zagrebParts } from './time';
 
 export function cadenceWords(ttl: number): string {
   if (ttl % 86400 === 0) {
@@ -72,6 +72,38 @@ function datasetCard(d: OpenDataset): string {
   );
 }
 
+/** `27. 9. 2026. u 20:00` for an instant, in Zagreb time. */
+function croatianInstant(iso: string): string {
+  const p = zagrebParts(new Date(iso));
+  return `${Number(p.day)}. ${Number(p.month)}. ${p.year}. u ${p.hour}:${p.minute}`;
+}
+
+function distributionName(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1);
+}
+
+/** The "Arhiva" card: a finished dataset published once, with its eight files and its licence line. */
+function archiveCard(a: OpenArchiveDataset): string {
+  return (
+    `<article id="${escapeHtml(a.id)}">` +
+    `<h2>${escapeHtml(a.title)}</h2>` +
+    `<p class="meta">Arhiva · ${escapeHtml(croatianInstant(a.temporal.start))} do ${escapeHtml(croatianInstant(a.temporal.end))} · objavljeno jednom, ne osvježava se · ${escapeHtml(a.keywords.join(', '))}</p>` +
+    `<p>${escapeHtml(a.description)}</p>` +
+    `<ul class="dl">` +
+    a.distributions
+      .map(
+        (x) =>
+          `<li><a href="${escapeHtml(x.path)}" type="${escapeHtml(x.mediaType)}">${escapeHtml(distributionName(x.path))}</a> (${escapeHtml(x.format)}): ${escapeHtml(x.description)}</li>`,
+      )
+      .join('') +
+    `</ul>` +
+    `<p class="src">${escapeHtml(a.provenance)} · Objavljeno pod: Otvorena dozvola, uz navođenje izvora. ` +
+    a.sources.map((x) => `<a href="${escapeHtml(x.url)}" rel="noopener">${escapeHtml(x.name)}</a>`).join(' · ') +
+    `. Skup je izveden iz izvora i prilagođen; na stranici <a href="/snimka/">Snimka</a> piše kako.</p>` +
+    `</article>`
+  );
+}
+
 export function renderOpenIndex(origin: string, now: Date): string {
   return `<!doctype html>
 <html lang="hr">
@@ -93,6 +125,7 @@ export function renderOpenIndex(origin: string, now: Date): string {
 </header>
 <main id="sadrzaj">
 ${OPEN_DATASETS.map(datasetCard).join('\n')}
+${ARCHIVE_DATASETS.map(archiveCard).join('\n')}
 <aside class="offer" aria-labelledby="h-ponuda">
 <h2 id="h-ponuda">Ponuda Gradu Zagrebu</h2>
 <p>Svaki skup na ovoj stranici Grad Zagreb može preuzeti i ponovno objaviti na <a href="https://data.zagreb.hr/" rel="noopener">data.zagreb.hr</a> pod Otvorenom dozvolom, bez daljnjeg odobrenja i bez naknade. Katalog <a href="/open/catalog.json">/open/catalog.json</a> dovoljan je za automatsko preuzimanje; izvorni kod koji ga proizvodi objavljen je pod licencom AGPL-3.0-or-later, a Gradu se nudi i pod EUPL-1.2.</p>

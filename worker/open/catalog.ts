@@ -24,8 +24,8 @@ export const CATALOG_TTL_SECONDS = 3600;
 
 export interface OpenDistribution {
   path: string;
-  format: 'JSON' | 'GeoJSON';
-  mediaType: 'application/json' | 'application/geo+json';
+  format: 'JSON' | 'GeoJSON' | 'CSV';
+  mediaType: 'application/json' | 'application/geo+json' | 'text/csv';
   description: string;
 }
 
@@ -113,6 +113,70 @@ export const OPEN_DATASETS: readonly OpenDataset[] = [
   },
 ];
 
+/**
+ * A finished, derived dataset published once (the replay of the ZET strike, docs/snimka-2026-10.md):
+ * not a live module, so it has no ttl, no registry entry and no place in OPEN_DATASETS, which
+ * test/open/catalog-registry.test.ts checks against the feed registry. Its distributions are the
+ * stable aliases of worker/routes/snimka.ts (/api/snimka/v2/exports/latest/<name>.<ext>), which
+ * answer 302 to the content-named file the dataset manifest lists.
+ */
+export interface OpenArchiveDataset {
+  id: string;
+  title: string;
+  description: string;
+  keywords: readonly string[];
+  /** ISO 8601 instants (UTC) of the first and the last minute the dataset covers. */
+  temporal: { start: string; end: string };
+  issued: string;
+  /** The ZET licence sentence first, then the other attributions, each as its source requires it. */
+  provenance: string;
+  sources: readonly { name: string; text: string; url: string; licence: string }[];
+  distributions: readonly OpenDistribution[];
+}
+
+/** The sentence ZET's licence asks for, verbatim (docs/izvori.md, worker/feed/registry.ts). */
+export const ZET_LICENCE_SENTENCE =
+  'Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669';
+
+const ARCHIVE = '/api/snimka/v2/exports/latest/';
+
+export const ARCHIVE_DATASETS: readonly OpenArchiveDataset[] = [
+  {
+    id: 'snimka-2026-09',
+    title: 'Tri dana bez tramvaja: izvedeni podaci iz snimke',
+    description:
+      'Stanje usluge po minuti, vozila u pokretu i po voznom redu po liniji, pouzdanost ZET-ovih podataka, bicikli po stanici, zatvorene ulice i poglavlja snimke od nedjelje 27. rujna u 20:00 do petka 2. listopada 2026. u 12:00. ' +
+      'Skup je izveden iz snimljenih otvorenih izvora, objavljen jednom i ne osvježava se; ne sadrži sirove ZET-ove okvire, naslove medija ni ijednu brojku o ljudima.',
+    keywords: ['promet', 'ZET', 'tramvaj', 'bicikli', 'BAJS', 'zatvaranja', 'arhiva', 'Zagreb'],
+    temporal: { start: '2026-09-27T18:00:00Z', end: '2026-10-02T10:00:00Z' },
+    issued: '2026-10-02',
+    provenance:
+      `${ZET_LICENCE_SENTENCE}. Bicikli: nextbike (BAJS), GBFS, CC0 1.0. ` +
+      'Zatvorene ulice: sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom. Vrijeme: izvor DHMZ, Otvorena dozvola.',
+    sources: [
+      { name: 'ZET', text: ZET_LICENCE_SENTENCE, url: 'http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669', licence: 'Otvorena dozvola' },
+      { name: 'nextbike (BAJS)', text: 'Bicikli: nextbike (BAJS), GBFS, CC0 1.0.', url: 'https://www.nextbike.hr/', licence: 'CC0 1.0' },
+      {
+        name: 'Grad Zagreb',
+        text: 'Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom',
+        url: 'https://data.zagreb.hr/dataset/prometnice',
+        licence: 'Otvorena dozvola',
+      },
+      { name: 'DHMZ', text: 'Izvor: DHMZ, Otvorena dozvola', url: 'https://meteo.hr/proizvodi.php?section=podaci&param=xml_korisnici', licence: 'Otvorena dozvola' },
+    ],
+    distributions: [
+      { path: `${ARCHIVE}series.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Jedan redak po minuti: vozila u pokretu i po voznom redu, stanje usluge, pouzdanost ZET-ovih podataka, bicikli i zatvorene ulice.' },
+      { path: `${ARCHIVE}hourly.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Jedan redak po satu: temperatura i vrijeme (DHMZ, Zagreb-Maksimir).' },
+      { path: `${ARCHIVE}routes-5min.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Po liniji i svakih pet minuta: vozila u pokretu i po voznom redu; prazno znači da podatka nema.' },
+      { path: `${ARCHIVE}bikes-5min.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Bicikli po stanici svakih pet minuta, jedan stupac po stanici; prazno znači da podatka nema.' },
+      { path: `${ARCHIVE}stations.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Popis stanica BAJS-a s nazivom i položajem; stupci datoteke s biciklima nose njihove oznake.' },
+      { path: `${ARCHIVE}events.json`, format: 'JSON', mediaType: 'application/json', description: 'Poglavlja i događaji snimke s vremenom, izvorom i poveznicama.' },
+      { path: `${ARCHIVE}closures.geojson`, format: 'GeoJSON', mediaType: 'application/geo+json', description: 'Zatvorene ulice kao GeoJSON, jedan objekt po zatvaranju, s krajevima kako su bili objavljeni u svakoj inačici skupa.' },
+      { path: `${ARCHIVE}opis.json`, format: 'JSON', mediaType: 'application/json', description: 'Opis skupa: licenca, atribucija i svaki stupac svake datoteke.' },
+    ],
+  },
+];
+
 export function findOpenDataset(id: string): OpenDataset | undefined {
   return OPEN_DATASETS.find((d) => d.module === id);
 }
@@ -149,6 +213,23 @@ export interface CatalogDataset {
   'dcat:distribution': CatalogDistribution[];
 }
 
+export interface CatalogArchiveDataset {
+  '@type': 'dcat:Dataset';
+  '@id': string;
+  'dct:identifier': string;
+  'dct:title': string;
+  'dct:description': string;
+  'dcat:keyword': string[];
+  'dct:accrualPeriodicity': string;
+  'dct:temporal': { '@type': 'dct:PeriodOfTime'; 'dcat:startDate': string; 'dcat:endDate': string };
+  'dct:issued': string;
+  'dct:license': string;
+  'dct:source': string[];
+  'dct:provenance': string;
+  'dct:language': 'hr';
+  'dcat:distribution': CatalogDistribution[];
+}
+
 export interface CatalogDocument {
   '@context': Record<string, string>;
   '@type': 'dcat:Catalog';
@@ -160,12 +241,27 @@ export interface CatalogDocument {
   'dct:language': 'hr';
   'dct:issued': string;
   'dct:modified': string;
-  'dcat:dataset': CatalogDataset[];
+  'dcat:dataset': (CatalogDataset | CatalogArchiveDataset)[];
+}
+
+/** EU Publications Office frequency vocabulary: a dataset that is published once and never refreshed. */
+export const FREQUENCY_NEVER = 'http://publications.europa.eu/resource/authority/frequency/NEVER';
+
+function distribution(origin: string, x: OpenDistribution): CatalogDistribution {
+  return {
+    '@type': 'dcat:Distribution',
+    'dcat:accessURL': `${origin}${x.path}`,
+    'dcat:downloadURL': `${origin}${x.path}`,
+    'dct:format': x.format,
+    'dcat:mediaType': x.mediaType,
+    'dct:license': OPEN_LICENCE.url,
+    'dct:description': x.description,
+  };
 }
 
 export function buildCatalog(origin: string, issued: Date): CatalogDocument {
   const iso = issued.toISOString();
-  return {
+  const document: CatalogDocument = {
     '@context': {
       dcat: 'http://www.w3.org/ns/dcat#',
       dct: 'http://purl.org/dc/terms/',
@@ -195,15 +291,26 @@ export function buildCatalog(origin: string, issued: Date): CatalogDocument {
       'dct:source': d.source.url,
       'dct:provenance': `${d.source.text} (${d.source.licence})`,
       'dct:language': 'hr',
-      'dcat:distribution': d.distributions.map((x) => ({
-        '@type': 'dcat:Distribution',
-        'dcat:accessURL': `${origin}${x.path}`,
-        'dcat:downloadURL': `${origin}${x.path}`,
-        'dct:format': x.format,
-        'dcat:mediaType': x.mediaType,
-        'dct:license': OPEN_LICENCE.url,
-        'dct:description': x.description,
-      })),
+      'dcat:distribution': d.distributions.map((x) => distribution(origin, x)),
     })),
   };
+  document['dcat:dataset'].push(
+    ...ARCHIVE_DATASETS.map((a): CatalogArchiveDataset => ({
+      '@type': 'dcat:Dataset',
+      '@id': `${origin}/open/#${a.id}`,
+      'dct:identifier': a.id,
+      'dct:title': a.title,
+      'dct:description': a.description,
+      'dcat:keyword': [...a.keywords],
+      'dct:accrualPeriodicity': FREQUENCY_NEVER,
+      'dct:temporal': { '@type': 'dct:PeriodOfTime', 'dcat:startDate': a.temporal.start, 'dcat:endDate': a.temporal.end },
+      'dct:issued': a.issued,
+      'dct:license': OPEN_LICENCE.url,
+      'dct:source': a.sources.map((x) => x.url),
+      'dct:provenance': a.provenance,
+      'dct:language': 'hr',
+      'dcat:distribution': a.distributions.map((x) => distribution(origin, x)),
+    })),
+  );
+  return document;
 }
