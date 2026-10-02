@@ -1,11 +1,13 @@
 // The /snimka/ codec round-trips exactly: motion to 1 m and 1e-5 degrees over
 // random vehicles with gaps and geometry changes, BAJS rows with both
-// sentinels, and base64 over every byte value (shared/snimka-codec.ts).
+// sentinels, per-line route rows with the 255 sentinel, and base64 over every
+// byte value (shared/snimka-codec.ts).
 import { describe, expect, it } from 'vitest';
-import { BAJS_STEP_S, MOTION_TICKS, SNIMKA_COMPARISON, SNIMKA_WINDOW, ZAGREB_OFFSET_S, isMotionChunk } from '../../shared/snimka';
+import { readFileSync } from 'node:fs';
+import { BAJS_STEP_S, MOTION_TICKS, ROUTES_STEP_S, SNIMKA_COMPARISONS, SNIMKA_WINDOW, ZAGREB_OFFSET_S, isMotionChunk, isRoutesFile, type RoutesFile } from '../../shared/snimka';
 import {
-  BAJS_MISSING, BAJS_NOT_RENTING, SnimkaError, chunkStart, contentPath, decodeBajs, decodeBase64, decodeMotionChunk, encodeBajs, encodeBase64,
-  encodeMotionChunk, expandVehicle, samplesAt, type MotionChunkInput, type MotionSample,
+  BAJS_MISSING, BAJS_NOT_RENTING, ROUTES_MISSING, SnimkaError, chunkStart, contentPath, decodeBajs, decodeBase64, decodeManifest, decodeMotionChunk, decodeRoutes, encodeBajs, encodeBase64,
+  encodeMotionChunk, encodeRoutes, expandVehicle, samplesAt, type MotionChunkInput, type MotionSample,
 } from '../../shared/snimka-codec';
 
 function rng(seed: number): () => number {
@@ -98,7 +100,7 @@ describe('motion chunks', () => {
   it('samplesAt lists every vehicle present at the tick with its undelta position, and nobody in a gap', () => {
     const r = rng(7);
     const vehicles = Array.from({ length: 12 }, (_, i) => randomVehicle(r, `s${i}`));
-    const chunk = encodeMotionChunk({ net: '395', t0: SNIMKA_COMPARISON.fromSec, vehicles });
+    const chunk = encodeMotionChunk({ net: '395', t0: SNIMKA_COMPARISONS[0].fromSec, vehicles });
     for (const tick of [0, 1, 17, 33, 58, 59]) {
       const at = samplesAt(chunk, tick);
       const expectedIds = vehicles.filter((v) => v.samples[tick] !== null).map((v) => v.id).sort();
@@ -230,23 +232,78 @@ describe('content names and constants', () => {
     expect(contentPath('series', sha, 'json')).toBe(`series.${'a'.repeat(16)}.json`);
     expect(contentPath('motion/396/20260928-0740', sha, 'json')).toBe(`motion/396/20260928-0740.${'a'.repeat(16)}.json`);
     expect(contentPath('captures/mon-0745-kiosk', sha, 'webp')).toBe(`captures/mon-0745-kiosk.${'a'.repeat(16)}.webp`);
+    expect(contentPath('exports/series', sha, 'csv')).toBe(`exports/series.${'a'.repeat(16)}.csv`);
+    expect(contentPath('exports/closures', sha, 'geojson')).toBe(`exports/closures.${'a'.repeat(16)}.geojson`);
+    expect(() => contentPath('exports/series', sha, 'txt' as never)).toThrow(SnimkaError);
     expect(() => contentPath('series', 'abc', 'json')).toThrow(SnimkaError);
     expect(() => contentPath('/series', sha, 'json')).toThrow(SnimkaError);
     expect(() => contentPath('../series', sha, 'json')).toThrow(SnimkaError);
   });
-  it('the window is Sun 27 Sep 20:00 to Thu 1 Oct 08:00 Zagreb, 5040 minutes; the comparison day is Thu 24 Sep', () => {
+  it('the window is Sun 27 Sep 20:00 to Fri 2 Oct 12:00 Zagreb, 6720 minutes; the comparison days are Thu 24 Sep and Mon 21 Sep', () => {
     expect(SNIMKA_WINDOW.toSec - SNIMKA_WINDOW.fromSec).toBe(SNIMKA_WINDOW.minutes * 60);
-    expect(SNIMKA_WINDOW.minutes).toBe(5040);
-    expect(SNIMKA_COMPARISON.minutes).toBe(1440);
+    expect(SNIMKA_WINDOW.minutes).toBe(6720);
     const zagreb = (sec: number): string => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zagreb', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(sec * 1000));
     expect(zagreb(SNIMKA_WINDOW.fromSec)).toBe('Sun 27 Sept, 20:00');
-    expect(zagreb(SNIMKA_WINDOW.toSec)).toBe('Thu 1 Oct, 08:00');
-    expect(zagreb(SNIMKA_COMPARISON.fromSec)).toBe('Thu 24 Sept, 00:00');
-    // Fixed UTC+2 arithmetic holds across the window and the comparison day.
-    for (const sec of [SNIMKA_WINDOW.fromSec, SNIMKA_WINDOW.toSec, SNIMKA_COMPARISON.fromSec, SNIMKA_COMPARISON.fromSec + 86_399]) {
+    expect(zagreb(SNIMKA_WINDOW.toSec)).toBe('Fri 2 Oct, 12:00');
+    expect(SNIMKA_COMPARISONS.map((c) => c.id)).toEqual(['cet-0924', 'pon-0921']);
+    expect(zagreb(SNIMKA_COMPARISONS[0].fromSec)).toBe('Thu 24 Sept, 00:00');
+    expect(zagreb(SNIMKA_COMPARISONS[1].fromSec)).toBe('Mon 21 Sept, 00:00');
+    for (const c of SNIMKA_COMPARISONS) {
+      expect(c.minutes).toBe(1440);
+      expect(c.net).toBe('395');
+      expect(new Date((c.fromSec + ZAGREB_OFFSET_S) * 1000).getUTCDay()).toBe(c.weekday);
+      expect(new Date((c.fromSec + ZAGREB_OFFSET_S) * 1000).toISOString().slice(0, 10)).toBe(c.day);
+    }
+    // Fixed UTC+2 arithmetic holds across the window and both comparison days.
+    for (const sec of [SNIMKA_WINDOW.fromSec, SNIMKA_WINDOW.toSec, ...SNIMKA_COMPARISONS.flatMap((c) => [c.fromSec, c.fromSec + 86_399])]) {
       const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zagreb', timeZoneName: 'longOffset' }).formatToParts(new Date(sec * 1000));
       expect(parts.find((p) => p.type === 'timeZoneName')?.value).toBe('GMT+02:00');
     }
     expect(ZAGREB_OFFSET_S).toBe(7200);
+  });
+  it('the committed v2 manifest sample decodes', () => {
+    const m = decodeManifest(JSON.parse(readFileSync('test/fixtures/snimka/manifest.sample.json', 'utf8')) as unknown);
+    expect(m.version).toBe(2);
+    expect(m.comparisons.map((c) => c.id)).toEqual(SNIMKA_COMPARISONS.map((c) => c.id));
+  });
+});
+
+describe('route rows', () => {
+  const routes: RoutesFile['routes'] = [{ id: '6', shortName: '6', type: 0 }, { id: '228', shortName: '228', type: 3 }, { id: '17', shortName: '17', type: 0 }];
+  it('round-trips seen and expected per route with the 255 sentinel', () => {
+    const r = rng(228);
+    const n = 1344;
+    const rows = (): Uint8Array[] => routes.map(() => {
+      const row = new Uint8Array(n);
+      for (let j = 0; j < n; j++) row[j] = r() < 0.03 ? ROUTES_MISSING : Math.floor(r() * 30);
+      return row;
+    });
+    const seen = rows();
+    const expected = rows();
+    seen[0]![0] = 0;
+    seen[0]![1] = ROUTES_MISSING;
+    const file = encodeRoutes(SNIMKA_WINDOW.fromSec, ROUTES_STEP_S, routes, seen, expected);
+    expect(file).toMatchObject({ v: 2, step: 300, n, t0: SNIMKA_WINDOW.fromSec, net: '396+395' });
+    expect(file.routes).toEqual(routes);
+    expect(file.routes).not.toBe(routes);
+    expect(isRoutesFile(JSON.parse(JSON.stringify(file)))).toBe(true);
+    const back = decodeRoutes(JSON.parse(JSON.stringify(file)) as RoutesFile);
+    expect(back.seen).toHaveLength(3);
+    expect(back.expected).toHaveLength(3);
+    back.seen.forEach((row, i) => expect(Array.from(row)).toEqual(Array.from(seen[i]!)));
+    back.expected.forEach((row, i) => expect(Array.from(row)).toEqual(Array.from(expected[i]!)));
+    expect(ROUTES_MISSING).toBe(255);
+    expect(encodeRoutes(0, 300, routes, [new Uint8Array(0), new Uint8Array(0), new Uint8Array(0)], [new Uint8Array(0), new Uint8Array(0), new Uint8Array(0)], '395').n).toBe(0);
+  });
+  it('refuses a ragged matrix, a wrong step and a row of the wrong length', () => {
+    const ok = [Uint8Array.of(1, 2), Uint8Array.of(3, 4), Uint8Array.of(5, 6)];
+    expect(() => encodeRoutes(0, 300, routes, ok, [Uint8Array.of(1, 2), Uint8Array.of(3), Uint8Array.of(5, 6)])).toThrow(SnimkaError);
+    expect(() => encodeRoutes(0, 300, routes, ok.slice(0, 2), ok)).toThrow(SnimkaError);
+    expect(() => encodeRoutes(0, 60 as never, routes, ok, ok)).toThrow(SnimkaError);
+    const file = encodeRoutes(0, 300, routes, ok, ok);
+    expect(() => decodeRoutes({ ...file, n: 3 })).toThrow(SnimkaError);
+    expect(() => decodeRoutes({ ...file, expected: file.expected.slice(0, 2) })).toThrow(SnimkaError);
+    expect(() => decodeRoutes({ ...file, v: 1 as never })).toThrow(SnimkaError);
+    expect(() => decodeRoutes({ ...file, seen: ['AQI=', 'AQI=', 'AQ=='] })).toThrow(SnimkaError);
   });
 });

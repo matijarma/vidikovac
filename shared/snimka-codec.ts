@@ -8,8 +8,8 @@
 // Every decoder validates and throws SnimkaError on a violation; none of them
 // minds a field it does not know.
 import {
-  BAJS_STEP_S, MOTION_CHUNK_S, MOTION_STEP_S, MOTION_TICKS, SNIMKA_COMPARISON, SNIMKA_WINDOW, isHashedRef,
-  type BajsFile, type HashedRef, type MotionChunk, type MotionSegment, type MotionVehicle, type SnimkaManifest,
+  BAJS_STEP_S, MOTION_CHUNK_S, MOTION_STEP_S, MOTION_TICKS, ROUTES_STEP_S, SNIMKA_COMPARISONS, SNIMKA_WINDOW, isBoardRef, isExportRef, isHashedRef,
+  type BajsFile, type HashedRef, type MotionChunk, type MotionSegment, type MotionVehicle, type RoutesFile, type SnimkaManifest,
 } from './snimka';
 
 export class SnimkaError extends Error {
@@ -267,15 +267,49 @@ export function decodeBajs(file: BajsFile): Uint8Array[] {
   });
 }
 
+// ---- routes (per-line five-minute counts) --------------------------------------
+
+export const ROUTES_MISSING = 255;
+
+/** One row of five-minute counts per route for `seen` and for `expected`, as base64; 255 = missing. Every row must have `n` samples. */
+export function encodeRoutes(t0: number, step: RoutesFile['step'], routes: RoutesFile['routes'], seen: Uint8Array[], expected: Uint8Array[], net: RoutesFile['net'] = '396+395'): RoutesFile {
+  if (!isInt(t0)) fail('routes: t0');
+  if (step !== ROUTES_STEP_S) fail(`routes: step ${String(step)}`);
+  if (routes.length !== seen.length || routes.length !== expected.length) fail(`routes: ${routes.length} routes, ${seen.length} seen rows, ${expected.length} expected rows`);
+  const n = seen[0]?.length ?? expected[0]?.length ?? 0;
+  const encode = (rows: Uint8Array[], what: string): string[] => rows.map((row, i) => {
+    if (row.length !== n) fail(`routes: ${what} row ${routes[i]?.id} has ${row.length} samples, not ${n}`);
+    return encodeBase64(row);
+  });
+  return { v: 2, t0, step, n, net, routes: routes.map((r) => ({ ...r })), seen: encode(seen, 'seen'), expected: encode(expected, 'expected') };
+}
+
+/** The rows back, one Uint8Array of `n` samples per route for seen and for expected, in the file's route order. */
+export function decodeRoutes(file: RoutesFile): { seen: Uint8Array[]; expected: Uint8Array[] } {
+  if (!isRec(file) || file.v !== 2) fail('routes: version');
+  if (!isInt(file.t0) || file.step !== ROUTES_STEP_S || !isInt(file.n) || file.n < 0) fail('routes: header');
+  if (!Array.isArray(file.routes) || !Array.isArray(file.seen) || !Array.isArray(file.expected) || file.seen.length !== file.routes.length || file.expected.length !== file.routes.length) {
+    fail('routes: routes, seen and expected differ in length');
+  }
+  const decode = (rows: string[], what: string): Uint8Array[] => rows.map((text, i) => {
+    const row = decodeBase64(text);
+    if (row.length !== file.n) fail(`routes: ${what} row ${String(file.routes[i]?.id)} decodes to ${row.length} samples, not ${file.n}`);
+    return row;
+  });
+  return { seen: decode(file.seen, 'seen'), expected: decode(file.expected, 'expected') };
+}
+
 // ---- names and the manifest ------------------------------------------------
 
 const HASH_PREFIX = 16;
+export type ContentExt = 'json' | 'webp' | 'csv' | 'geojson';
+const CONTENT_EXTS: ReadonlySet<string> = new Set(['json', 'webp', 'csv', 'geojson']);
 
 /** `<name>.<first 16 hex of the sha256>.<ext>`; `name` may carry directories ("motion/396/20260928-0730"). */
-export function contentPath(name: string, sha256Hex: string, ext: 'json' | 'webp'): string {
+export function contentPath(name: string, sha256Hex: string, ext: ContentExt): string {
   if (!/^[0-9a-f]{64}$/.test(sha256Hex)) fail('contentPath: sha256 must be 64 lowercase hex characters');
   if (!name || name.startsWith('/') || name.includes('..') || name.includes('\\')) fail(`contentPath: bad name ${JSON.stringify(name)}`);
-  if (ext !== 'json' && ext !== 'webp') fail(`contentPath: bad extension ${String(ext)}`);
+  if (!CONTENT_EXTS.has(ext)) fail(`contentPath: bad extension ${String(ext)}`);
   return `${name}.${sha256Hex.slice(0, HASH_PREFIX)}.${ext}`;
 }
 
@@ -286,29 +320,41 @@ export function checkRefPath(ref: HashedRef, where: string): void {
   const parts = path.split('/');
   if (parts.some((p) => p === '' || p === '.' || p === '..')) fail(`${where}: path ${JSON.stringify(path)} climbs or has an empty segment`);
   if (!path.includes(`.${ref.sha256.slice(0, HASH_PREFIX)}.`)) fail(`${where}: path ${JSON.stringify(path)} does not carry its hash`);
+  const ext = path.slice(path.lastIndexOf('.') + 1);
+  if (!CONTENT_EXTS.has(ext)) fail(`${where}: path ${JSON.stringify(path)} has an unknown extension`);
 }
 
-const FILE_KEYS = ['series', 'comparisonSeries', 'motionIndex', 'stations', 'bajs', 'closures', 'events', 'notices', 'news', 'screenIndex', 'board106'] as const;
+const FILE_KEYS = ['series', 'motionIndex', 'routes', 'stations', 'bajs', 'closures', 'events', 'notices', 'news', 'places', 'screenIndex', 'voiceIndex', 'opis'] as const;
 const ATTRIBUTION_IDS = new Set(['zet', 'zet-rss', 'nextbike', 'zagreb-closures', 'dhmz', 'news', 'osm', 'kajima']);
+const EXPORT_EXT: Record<string, string> = { csv: 'csv', json: 'json', geojson: 'geojson' };
 
 function checkRef(ref: unknown, where: string): asserts ref is HashedRef {
   if (!isHashedRef(ref)) fail(`${where}: not a hashed ref`);
   checkRefPath(ref, where);
 }
 
-/** Validates manifest.json: version 1, the window and comparison constants, every ref relative with its hash in its name. */
+/** Validates manifest.json: version 2, the window and both comparisons as the constants say, every file key present,
+ *  every ref relative with its hash in its name, every export's path ending in its format. */
 export function decodeManifest(raw: unknown): SnimkaManifest {
   if (!isRec(raw)) fail('manifest: not an object');
   const m = raw as Rec;
-  if (m.version !== 1) fail(`manifest: version ${String(m.version)}, expected 1`);
+  if (m.version !== 2) fail(`manifest: version ${String(m.version)}, expected 2`);
   if (typeof m.builtAt !== 'string' || typeof m.title !== 'string') fail('manifest: builtAt and title');
   if (!isRec(m.build) || typeof m.build.commit !== 'string' || !isRec(m.build.inputs)) fail('manifest: build');
   const w = m.window;
   if (!isRec(w) || w.fromSec !== SNIMKA_WINDOW.fromSec || w.toSec !== SNIMKA_WINDOW.toSec || w.minutes !== SNIMKA_WINDOW.minutes || w.tz !== 'Europe/Zagreb' || w.utcOffsetMin !== 120) {
     fail('manifest: window differs from SNIMKA_WINDOW');
   }
-  const c = m.comparison;
-  if (!isRec(c) || c.day !== SNIMKA_COMPARISON.day || c.fromSec !== SNIMKA_COMPARISON.fromSec || c.minutes !== SNIMKA_COMPARISON.minutes) fail('manifest: comparison differs from SNIMKA_COMPARISON');
+  if (!Array.isArray(m.comparisons) || m.comparisons.length !== SNIMKA_COMPARISONS.length) fail('manifest: comparisons differ from SNIMKA_COMPARISONS');
+  SNIMKA_COMPARISONS.forEach((want, i) => {
+    const c = (m.comparisons as unknown[])[i];
+    const where = `manifest: comparisons[${i}]`;
+    if (!isRec(c) || c.id !== want.id || c.day !== want.day || c.fromSec !== want.fromSec || c.minutes !== want.minutes || c.net !== want.net || c.weekday !== want.weekday) fail(`${where} differs from SNIMKA_COMPARISONS`);
+    if (!isRec(c.files)) fail(`${where}.files`);
+    checkRef(c.files.series, `${where}.files.series`);
+    checkRef(c.files.routes, `${where}.files.routes`);
+    if (!Array.isArray(c.notes) || !c.notes.every((n) => typeof n === 'string')) fail(`${where}.notes`);
+  });
   if (!isInt(m.serviceLiveFromSec)) fail('manifest: serviceLiveFromSec');
   if (!isRec(m.networks)) fail('manifest: networks');
   for (const net of ['395', '396'] as const) {
@@ -318,8 +364,20 @@ export function decodeManifest(raw: unknown): SnimkaManifest {
     if (typeof n.feedVersion !== 'string' || typeof n.graphHash !== 'string' || !isInt(n.paths) || !isInt(n.shapes)) fail(`manifest: networks.${net} is not a network ref`);
   }
   if (!isRec(m.files)) fail('manifest: files');
-  for (const key of FILE_KEYS) checkRef(m.files[key], `manifest: files.${key}`);
-  if (m.files.grid !== null) checkRef(m.files.grid, 'manifest: files.grid');
+  const files = m.files;
+  for (const key of FILE_KEYS) checkRef(files[key], `manifest: files.${key}`);
+  if (!Array.isArray(files.boards)) fail('manifest: files.boards');
+  files.boards.forEach((b, i) => {
+    if (!isBoardRef(b)) fail(`manifest: files.boards[${i}] is not a board ref`);
+    checkRefPath(b, `manifest: files.boards[${i}]`);
+  });
+  if (!Array.isArray(files.exports)) fail('manifest: files.exports');
+  files.exports.forEach((e, i) => {
+    if (!isExportRef(e)) fail(`manifest: files.exports[${i}] is not an export ref`);
+    checkRefPath(e, `manifest: files.exports[${i}]`);
+    if (!e.path.endsWith(`.${EXPORT_EXT[e.format]}`)) fail(`manifest: files.exports[${i}] path does not end in .${e.format}`);
+  });
+  if (files.grid !== null) fail('manifest: files.grid must be null');
   if (!Array.isArray(m.attribution)) fail('manifest: attribution');
   m.attribution.forEach((a, i) => {
     if (!isRec(a) || typeof a.id !== 'string' || !ATTRIBUTION_IDS.has(a.id) || typeof a.text !== 'string' || (a.url !== null && typeof a.url !== 'string')

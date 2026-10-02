@@ -1,14 +1,15 @@
 // The committed sample of the /snimka/ dataset (test/fixtures/snimka/, cut by
 // scripts/snimka/fixture-cut.mjs): one motion chunk of the first strike
-// morning and the manifest of its build. A deviation fixture of the ZET
-// strike, never a normal day.
+// morning and a manifest in the v2 shape (hand-updated on 2 October 2026
+// until the v2 build is re-cut). A deviation fixture of the ZET strike,
+// never a normal day.
 
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { decodeNetwork } from '../../shared/motion/network';
-import { MOTION_CHUNK_S, MOTION_TICKS, SNIMKA_WINDOW } from '../../shared/snimka';
+import { MOTION_CHUNK_S, MOTION_TICKS, SNIMKA_COMPARISONS, SNIMKA_WINDOW } from '../../shared/snimka';
 import { decodeManifest, decodeMotionChunk, expandVehicle, samplesAt } from '../../shared/snimka-codec';
 
 const DIR = 'test/fixtures/snimka';
@@ -67,13 +68,20 @@ describe('the committed snimka fixture', () => {
     }
   });
 
-  it('carries a manifest that decodes, with the corrected 84-hour window and the motion budget', () => {
+  it('carries a v2 manifest that decodes: the 112-hour window, both comparison days, eight boards, nine downloads', () => {
     const manifest = decodeManifest(JSON.parse(readFileSync(join(DIR, 'manifest.sample.json'), 'utf8')) as unknown);
-    expect(manifest.window.minutes).toBe(5040);
+    expect(manifest.version).toBe(2);
+    expect(manifest.window.minutes).toBe(6720);
+    expect(manifest.window.toSec).toBe(SNIMKA_WINDOW.toSec);
+    expect(manifest.comparisons.map((c) => c.id)).toEqual(SNIMKA_COMPARISONS.map((c) => c.id));
     expect(manifest.files.grid).toBeNull();
+    expect(manifest.files.boards.map((b) => b.stop)).toEqual(['106_1', '106_2', '98_1', '208_24', '271_24', '236_1', '109_1', '245_1']);
+    expect(manifest.files.exports.map((e) => e.name)).toEqual(['series', 'hourly', 'routes-5min', 'bikes-5min', 'stations', 'sentences', 'events', 'closures', 'opis']);
+    expect(manifest.files.exports.map((e) => e.format)).toEqual(['csv', 'csv', 'csv', 'csv', 'csv', 'csv', 'json', 'geojson', 'json']);
+    expect(manifest.files.opis.path).toBe(manifest.files.exports.find((e) => e.name === 'opis')!.path);
     expect(manifest.attribution.find((a) => a.id === 'zet')?.text).toBe('Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669');
     expect(manifest.serviceLiveFromSec).toBe(Date.parse('2026-09-29T21:18:00Z') / 1000);
-    for (const note of manifest.notes) {
+    for (const note of [...manifest.notes, ...manifest.comparisons.flatMap((c) => c.notes)]) {
       expect(note).not.toMatch(/—|--|…/);
       expect(note).not.toMatch(/štrajk/i);
     }
