@@ -1,7 +1,14 @@
 // The latest headline within three hours, the latest notice (kept until the
-// next), the latest event within an hour (app/src/snimka/voices.ts).
+// next), the latest event within an hour (app/src/snimka/voices.ts); and the
+// feed's pure half: order, kinds, the fold per beat, the cap and the subject,
+// the companion's own voices, the timeline's lanes and the state band.
 import { describe, expect, it } from 'vitest';
 import type { NewsFile, NoticesFile, SnimkaEvent } from '../../shared/snimka';
+import { SNIMKA_WINDOW, type VoiceFile } from '../../shared/snimka';
+import { buildEvents, buildNews, buildNotices, buildVoiceDay, buildWindowSeries, MARKS, zg } from '../../e2e/snimka-fixtures';
+import {
+  buildVoices, companionVoices, COMPANION_GAP_S, feedMarkers, focusSubject, foldedUpTo, foldPress, mentionsSubject, stateBand, voicesUpTo, type VoiceItem,
+} from '../../app/src/snimka/voices';
 import { ARTICLE_WINDOW_S, currentArticle, currentMarker, currentNotice, MARKER_WINDOW_S } from '../../app/src/snimka/voices';
 
 const H = 3600;
@@ -64,12 +71,6 @@ describe('currentMarker', () => {
 });
 
 // ---- the feed's pure half (v2) ----------------------------------------------------------------
-import { SNIMKA_WINDOW, type VoiceFile } from '../../shared/snimka';
-import { buildEvents, buildNews, buildNotices, buildVoiceDay, buildWindowSeries, MARKS, zg } from '../../e2e/snimka-fixtures';
-import {
-  buildVoices, companionVoices, COMPANION_GAP_S, feedMarkers, focusSubject, foldedUpTo, foldPress, mentionsSubject, stateBand, voicesUpTo, type VoiceItem,
-} from '../../app/src/snimka/voices';
-
 const fixtureFiles = { notices: buildNotices(), news: buildNews(), events: buildEvents().events };
 const press = (id: string, atSec: number, beat: string | null, extra: Partial<VoiceItem> = {}): VoiceItem => ({
   id, atSec, kind: 'press', title: id, text: null, link: `https://n1info.hr/${id}`, source: { label: 'N1', url: 'https://n1info.hr/' }, focus: { kind: 'none' }, facts: [], mentions: {}, beat, ...extra,
