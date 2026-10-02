@@ -358,7 +358,21 @@ export function sentenceFamilies(index: ScreenIndex): FamiliesResult {
 
 // ---- the hero numbers ----------------------------------------------------------
 
-export interface HeroTile { key: 'silent' | 'peak' | 'bikes' | 'return'; value: string; label: string; sub: string | null }
+export interface HeroTile { key: 'silent' | 'peak' | 'bikes' | 'return' | 'alerts'; value: string; label: string; sub: string | null }
+
+/** ZET's own alerts and cancelled trips summed over the window; null when the series carries neither column (never a 0 by assumption). */
+export function feedAlerts(s: SeriesFile): { alerts: number; cancelled: number; hours: number } | null {
+  let alerts = 0;
+  let cancelled = 0;
+  let any = false;
+  for (let m = 0; m < s.n; m++) {
+    const a = s.feed.alerts[m];
+    const c = s.feed.cancelledTrips[m];
+    if (a !== null && a !== undefined) { any = true; alerts += a; }
+    if (c !== null && c !== undefined) { any = true; cancelled += c; }
+  }
+  return any ? { alerts, cancelled, hours: Math.round(s.n / 60) } : null;
+}
 
 /** The four tiles of Ukratko: values and the lines under them, from the series alone. */
 export function heroTiles(s: SeriesFile, comparison: SeriesFile | null): HeroTile[] {
@@ -368,6 +382,7 @@ export function heroTiles(s: SeriesFile, comparison: SeriesFile | null): HeroTil
   const monday = peak.days.find((d) => new Date((d.day + ZAGREB_OFFSET_S) * 1000).getUTCDay() === 1) ?? null;
   const bikes = bikeDrain(s);
   const back = returnDuration(s);
+  const alerts = feedAlerts(s);
   return [
     {
       key: 'silent',
@@ -383,9 +398,9 @@ export function heroTiles(s: SeriesFile, comparison: SeriesFile | null): HeroTil
     },
     {
       key: 'bikes',
-      value: bikes ? num(bikes.maxTotal - bikes.minTotal) : none,
-      label: SN.kpi.bikes,
-      sub: bikes ? fill(SN.kpi.bikesSub, { from: num(bikes.maxTotal), to: num(bikes.minTotal), empty: bikes.maxEmpty === null ? none : num(bikes.maxEmpty), stations: bikes.stations === null ? none : num(bikes.stations) }) : null,
+      value: bikes && bikes.maxEmpty !== null ? num(bikes.maxEmpty) : none,
+      label: fill(SN.kpi.bikes, { stations: bikes && bikes.stations !== null ? num(bikes.stations) : none }),
+      sub: bikes && bikes.maxEmptyAt !== null ? fill(SN.kpi.bikesSub, { day: zagrebDay(bikes.maxEmptyAt * 1000), time: zagrebClock(bikes.maxEmptyAt * 1000), from: num(bikes.maxTotal), to: num(bikes.minTotal) }) : null,
     },
     {
       key: 'return',
@@ -393,16 +408,25 @@ export function heroTiles(s: SeriesFile, comparison: SeriesFile | null): HeroTil
       label: SN.kpi.return,
       sub: back ? fill(SN.kpi.returnSub, { from: zagrebClock(back.fromSec * 1000), to: zagrebClock(back.toSec * 1000) }) : null,
     },
+    ...(alerts ? [{
+      key: 'alerts' as const,
+      value: num(alerts.alerts),
+      label: SN.kpi.alerts,
+      sub: fill(SN.kpi.alertsSub, { alerts: num(alerts.alerts), cancelled: num(alerts.cancelled), hours: num(alerts.hours) }),
+    }] : []),
   ];
 }
 
-/** Fills the four tiles the HTML holds (data-sn="kpi-*") and clears the row's busy mark. */
+/** Fills the tiles the HTML holds (data-sn="kpi-*") and clears the row's busy mark; the alerts tile is hidden when the series has no such column. */
 export function renderHero(doc: Document, s: SeriesFile, comparison: SeriesFile | null): void {
-  for (const tile of heroTiles(s, comparison)) {
+  const tiles = heroTiles(s, comparison);
+  for (const tile of tiles) {
     const el = doc.querySelector<HTMLElement>(`[data-sn="kpi-${tile.key}"]`);
     if (!el) continue;
     el.innerHTML = `<p class="st-kpi-value">${escapeHtml(tile.value)}</p><p class="st-kpi-label">${escapeHtml(tile.label)}</p>${tile.sub ? `<p class="st-kpi-sub">${escapeHtml(tile.sub)}</p>` : ''}`;
   }
+  const alertsTile = doc.querySelector<HTMLElement>('[data-sn="kpi-alerts"]');
+  if (alertsTile && !tiles.some((t) => t.key === 'alerts')) alertsTile.hidden = true;
   doc.querySelector('[data-sn="kpis"]')?.removeAttribute('aria-busy');
 }
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kaj ima? · Snimka</title>
-<meta name="description" content="Snimka triju dana bez tramvaja i autobusa u Zagrebu, od 27. rujna do 1. listopada 2026., iz podataka aplikacije Kaj ima?">
+<meta name="description" content="Snimka dana bez tramvaja i autobusa u Zagrebu, od 27. rujna do 2. listopada 2026., iz podataka aplikacije Kaj ima?: što se događalo, što je zaslon govorio i koji su podaci iz toga nastali.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/src/ui/tokens.css">
@@ -13,6 +13,8 @@
 <link rel="stylesheet" href="/src/ui/statistika.css">
 <link rel="stylesheet" href="/src/ui/snimka.css">
 <link rel="stylesheet" href="/src/ui/snimka-stage.css">
+<link rel="stylesheet" href="/src/ui/snimka-panels.css">
+<link rel="stylesheet" href="/src/ui/snimka-voices.css">
 <link rel="stylesheet" href="/src/ui/snimka-report.css">
 </head>
 <body class="st-body sn-body">
@@ -28,41 +30,58 @@
     <div class="st-sections" data-st="sections">
       <a href="#ukratko" data-sn-text="nav.summary">Ukratko</a>
       <a href="#snimka" data-sn-text="nav.stage">Snimka</a>
+      <a href="#brojke" data-sn-text="nav.numbers">Brojke</a>
       <a href="#zaslon" data-sn-text="nav.screen">Zaslon</a>
       <a href="#tijek" data-sn-text="nav.strip">Tijek</a>
+      <a href="#zamjene" data-sn-text="nav.alternatives">Zamjene</a>
       <a href="#vidjelo" data-sn-text="nav.reckoning">Što se vidjelo</a>
+      <a href="#otvoreno" data-sn-text="nav.open">Otvoreni podaci</a>
       <a href="#izvori" data-sn-text="nav.sources">Izvori</a>
     </div>
   </div>
 </nav>
 
 <main id="sadrzaj" class="st-main sn-main">
-  <section id="ukratko" class="st-hero st-bound" aria-labelledby="ukratko-h">
-    <p class="st-eyebrow" data-sn-text="hero.eyebrow">Snimka · 27. rujna do 1. listopada 2026.</p>
+  <section id="ukratko" class="st-hero st-bound sn-hero" aria-labelledby="ukratko-h">
+    <p class="st-eyebrow" data-sn-text="hero.eyebrow">Snimka · 27. rujna do 2. listopada 2026.</p>
     <div class="st-hero-top">
       <h1 id="ukratko-h" data-sn-text="hero.title"><span>Tri dana</span> <span class="st-accent">bez tramvaja</span></h1>
       <div class="st-hero-copy">
         <p class="st-lead" data-sn-text="narration.lede1">Radnici ZET-a i Zagrebačkog holdinga stupili su u štrajk u ponedjeljak 28. rujna u 03:30. Županijski sud u Zagrebu u srijedu 30. rujna proglasio je oba štrajka nezakonitima, a iste su se večeri tramvaji i autobusi vratili na ulice.</p>
-        <p class="st-intro" data-sn-text="narration.lede2">Ova je stranica snimka tih dana iz podataka koje je aplikacija tada imala: vozila u pokretu, bicikli na stanicama, zatvorene ulice i rečenice s javnog zaslona. Zaslon nije znao za štrajk; vidio je samo da vozila nema.</p>
+        <p class="st-intro" data-sn-text="narration.lede2">Ova stranica ponavlja te dane iz podataka koje je aplikacija imala, minutu po minutu: vozila na karti, bicikle na stanicama, zatvorene ulice, obavijesti ZET-a, presude, naslove i rečenicu koju je javni zaslon pisao. Zaslon nije znao za štrajk; vidio je samo da vozila nema.</p>
+        <p class="st-intro sn-for-whom" data-sn-text="narration.forWhom">Za građane, radnike ZET-a i Holdinga, Grad i novinare: četiri pitanja, četiri ulaza u snimku.</p>
       </div>
     </div>
-    <div class="st-kpis" data-sn="kpis" aria-busy="true">
-      <div class="st-kpi" data-sn="kpi-silent"><span class="skeleton"></span></div>
-      <div class="st-kpi" data-sn="kpi-peak"><span class="skeleton"></span></div>
-      <div class="st-kpi" data-sn="kpi-bikes"><span class="skeleton"></span></div>
-      <div class="st-kpi" data-sn="kpi-return"><span class="skeleton"></span></div>
-    </div>
+    <nav class="chips sn-q-nav" aria-label="Ulazi u snimku" data-sn="questions">
+      <a class="chip sn-q-chip" href="#zamjene" data-sn-q="1" data-sn-chapter="prvo-jutro" data-sn-layer="bikes" data-sn-section="zamjene" data-sn-text="narration.q1">Što sam mogao umjesto tramvaja?</a>
+      <a class="chip sn-q-chip" href="#tijek" data-sn-q="2" data-sn-chapter="trece-jutro" data-sn-subject="route:17" data-sn-section="tijek" data-sn-text="narration.q2">Koliko je štrajk bio potpun?</a>
+      <a class="chip sn-q-chip" href="#otvoreno" data-sn-q="3" data-sn-chapter="stanje-usluge" data-sn-section="otvoreno" data-sn-text="narration.q3">Što je grad mogao znati u svakoj minuti?</a>
+      <a class="chip sn-q-chip" href="#vidjelo" data-sn-q="4" data-sn-section="vidjelo" data-sn-text="narration.q4">Odakle brojevi i kako ih provjeriti?</a>
+    </nav>
     <noscript><p class="state" data-sn-text="noscript">Snimka treba JavaScript. Izvori i opis skupa podataka nalaze se ispod.</p></noscript>
   </section>
 
   <section id="snimka" class="st-section sn-section-stage" aria-labelledby="snimka-h">
+    <h2 id="snimka-h" class="visually-hidden" data-sn-text="stage.title">Grad na jednom satu</h2>
+    <div class="sn-stage" data-sn-mount="stage" aria-busy="true"></div>
+  </section>
+
+  <section id="brojke" class="st-section" aria-labelledby="brojke-h">
     <div class="st-bound">
       <div class="st-section-head">
-        <p class="st-eyebrow" data-sn-text="nav.stage">Snimka</p>
-        <h2 id="snimka-h" data-sn-text="stage.title">Grad na jednom satu</h2>
-        <p data-sn-text="stage.lede">Vozila na karti, stanje usluge, obavijesti ZET-a i naslovi iz medija, sve na istom satu. Pokreni, zaustavi ili povuci klizač na bilo koji trenutak.</p>
+        <p class="st-eyebrow" data-sn-text="nav.numbers">Brojke</p>
+        <h2 id="brojke-h" data-sn-text="numbers.title">U brojkama</h2>
+        <p data-sn-text="numbers.lede">Pet brojeva iz snimke; kako je svaki izračunan piše pod Što se vidjelo.</p>
       </div>
-      <div class="sn-stage" data-sn-mount="stage" aria-busy="true"></div>
+      <div class="sn-numbers" data-sn-mount="brojke" aria-busy="true">
+        <div class="st-kpis" data-sn="kpis">
+          <div class="st-kpi" data-sn="kpi-silent"><span class="skeleton"></span></div>
+          <div class="st-kpi" data-sn="kpi-peak"><span class="skeleton"></span></div>
+          <div class="st-kpi" data-sn="kpi-bikes"><span class="skeleton"></span></div>
+          <div class="st-kpi" data-sn="kpi-return"><span class="skeleton"></span></div>
+          <div class="st-kpi" data-sn="kpi-alerts"><span class="skeleton"></span></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -70,8 +89,8 @@
     <div class="st-bound">
       <div class="st-section-head">
         <p class="st-eyebrow" data-sn-text="nav.screen">Zaslon</p>
-        <h2 id="zaslon-h" data-sn-text="screen.title">Što je pisalo na zaslonu</h2>
-        <p data-sn-text="screen.lede">Javni zaslon na Trgu bana J. Jelačića: rečenica u zaglavlju i popis U blizini, iz zapisa svakih 20 sekundi.</p>
+        <h2 id="zaslon-h" data-sn-text="screen.title">Što je zaslon rekao i što bi rekao</h2>
+        <p data-sn-text="screen.lede">Javni zaslon na Trgu bana J. Jelačića: zapis svakih 20 sekundi gdje postoji i rečenica današnjih pravila za svaku minutu.</p>
       </div>
       <div class="sn-screen" data-sn-mount="screen" aria-busy="true"></div>
     </div>
@@ -82,20 +101,43 @@
       <div class="st-section-head">
         <p class="st-eyebrow" data-sn-text="nav.strip">Tijek</p>
         <h2 id="tijek-h" data-sn-text="strip.title">Tijek</h2>
-        <p data-sn-text="strip.lede">Tri i pol dana na jednoj osi. Crta prati sat; klik ili povlačenje premješta snimku.</p>
+        <p data-sn-text="strip.lede">Gotovo pet dana na jednoj osi. Crta prati sat; klik ili povlačenje premješta snimku.</p>
       </div>
       <div class="sn-strip" data-sn-mount="strip" aria-busy="true"></div>
+    </div>
+  </section>
+
+  <section id="zamjene" class="st-section" aria-labelledby="zamjene-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow" data-sn-text="narration.q1">Što sam mogao umjesto tramvaja?</p>
+        <h2 id="zamjene-h" data-sn-text="alternatives.title">Što je ostalo kad tramvaja nije bilo</h2>
+        <p data-sn-text="alternatives.lede">Bicikli, vlakovi, jedna autobusna linija i ono što su mediji zabilježili. Sve iz snimke, s izvorom.</p>
+      </div>
+      <div class="sn-alternatives" data-sn-mount="alternatives" aria-busy="true"></div>
     </div>
   </section>
 
   <section id="vidjelo" class="st-section" aria-labelledby="vidjelo-h">
     <div class="st-bound">
       <div class="st-section-head">
-        <p class="st-eyebrow" data-sn-text="nav.reckoning">Što se vidjelo</p>
+        <p class="st-eyebrow" data-sn-text="narration.q4">Odakle brojevi i kako ih provjeriti?</p>
         <h2 id="vidjelo-h" data-sn-text="reckoning.title">Što se vidjelo</h2>
         <p data-sn-text="reckoning.lede">Brojevi izračunati iz ove snimke. Ispod svakog piše kako.</p>
       </div>
       <div class="sn-reckoning" data-sn-mount="reckoning" aria-busy="true"></div>
+    </div>
+  </section>
+
+  <section id="otvoreno" class="st-section st-section-tint" aria-labelledby="otvoreno-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow" data-sn-text="narration.q3">Što je grad mogao znati u svakoj minuti?</p>
+        <h2 id="otvoreno-h" data-sn-text="open.title">Otvoreni podaci iz snimke</h2>
+        <p data-sn-text="open.lede">Podaci koje Grad nije imao, a aplikacija ih je izvela iz otvorenih izvora. Svaki je preuzimljiv, s izvorom, licencom i načinom izračuna.</p>
+      </div>
+      <div class="sn-open" data-sn-mount="open" aria-busy="true"></div>
+      <div class="sn-live" data-sn-mount="live" aria-busy="true"></div>
     </div>
   </section>
 
@@ -113,11 +155,15 @@
         <li data-sn-text="sources.dhmz">Temperatura i vrijeme: DHMZ, postaja Zagreb-Maksimir, Otvorena dozvola.</li>
         <li data-sn-text="sources.news">Naslovi: Jutarnji list, Večernji list i N1. Svaki naslov vodi na izvorni članak; ovdje se prenose samo naslovi.</li>
         <li data-sn-text="sources.court">Presude: Županijski sud u Zagrebu, 30. rujna 2026., prema izvještajima medija i obavijesti ZET-a.</li>
+        <li data-sn-text="sources.voice">Rečenice „zaslon bi rekao” izračunane su naknadno današnjim pravilima aplikacije i tako su označene; zapis zaslona je ono što je doista pisalo.</li>
+        <li data-sn-text="sources.live">Kartica „I danas” jedina na stranici čita živi izvor: javni sažetak aplikacije, jednom, kad se pojavi na zaslonu.</li>
+        <li data-sn-text="sources.open">Preuzimanja: izvedeni skupovi pod Otvorenom dozvolom, uz navođenje izvora; ZET-ova atribucija doslovno.</li>
         <li data-sn-text="sources.map">Karta: © OpenStreetMap contributors · Protomaps.</li>
       </ul>
       <div class="sn-attribution-slot" data-sn="attribution" aria-busy="true"></div>
       <ul class="st-open sn-links">
         <li><a class="st-link" href="https://github.com/matijarma/vidikovac/blob/main/docs/izvori.md" rel="noopener noreferrer" target="_blank"><span data-sn-text="sources.dataset">Opis skupa podataka</span><span aria-hidden="true">↗</span></a></li>
+        <li><a class="st-link" href="/open/"><span data-sn-text="sources.catalog">Otvoreni podaci</span><span aria-hidden="true">↗</span></a></li>
         <li><a class="st-link" href="/statistika/"><span data-sn-text="sources.statistika">Statistika</span><span aria-hidden="true">↗</span></a></li>
         <li><a class="st-link" href="/prijava/"><span data-sn-text="sources.prijava">Prijava projekta</span><span aria-hidden="true">↗</span></a></li>
       </ul>

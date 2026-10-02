@@ -11,6 +11,9 @@
 // so that request waits SCRUB_DEBOUNCE_MS for the hand to settle.
 import { decodeNetwork, type GraphNetwork } from '../../../shared/motion/network';
 import { MOTION_CHUNK_S, type HashedRef, type MotionChunk, type MotionIndex, type SnimkaManifest, type Speed } from '../../../shared/snimka';
+
+/** A chunk as the slim v2 index names it: its content path (which carries the hash) and its size. */
+export type ChunkRef = Pick<HashedRef, 'path' | 'bytes'>;
 import { chunkStart } from '../../../shared/snimka-codec';
 import type { RefCache } from './data';
 
@@ -34,7 +37,7 @@ export interface ChunkPair { current: MotionChunk | null; next: MotionChunk | nu
 export interface ChunkStoreDeps {
   index: MotionIndex;
   /** Loads and validates one chunk (ctx.data.get(ref, decodeMotionChunk)). Rejects on failure. */
-  load(ref: HashedRef): Promise<MotionChunk>;
+  load(ref: ChunkRef): Promise<MotionChunk>;
   /** Runs `fn` in idle time and returns its cancel; requestIdleCallback or a short timer by default. */
   idle?: (fn: () => void) => () => void;
   setTimer?: (fn: () => void, ms: number) => unknown;
@@ -73,8 +76,8 @@ export function createChunkStore(deps: ChunkStoreDeps): ChunkStore {
   const clearTimer = deps.clearTimer ?? ((h): void => clearTimeout(h as ReturnType<typeof setTimeout>));
   const idle = deps.idle ?? defaultIdle;
   const now = deps.now ?? ((): number => Date.now());
-  const refs = new Map<string, HashedRef>();
-  for (const c of deps.index.chunks) refs.set(`${c.net}:${c.t0}`, { path: c.path, sha256: c.sha256, bytes: c.bytes });
+  const refs = new Map<string, ChunkRef>();
+  for (const c of deps.index.chunks) refs.set(`${c.net}:${c.t0}`, { path: c.path, bytes: c.bytes });
   const entries = new Map<string, Entry>();
   const key = (net: SegmentNet, t0: number): string => `${net}:${t0}`;
   let destroyed = false;

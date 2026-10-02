@@ -16,7 +16,7 @@
 import { toLonLat, toPlane, type XY } from '../../../shared/motion/geo';
 import type { GraphNetwork } from '../../../shared/motion/network';
 import { at as pointAt, tangent } from '../../../shared/motion/polyline';
-import { MOTION_STEP_S, MOTION_TICKS, SNIMKA_COMPARISON, type MotionChunk, type Speed } from '../../../shared/snimka';
+import { MOTION_STEP_S, MOTION_TICKS, SNIMKA_COMPARISONS, type MotionChunk, type Speed } from '../../../shared/snimka';
 import { expandVehicle, type MotionSample } from '../../../shared/snimka-codec';
 import type { Drawn, Model } from '../motion/integrator';
 import { zagrebTimeOfDay } from './format';
@@ -160,7 +160,8 @@ export function drawnAt(current: MotionChunk | null, next: MotionChunk | null, a
   return out;
 }
 
-const COMPARISON_MIDNIGHT_MS = SNIMKA_COMPARISON.fromSec * 1000;
+/** The first comparison day (Thu 24 Sep); lane V2 matches the weekday (context.ts comparisonFor). */
+const COMPARISON_MIDNIGHT_MS = SNIMKA_COMPARISONS[0].fromSec * 1000;
 
 /** The instant of the comparison day (Thu 24 Sep) at the same Zagreb time of day as the window instant. */
 export function compareInstant(atMs: number): number {

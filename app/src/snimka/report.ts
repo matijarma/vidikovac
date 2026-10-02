@@ -1,11 +1,13 @@
-// The report of /snimka/: the hero numbers (Ukratko), Zaslon, Tijek and Što
-// se vidjelo. Mounted once on the page (the entry passes document.body); it
-// fills the slots the static HTML holds (data-sn-mount="screen", "strip",
-// "reckoning" and the four data-sn="kpi-*" tiles). The hero, the strip and
-// the reckoning come from the series the entry already loaded; the screen
-// loads its own index, runs and board, and hands the index on to the
-// reckoning's screen card.
+// The dossier of /snimka/: Brojke, Zaslon, Tijek, Zamjene, Što se vidjelo,
+// Otvoreni podaci and I danas (plan section 4). Mounted once on the page
+// (the entry passes document.body); it fills the slots the static HTML
+// holds (data-sn-mount="brojke", "screen", "strip", "alternatives",
+// "reckoning", "open", "live" and the five data-sn="kpi-*" tiles). Lane V5
+// owns this file; V0 wires the v1 parts to the v2 context and the V5 stubs.
+import { mountAlternatives } from './alternatives';
 import type { Mount } from './context';
+import { mountLive } from './live';
+import { mountOpen } from './open';
 import { renderHero, renderReckoning } from './reckoning';
 import { mountScreen } from './screen';
 import { mountStrip } from './strip';
@@ -28,11 +30,14 @@ export const mountReport: Mount = (ctx, root) => {
   ensureTip(doc);
   const slot = (name: string): HTMLElement | null => root.querySelector<HTMLElement>(`[data-sn-mount="${name}"]`);
   const teardowns: (() => void)[] = [];
+  // The v1 hero and reckoning read one normal day: the Thursday (V5 moves the Monday tile to Mon 21 Sep).
+  const comparison = ctx.comparisons.find((c) => c.id === 'cet-0924')?.series ?? ctx.comparisons[0]?.series ?? null;
 
-  renderHero(doc, ctx.series, ctx.comparison);
+  renderHero(doc, ctx.series, comparison);
+  slot('brojke')?.removeAttribute('aria-busy');
 
   const reckoningRoot = slot('reckoning');
-  const reckoning = reckoningRoot ? renderReckoning(reckoningRoot, ctx.series, ctx.comparison) : null;
+  const reckoning = reckoningRoot ? renderReckoning(reckoningRoot, ctx.series, comparison) : null;
 
   const stripRoot = slot('strip');
   if (stripRoot) teardowns.push(mountStrip(ctx, stripRoot));
@@ -40,6 +45,11 @@ export const mountReport: Mount = (ctx, root) => {
   const screenRoot = slot('screen');
   if (screenRoot) teardowns.push(mountScreen(ctx, screenRoot, (index) => reckoning?.setIndex(index, index === null)));
   else reckoning?.setIndex(null, true);
+
+  for (const [name, mount] of [['alternatives', mountAlternatives], ['open', mountOpen], ['live', mountLive]] as const) {
+    const el = slot(name);
+    if (el) teardowns.push(mount(ctx, el));
+  }
 
   return () => {
     for (const off of teardowns.reverse()) off();

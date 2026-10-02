@@ -22,6 +22,7 @@ import { PILL_ZOOM } from '../map/overlays';
 import { cameraFor, FIT_MIN_ZOOM, FIT_PADDING_PX, fitDecision, viewBounds } from './camera';
 import { createChunkStore, type ChunkState, type ChunkStore } from './chunks';
 import type { SnimkaContext } from './context';
+import type { MountMapLayer, StageMap } from './contracts';
 import { compareInstant, createReplayModel, ghostsAt } from './positions';
 import { SN } from './strings';
 
@@ -94,9 +95,13 @@ const decodeStations = (raw: unknown): StationsFile => { if (!isStationsFile(raw
 const decodeBajsFile = (raw: unknown): { file: BajsFile; rows: Uint8Array[] } => { if (!isBajsFile(raw)) throw new SnimkaError('bajs: not a bajs file'); return { file: raw, rows: decodeBajs(raw) }; };
 const decodeClosures = (raw: unknown): ClosuresFile => { if (!isClosuresFile(raw)) throw new SnimkaError('closures: not a closures file'); return raw; };
 
-/** Mounts the map into `container` and returns its teardown. Everything async inside degrades to "no vehicles", never to a throw. */
-export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks: MapLayerHooks): () => void {
+interface MountedV1 { destroy: () => void; handle: CityMapHandle; onUserMove: (fn: () => void) => () => void }
+
+/** The v1 map: mounts into `container`, answers the chunk state through `hooks`. Everything async inside degrades to "no vehicles", never to a throw.
+ *  Lane V2 replaces this with the living network and the director; until then `mountMapLayer` below wraps it in the StageMap contract. */
+function mountMapLayerV1(ctx: SnimkaContext, container: HTMLElement, hooks: MapLayerHooks): MountedV1 {
   const { clock, frames, layers, data, manifest } = ctx;
+  const moveListeners = new Set<() => void>();
   let disposed = false;
   let store: ChunkStore | null = null;
   let net395: GraphNetwork | null = null;
@@ -143,7 +148,7 @@ export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks:
         const next = camera.zoom < PLACE_NAMES_ZOOM;
         if (next !== far) { far = next; frames.kick(); }
       },
-      onUserMove: () => { userMoved = true; fitPending = false; },
+      onUserMove: () => { userMoved = true; fitPending = false; for (const fn of [...moveListeners]) fn(); },
     },
     {
       createModel: (net) => {
@@ -179,7 +184,7 @@ export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks:
 
   void data.get(manifest.files.motionIndex, decodeIndex).then((index) => {
     if (disposed) return;
-    store = createChunkStore({ index, load: (ref) => data.get(ref, decodeMotionChunk), onChange: () => { nudgeDue = true; frames.kick(); } });
+    store = createChunkStore({ index, load: (ref) => data.get(ref.path, decodeMotionChunk), onChange: () => { nudgeDue = true; frames.kick(); } });
     frames.kick();
   }, () => { indexFailed = true; frames.kick(); });
   void Promise.all([data.get(manifest.files.stations, decodeStations), data.get(manifest.files.bajs, decodeBajsFile)]).then(([s, b]) => {
@@ -275,7 +280,7 @@ export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks:
   });
   const offTheme = ctx.theme.onChange((theme) => handle.setTheme?.(theme));
 
-  return () => {
+  const destroy = (): void => {
     disposed = true;
     if (fitTimer !== null) clearTimeout(fitTimer);
     offTheme();
@@ -285,4 +290,22 @@ export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks:
     store?.destroy();
     handle.destroy();
   };
+  return { destroy, handle, onUserMove: (fn) => { moveListeners.add(fn); return () => { moveListeners.delete(fn); }; } };
 }
+
+/** The contract mount (app/src/snimka/contracts.ts MountMapLayer): the v1 map wrapped as a StageMap. Lane V2 fills in
+ *  flyTo, select, vehicles and liveCounts with the living network and the director; here they are the no-ops of a stub. */
+export const mountMapLayer: MountMapLayer = async (ctx, host) => {
+  const mounted = mountMapLayerV1(ctx, host, { onMotion: (state) => { host.dataset.snMotion = state; } });
+  const map: StageMap = {
+    flyTo() {},
+    select() {},
+    camera: () => mounted.handle.camera?.() ?? { center: ZAGREB_CENTER, zoom: STAGE_ZOOM },
+    onUserMove: (fn) => mounted.onUserMove(fn),
+    vehicles: () => [],
+    liveCounts: () => null,
+    resize: () => { mounted.handle.resize?.(); },
+    destroy: () => { mounted.destroy(); },
+  };
+  return map;
+};

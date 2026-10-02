@@ -7,7 +7,7 @@
 // note saying so. It re-renders only when what it shows changes (a new
 // reading, another run, another board sample), never on a frame that changes
 // nothing.
-import { isBoardSeries, isScreenIndex, isScreenRun, ZAGREB_OFFSET_S, type BoardSeries, type ScreenIndex, type ScreenReading, type ScreenRow, type ScreenRun } from '../../../shared/snimka';
+import { isBoardSeries, isScreenIndex, isScreenRun, VOICE_PLACE, ZAGREB_OFFSET_S, type BoardSeries, type ScreenIndex, type ScreenReading, type ScreenRow, type ScreenRun } from '../../../shared/snimka';
 import { SnimkaError } from '../../../shared/snimka-codec';
 import { escapeHtml } from '../ui/dom/escape';
 import type { SnimkaContext } from './context';
@@ -307,7 +307,7 @@ export function mountScreen(ctx: SnimkaContext, root: HTMLElement, onIndex: (ind
 
   Promise.all([
     ctx.data.get(ctx.manifest.files.screenIndex, decodeIndex),
-    ctx.data.get(ctx.manifest.files.board106, decodeBoard).catch(() => null),
+    (() => { const ref = ctx.manifest.files.boards.find((b) => b.stop === VOICE_PLACE); return ref ? ctx.data.get(ref, decodeBoard).catch(() => null) : Promise.resolve(null); })(),
   ]).then(
     ([ix, b]) => {
       if (destroyed) return;

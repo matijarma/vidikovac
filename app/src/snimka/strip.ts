@@ -604,7 +604,7 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
 export function mountStrip(ctx: SnimkaContext, root: HTMLElement): () => void {
   const handle = renderStrip(root, {
     series: ctx.series,
-    comparison: ctx.comparison,
+    comparison: ctx.comparisons.find((c) => c.id === 'cet-0924')?.series ?? ctx.comparisons[0]?.series ?? null,
     startMs: ctx.clock.start,
     endMs: ctx.clock.end,
     serviceLiveFromSec: ctx.manifest.serviceLiveFromSec,

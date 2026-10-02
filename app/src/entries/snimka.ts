@@ -1,18 +1,24 @@
-// /snimka/: the replay of the strike of 28 to 30 September 2026. The page's
-// prose is static HTML; this entry loads the manifest and the series from
-// /api/snimka/v1/, builds the one replay clock and the one frame loop, and
-// mounts the stage (app/src/snimka/stage.ts) and the report (report.ts) on
-// the slots the HTML holds. State lives in the address (?t=, ?brzina=,
-// ?usporedba=), written by replaceState, so a link shows what its sender saw.
-// Nothing here calls a live API and nothing references the map library: the
-// stage loads it on its own when it has a map to draw.
-import { isEventsFile, isSeriesFile, type EventsFile, type SeriesFile, type SnimkaManifest } from '../../../shared/snimka';
+// /snimka/: the replay of the strike of 28 to 30 September 2026 and the
+// normal days after it. The page's prose is static HTML; this entry loads
+// the manifest and the first-paint set from /api/snimka/v2/ (the window
+// series and routes, both comparison days, events, notices, news, places),
+// builds the one replay clock, the one frame loop and the view store, and
+// mounts the stage (app/src/snimka/stage.ts) and the dossier (report.ts) on
+// the slots the HTML holds. State lives in the address (?t=, &brzina=,
+// &usporedba=, &panel=, &linija=, &stanica=, &mreza=, &prati=), written by
+// replaceState, so a link shows what its sender saw. The only live read of
+// the page is the card "I danas" (app/src/snimka/live.ts, decision S-10);
+// nothing here references the map library: the stage loads it on its own.
+import {
+  isEventsFile, isNewsFile, isNoticesFile, isPlacesFile, isRoutesFile, isSeriesFile, SNIMKA_COMPARISONS,
+  type EventsFile, type NewsFile, type NoticesFile, type PlacesFile, type RoutesFile, type SeriesFile, type SnimkaManifest,
+} from '../../../shared/snimka';
 import { SnimkaError } from '../../../shared/snimka-codec';
 import { detectLagano, markLagano } from '../ui/lagano';
 import { createThemeController } from '../ui/theme';
 import { readAddress, writeAddress } from '../snimka/address';
 import { createReplayClock, DEFAULT_SPEED, type Chapter, type TickReason } from '../snimka/clock';
-import { createLayerStore, type SnimkaContext } from '../snimka/context';
+import { createLayerStore, createViewStore, type LoadedComparison, type SnimkaContext } from '../snimka/context';
 import { createRefCache, loadManifest } from '../snimka/data';
 import { parseZagrebLocal } from '../snimka/format';
 import { createFrameLoop } from '../snimka/frames';
@@ -53,7 +59,7 @@ const reducedMotion = ((): boolean => {
   try { return globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
 })();
 const address = readAddress(location.search);
-/** Without a time in the address the replay opens on the first morning (decision S-4). */
+/** Without a time in the address the replay opens on the first morning (decisions S-4 and S-20). */
 const OPENING_MS = parseZagrebLocal('2026-09-28T07:45')!;
 /** The address follows a playing clock at most this often. */
 const ADDRESS_EVERY_MS = 2000;
@@ -62,14 +68,16 @@ const USER_REASONS = new Set<TickReason>(['play', 'pause', 'seek', 'speed', 'end
 const stageRoot = document.querySelector<HTMLElement>('[data-sn-mount="stage"]');
 const attributionRoot = document.querySelector<HTMLElement>('[data-sn="attribution"]');
 
-const decodeSeries = (raw: unknown): SeriesFile => {
-  if (!isSeriesFile(raw)) throw new SnimkaError('series: not a series file');
+const guard = <T,>(ok: (raw: unknown) => raw is T, what: string) => (raw: unknown): T => {
+  if (!ok(raw)) throw new SnimkaError(`${what}: not a ${what} file`);
   return raw;
 };
-const decodeEvents = (raw: unknown): EventsFile => {
-  if (!isEventsFile(raw)) throw new SnimkaError('events: not an events file');
-  return raw;
-};
+const decodeSeries = guard<SeriesFile>(isSeriesFile, 'series');
+const decodeRoutes = guard<RoutesFile>(isRoutesFile, 'routes');
+const decodeEvents = guard<EventsFile>(isEventsFile, 'events');
+const decodeNotices = guard<NoticesFile>(isNoticesFile, 'notices');
+const decodeNews = guard<NewsFile>(isNewsFile, 'news');
+const decodePlaces = guard<PlacesFile>(isPlacesFile, 'places');
 
 function renderError(root: HTMLElement, retry: () => void): void {
   const card = document.createElement('p');
@@ -113,18 +121,19 @@ function renderAttribution(root: HTMLElement, manifest: SnimkaManifest): void {
     list.append(li);
   }
   root.replaceChildren(list);
-  if (manifest.notes.length) {
+  const notes = [...manifest.notes, ...manifest.comparisons.flatMap((c) => c.notes)];
+  if (notes.length) {
     const h3 = document.createElement('h3');
     h3.className = 'sn-notes-title';
     h3.textContent = SN.attribution.notes;
-    const notes = document.createElement('ul');
-    notes.className = 'sn-notes';
-    for (const note of manifest.notes) {
+    const ul = document.createElement('ul');
+    ul.className = 'sn-notes';
+    for (const note of notes) {
       const li = document.createElement('li');
       li.textContent = note;
-      notes.append(li);
+      ul.append(li);
     }
-    root.append(h3, notes);
+    root.append(h3, ul);
   }
   root.removeAttribute('aria-busy');
 }
@@ -140,15 +149,29 @@ async function boot(): Promise<void> {
 
   let manifest: SnimkaManifest;
   let series: SeriesFile;
-  let comparison: SeriesFile;
+  let routes: RoutesFile;
+  let comparisons: LoadedComparison[];
   let events: EventsFile;
+  let notices: NoticesFile;
+  let news: NewsFile;
+  let places: PlacesFile;
   const data = createRefCache();
   try {
     manifest = await loadManifest();
-    [series, comparison, events] = await Promise.all([
+    // The first-paint set, in parallel after the manifest.
+    const loadedComparisons = Promise.all(manifest.comparisons.map(async (c) => {
+      const constant = SNIMKA_COMPARISONS.find((k) => k.id === c.id)!;
+      const [cs, cr] = await Promise.all([data.get(c.files.series, decodeSeries), data.get(c.files.routes, decodeRoutes)]);
+      return { id: c.id, day: c.day, weekday: constant.weekday, fromSec: c.fromSec, series: cs, routes: cr } satisfies LoadedComparison;
+    }));
+    [series, routes, comparisons, events, notices, news, places] = await Promise.all([
       data.get(manifest.files.series, decodeSeries),
-      data.get(manifest.files.comparisonSeries, decodeSeries),
+      data.get(manifest.files.routes, decodeRoutes),
+      loadedComparisons,
       data.get(manifest.files.events, decodeEvents),
+      data.get(manifest.files.notices, decodeNotices),
+      data.get(manifest.files.news, decodeNews),
+      data.get(manifest.files.places, decodePlaces),
     ]);
   } catch {
     renderError(stageRoot, () => void boot());
@@ -165,16 +188,22 @@ async function boot(): Promise<void> {
     chapters,
   });
   const frames = createFrameLoop(clock, { reducedMotion });
-  const layers = createLayerStore({ compare: address.compare });
+  const layers = createLayerStore({ compare: address.compare, live: address.live, follow: address.following });
+  const view = createViewStore({ panel: address.panel, subject: address.subject, following: address.following });
   const ctx: SnimkaContext = {
     manifest,
     series,
-    comparison,
+    routes,
+    comparisons,
     events: events.events,
+    notices,
+    news,
+    places,
     clock,
     frames,
     data,
     layers,
+    view,
     lagano: lightweight,
     reducedMotion,
     theme: {
@@ -189,12 +218,17 @@ async function boot(): Promise<void> {
   const unmountReport = mountReport(ctx, document.body);
 
   // The address follows every user mutation at once and a playing clock every two seconds.
-  const write = (): void => { writeAddress({ t: clock.now(), speed: clock.speed(), compare: layers.get().compare }); };
+  const write = (): void => {
+    const v = view.get();
+    const l = layers.get();
+    writeAddress({ t: clock.now(), speed: clock.speed(), compare: l.compare, panel: v.panel, subject: v.subject, live: l.live, following: v.following });
+  };
   let lastWrite = 0;
   const offTick = clock.onTick((_, reason) => {
     if (USER_REASONS.has(reason)) { lastWrite = Date.now(); write(); }
   });
-  const offLayers = layers.onChange((next, previous) => { if (next.compare !== previous.compare) write(); });
+  const offLayers = layers.onChange((next, previous) => { if (next.compare !== previous.compare || next.live !== previous.live) write(); });
+  const offView = view.onChange(() => { write(); });
   const offFrames = frames.subscribe(() => {
     if (!clock.playing()) return;
     const at = Date.now();
@@ -208,6 +242,7 @@ async function boot(): Promise<void> {
   teardown = (): void => {
     document.removeEventListener('visibilitychange', onVisibility);
     offFrames();
+    offView();
     offLayers();
     offTick();
     unmountReport();
