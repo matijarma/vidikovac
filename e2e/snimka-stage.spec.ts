@@ -124,12 +124,36 @@ test.describe('/snimka/ instrument', () => {
     await expect(depth.locator('[data-sn-heatmap]')).toHaveAttribute('data-sn-heatmap', '23');
     await expect(depth.locator('.sn-hm-row[data-route="228"]')).toHaveText('228');
     await expect(depth.locator('.sn-hm-name').last()).toHaveText('Ostale autobusne linije (10), zajedno');
-    await depth.locator('.sn-hm-row[data-route="228"]').click();
+    // Decision S-22: the row label is the button, 24 px tall (the one exception to 44 px), with a visible focus ring.
+    const rowButton = depth.locator('.sn-hm-row[data-route="228"]');
+    const rowBox = (await rowButton.boundingBox())!;
+    expect(rowBox.height, 'a heatmap row is at least 24 px tall').toBeGreaterThanOrEqual(24);
+    expect(rowBox.width, 'a heatmap row is at least 24 px wide').toBeGreaterThanOrEqual(24);
+    await depth.locator('.sn-hm-row').first().focus();
+    await page.keyboard.press('Tab');
+    const ring = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      const cs = el ? getComputedStyle(el) : null;
+      return el?.classList.contains('sn-hm-row') && cs ? { style: cs.outlineStyle, width: parseFloat(cs.outlineWidth) } : null;
+    });
+    expect(ring, 'Tab moves to the next row button').not.toBeNull();
+    expect(ring!.style, 'the focused row shows its ring').not.toBe('none');
+    expect(ring!.width).toBeGreaterThanOrEqual(2);
+    await rowButton.click();
     await expect(page).toHaveURL(/linija=228/);
     await expect(depth.locator('[data-sn="subject-now"]')).toHaveText(/^u pokretu sada \d+, po voznom redu \d+$/);
     await depth.getByRole('button', { name: 'Ukloni temu' }).click();
     await expect(page).not.toHaveURL(/linija=/);
     await expect(depth.locator('[data-sn-heatmap]')).toBeVisible();
+  });
+
+  test('the instrument stands in the first viewport at 1366×768: #snimka starts under 300 px (decision S-9)', async ({ page }) => {
+    await open(page, '/snimka/');
+    const top = await page.evaluate(() => document.querySelector('#snimka')!.getBoundingClientRect().top + window.scrollY);
+    expect(top).toBeLessThan(300);
+    await expect(page.locator('[data-sn="questions"]')).toHaveAttribute('data-sn-questions', 'ready');
+    const topAfter = await page.evaluate(() => document.querySelector('#snimka')!.getBoundingClientRect().top + window.scrollY);
+    expect(topAfter, 'the upgraded chips keep the hero compact').toBeLessThan(300);
   });
 
   test('the timeline shows the fleet lane, the state band and three tick lanes with the day labels', async ({ page }) => {

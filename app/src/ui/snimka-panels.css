@@ -125,7 +125,7 @@
 /* The group seams are drawn inside the row (a border would take a pixel from the 24 px target). */
 .sn-hm-label[data-kind='aggregate'], .sn-hm-label[data-kind='tram'] + .sn-hm-label[data-kind='strike'] { box-shadow: inset 0 1px 0 var(--tone-stroke-strong); }
 .sn-hm-row, .sn-hm-name { display: flex; align-items: center; inline-size: 100%; padding: 0 var(--sp-2); font-size: var(--type-meta); font-weight: var(--weight-bold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sn-hm-row { border: 0; background: transparent; color: var(--tone-text-primary); font-family: inherit; cursor: pointer; }
+.sn-hm-row { min-block-size: 1.5rem; min-inline-size: 1.5rem; border: 0; background: transparent; color: var(--tone-text-primary); font-family: inherit; cursor: pointer; }
 .sn-hm-row:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; }
 @media (hover: hover) { .sn-hm-row:hover { background: var(--tone-surface-2); } }
 .sn-hm-name { color: var(--tone-text-muted); font-weight: var(--weight-medium); }
