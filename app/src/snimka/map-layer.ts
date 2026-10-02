@@ -5,32 +5,43 @@
 // it through handle.update(), the map's own "news" entry. BAJS stations and
 // closures ride the map's city points and lines with the wall's props,
 // pushed only when their five-minute sample or the closure version changes;
-// the comparison day's ghosts go through setGhosts at most twelve times a
-// second while the layer is on. Loaded by stage.ts with one dynamic import,
-// so the page's entry graph never carries the map library.
+// the comparison day's ghosts (hollow rings, decision S-17, the
+// weekday-matched day of S-12) go through setGhosts at most twelve times a
+// second while the layer is on; the living network (decision S-16) goes
+// through setLiveNetwork once per five-minute sample as feature state. The
+// subject (a line, a station, a stop) comes in from the map's own tap and
+// goes out to it from the view store; the director binds itself here until
+// the shell binds it with its hooks (director.ts). Loaded by stage.ts with
+// one dynamic import, so the page's entry graph never carries the map library.
 import { toLonLat } from '../../../shared/motion/geo';
 import { decodeNetwork, type GraphNetwork, type Network } from '../../../shared/motion/network';
 import {
   BAJS_STEP_S, isBajsFile, isClosuresFile, isMotionIndex, isStationsFile,
-  type BajsFile, type ClosuresFile, type MotionIndex, type StationsFile,
+  type BajsFile, type ClosuresFile, type Focus, type MotionIndex, type StationsFile,
 } from '../../../shared/snimka';
 import { BAJS_MISSING, BAJS_NOT_RENTING, decodeBajs, decodeMotionChunk, SnimkaError } from '../../../shared/snimka-codec';
-import { createCityMap, ZAGREB_CENTER, type CityMapHandle, type MapLine, type MapPoint } from '../map/city-map';
+import { createCityMap, FOCUS_ZOOM, ZAGREB_CENTER, type CityMapHandle, type MapLine, type MapPoint, type MapSelection } from '../map/city-map';
 import type { Model } from '../motion/integrator';
 import { PLACE_NAMES_ZOOM } from '../map/city-layers';
 import { PILL_ZOOM } from '../map/overlays';
 import { cameraFor, FIT_MIN_ZOOM, FIT_PADDING_PX, fitDecision, viewBounds } from './camera';
 import { createChunkStore, type ChunkState, type ChunkStore } from './chunks';
-import type { SnimkaContext } from './context';
-import type { MountMapLayer, StageMap } from './contracts';
-import { compareInstant, createReplayModel, ghostsAt } from './positions';
+import { comparisonFor, type SnimkaContext } from './context';
+import type { MountMapLayer, StageMap, Subject, ViewReason } from './contracts';
+import { bindDirector } from './director';
+import { formatZagrebLocal } from './format';
+import { aliveSets, aliveStates, liveCounts, routeSlotAt, stopAliveSet, stopRoutesOf, type StopRoutes } from './live-network';
+import { compareInstantFor, createReplayModel, ghostsAt } from './positions';
 import { SN } from './strings';
+import { sameSubject, selectionOfSubject, subjectFromSelection } from './subject';
 
 /** The whole tram network in one view on a stage about 900 px wide, just inside the zoom from which the marks are pills with their line numbers. */
 export const STAGE_ZOOM = PILL_ZOOM + 0.1;
 /** Ghost pushes per second at most (the map pushes its own vehicles at the same rate). */
 export const GHOST_HZ = 12;
 const GHOST_INTERVAL_MS = 1000 / GHOST_HZ;
+/** The camera on a BAJS station or a stop the director or the subject asks for. */
+export const STATION_ZOOM = FOCUS_ZOOM;
 
 export interface MapLayerHooks {
   /** The current chunk's state, whenever it changes: 'idle' while nothing is asked for (one hour per second, playing). */
@@ -90,21 +101,30 @@ export function closureLinesAt(file: ClosuresFile, version: number, atSec: numbe
   return out;
 }
 
+/** The camera a focus asks for when it is a place: the event's own resolved point, else the places file's. */
+export function placeCamera(ctx: Pick<SnimkaContext, 'places'>, focus: Extract<Focus, { kind: 'place' }>): { center: [number, number]; zoom: number } | null {
+  const place = ctx.places.places.find((p) => p.id === focus.id);
+  const center = focus.lonLat ?? place?.lonLat ?? null;
+  if (!center) return null;
+  return { center: [center[0], center[1]], zoom: focus.zoom ?? place?.zoom ?? 14 };
+}
+
 const decodeIndex = (raw: unknown): MotionIndex => { if (!isMotionIndex(raw)) throw new SnimkaError('motion index: not a motion index'); return raw; };
 const decodeStations = (raw: unknown): StationsFile => { if (!isStationsFile(raw)) throw new SnimkaError('stations: not a stations file'); return raw; };
 const decodeBajsFile = (raw: unknown): { file: BajsFile; rows: Uint8Array[] } => { if (!isBajsFile(raw)) throw new SnimkaError('bajs: not a bajs file'); return { file: raw, rows: decodeBajs(raw) }; };
 const decodeClosures = (raw: unknown): ClosuresFile => { if (!isClosuresFile(raw)) throw new SnimkaError('closures: not a closures file'); return raw; };
 
-interface MountedV1 { destroy: () => void; handle: CityMapHandle; onUserMove: (fn: () => void) => () => void }
-
-/** The v1 map: mounts into `container`, answers the chunk state through `hooks`. Everything async inside degrades to "no vehicles", never to a throw.
- *  Lane V2 replaces this with the living network and the director; until then `mountMapLayer` below wraps it in the StageMap contract. */
-function mountMapLayerV1(ctx: SnimkaContext, container: HTMLElement, hooks: MapLayerHooks): MountedV1 {
-  const { clock, frames, layers, data, manifest } = ctx;
+/** The contract mount (contracts.ts MountMapLayer). Everything async inside degrades to "no vehicles", never to a throw. */
+export const mountMapLayer: MountMapLayer = async (ctx, host) => {
+  const { clock, frames, layers, data, manifest, view } = ctx;
+  const container = host;
+  const hooks: MapLayerHooks = { onMotion: (state) => { host.dataset.snMotion = state; } };
   const moveListeners = new Set<() => void>();
   let disposed = false;
   let store: ChunkStore | null = null;
   let net395: GraphNetwork | null = null;
+  /** The drawn network (396) once the map has it, and its stop to routes table for the lit stops. */
+  let stopRoutes: StopRoutes | null = null;
   let stations: StationsFile | null = null;
   let bajs: { file: BajsFile; rows: Uint8Array[] } | null = null;
   let closures: ClosuresFile | null = null;
@@ -119,11 +139,20 @@ function mountMapLayerV1(ctx: SnimkaContext, container: HTMLElement, hooks: MapL
   let indexFailed = false;
   let lastGhostAt = -Infinity;
   let ghostsShown = false;
+  /** The living network as last applied: the sample it was computed for, whether the layer was on, and the counts. */
+  let lastLiveSlot = -2;
+  let lastLiveOn: boolean | null = null;
+  let liveDirty = true;
+  let lastCounts: { alive: number; dead: number; quiet: number } | null = null;
+  let lastAt = '';
   /** The small-fleet camera (camera.ts): owed on load and after a seek while paused, never during play, never once
-   *  the reader has moved the map; settled by the first step that draws anything. */
-  let fitPending = true;
+   *  the reader has moved the map, never when the address or the director named a focus; settled by the first step
+   *  that draws anything. */
+  let fitPending = view.get().subject === null;
   let userMoved = false;
   let fitTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The subject the view holds, as the map last applied it. */
+  let appliedSubject: Subject | null = null;
 
   const network396 = data.get(manifest.networks['396'], decodeNetwork);
   const network395 = data.get(manifest.networks['395'], decodeNetwork);
@@ -144,11 +173,33 @@ function mountMapLayerV1(ctx: SnimkaContext, container: HTMLElement, hooks: MapL
       cityLabels: 'venues',
       center: ZAGREB_CENTER,
       zoom: STAGE_ZOOM,
+      liveNetwork: true,
+      pickRoutes: true,
+      lineFocus: false,
       onCamera: (camera) => {
         const next = camera.zoom < PLACE_NAMES_ZOOM;
         if (next !== far) { far = next; frames.kick(); }
       },
       onUserMove: () => { userMoved = true; fitPending = false; for (const fn of [...moveListeners]) fn(); },
+      onNetwork: (net) => {
+        stopRoutes = net ? stopRoutesOf(net) : null;
+        liveDirty = true;
+        // A subject that arrived before the artefact (the address's &linija=) is fitted now that its geometry is here.
+        if (appliedSubject) handle.select?.(selectionOfSubject(appliedSubject), { fit: true });
+        frames.kick();
+      },
+      onSelect: (sel) => {
+        let next = subjectFromSelection(sel);
+        if (!next && sel?.kind === 'vehicle') {
+          // A tap on a tram is a tap on its line.
+          const routeId = handle.vehicles?.().find((v) => v.id === sel.id)?.routeId ?? null;
+          if (routeId) {
+            next = { kind: 'route', id: routeId };
+            handle.select?.({ kind: 'route', id: routeId });
+          }
+        }
+        view.set({ subject: next }, 'map');
+      },
     },
     {
       createModel: (net) => {
@@ -235,17 +286,39 @@ function mountMapLayerV1(ctx: SnimkaContext, container: HTMLElement, hooks: MapL
   }
   let lastStatic: { points: MapPoint[]; lines: MapLine[] } = { points: [], lines: [] };
 
+  /** The living network for the instant, once per five-minute sample (or when the layer or the artefact changed). */
+  function liveAt(atSec: number): void {
+    const slot = routeSlotAt(ctx.routes, atSec);
+    const on = layers.get().live;
+    if (slot === lastLiveSlot && on === lastLiveOn && !liveDirty) return;
+    lastLiveSlot = slot;
+    lastLiveOn = on;
+    liveDirty = false;
+    const states = aliveStates(ctx.routes, atSec);
+    lastCounts = liveCounts(states);
+    const probe = `${lastCounts.alive}/${lastCounts.dead}/${lastCounts.quiet}`;
+    if (container.dataset.snAlive !== probe) container.dataset.snAlive = probe;
+    if (on) {
+      const { alive, dead } = aliveSets(states);
+      handle.setLiveNetwork?.({ alive, dead, stopsAlive: stopAliveSet(stopRoutes, states) });
+    } else handle.setLiveNetwork?.(null);
+  }
+
   const offFrames = frames.subscribe((t) => {
     if (disposed) return;
     const atSec = t / 1000;
     const speed = clock.speed();
     const playing = clock.playing();
     const compare = layers.get().compare;
+    const compareMs = compareInstantFor(comparisonFor(ctx, atSec), t);
     store?.want('396', atSec, speed, playing);
-    if (compare) store?.want('395', compareInstant(t) / 1000, speed, playing);
+    if (compare) store?.want('395', compareMs / 1000, speed, playing);
 
     const motion: ChunkState = indexFailed ? 'idle' : !store ? 'loading' : speed === 3600 && playing ? 'idle' : store.state('396', atSec);
     if (motion !== lastMotion) { lastMotion = motion; hooks.onMotion(motion); }
+
+    const at = formatZagrebLocal(t);
+    if (at !== lastAt) { lastAt = at; container.dataset.snAt = at; }
 
     const next = staticAt(atSec);
     if (next) lastStatic = next;
@@ -254,58 +327,121 @@ function mountMapLayerV1(ctx: SnimkaContext, container: HTMLElement, hooks: MapL
       handle.update(lastStatic.points, lastStatic.lines);
     }
 
+    liveAt(atSec);
+
     if (compare && net395 && store && handle.setGhosts) {
       const real = Date.now();
       if (real - lastGhostAt >= GHOST_INTERVAL_MS - 1) {
         lastGhostAt = real;
-        const pair = store.at('395', compareInstant(t) / 1000);
-        handle.setGhosts(pair ? ghostsAt(pair.current, pair.next, t, net395) : []);
+        const pair = store.at('395', compareMs / 1000);
+        const points = pair ? ghostsAt(pair.current, pair.next, t, net395, compareMs) : [];
+        handle.setGhosts(points);
         ghostsShown = true;
+        const count = String(points.length);
+        if (container.dataset.snGhosts !== count) container.dataset.snGhosts = count;
       }
     } else if (ghostsShown && handle.setGhosts) {
       handle.setGhosts([]);
       ghostsShown = false;
+      container.dataset.snGhosts = '0';
     }
   });
 
   const offTick = clock.onTick((_, reason) => {
     nudgeDue = true;
-    if (reason === 'seek' && !clock.playing()) fitPending = !userMoved;
+    if (reason === 'seek' && !clock.playing()) fitPending = !userMoved && view.get().subject === null;
     else if (reason === 'play') fitPending = false;
   });
   const offLayers = layers.onChange((next, previous) => {
     if (next.closures !== previous.closures) handle.setClosuresVisible?.(next.closures);
+    if (next.live !== previous.live) liveDirty = true;
     nudgeDue = true;
     frames.kick();
   });
   const offTheme = ctx.theme.onChange((theme) => handle.setTheme?.(theme));
 
-  const destroy = (): void => {
-    disposed = true;
-    if (fitTimer !== null) clearTimeout(fitTimer);
-    offTheme();
-    offLayers();
-    offTick();
-    offFrames();
-    store?.destroy();
-    handle.destroy();
-  };
-  return { destroy, handle, onUserMove: (fn) => { moveListeners.add(fn); return () => { moveListeners.delete(fn); }; } };
-}
+  // ---- the subject: from the view store to the map ------------------------------------------------
+  function applySubject(subject: Subject | null, reason: ViewReason | undefined): void {
+    appliedSubject = subject;
+    if (subject) container.dataset.snSubject = `${subject.kind}:${subject.id}`;
+    else delete container.dataset.snSubject;
+    // A tap on the map is already where it is; anything else is selected and framed.
+    if (reason === 'map') return;
+    if (subject?.kind === 'station') {
+      handle.select?.(selectionOfSubject(subject));
+      const station = stations?.stations.find((s) => s.id === subject.id);
+      if (station) handle.setView?.({ center: [station.lon, station.lat], zoom: Math.max(handle.camera?.()?.zoom ?? 0, STATION_ZOOM) });
+      else handle.select?.(selectionOfSubject(subject), { fit: true });
+      return;
+    }
+    handle.select?.(selectionOfSubject(subject), { fit: subject !== null });
+  }
+  const offView = view.onChange((next, prev, reason) => {
+    if (!sameSubject(next.subject, prev.subject)) applySubject(next.subject, reason);
+  });
+  if (view.get().subject) applySubject(view.get().subject, 'address');
 
-/** The contract mount (app/src/snimka/contracts.ts MountMapLayer): the v1 map wrapped as a StageMap. Lane V2 fills in
- *  flyTo, select, vehicles and liveCounts with the living network and the director; here they are the no-ops of a stub. */
-export const mountMapLayer: MountMapLayer = async (ctx, host) => {
-  const mounted = mountMapLayerV1(ctx, host, { onMotion: (state) => { host.dataset.snMotion = state; } });
+  // ---- the contract ----------------------------------------------------------------------------------
   const map: StageMap = {
-    flyTo() {},
-    select() {},
-    camera: () => mounted.handle.camera?.() ?? { center: ZAGREB_CENTER, zoom: STAGE_ZOOM },
-    onUserMove: (fn) => mounted.onUserMove(fn),
-    vehicles: () => [],
-    liveCounts: () => null,
-    resize: () => { mounted.handle.resize?.(); },
-    destroy: () => { mounted.destroy(); },
+    flyTo(focus) {
+      if (disposed) return;
+      const subject = view.get().subject;
+      switch (focus.kind) {
+        case 'city':
+          if (!subject) handle.select?.(null);
+          handle.setView?.({ center: ZAGREB_CENTER, zoom: STAGE_ZOOM });
+          return;
+        case 'place': {
+          if (!subject) handle.select?.(null);
+          const camera = placeCamera(ctx, focus);
+          if (camera) handle.setView?.(camera);
+          return;
+        }
+        case 'route':
+          handle.select?.({ kind: 'route', id: focus.id }, { fit: true });
+          return;
+        case 'station': {
+          handle.select?.({ kind: 'place', id: `bajs:${focus.id}` });
+          const station = stations?.stations.find((s) => s.id === focus.id);
+          if (station) handle.setView?.({ center: [station.lon, station.lat], zoom: Math.max(handle.camera?.()?.zoom ?? 0, STATION_ZOOM) });
+          return;
+        }
+        case 'stop':
+          handle.select?.({ kind: 'stop', id: focus.id }, { fit: true });
+          return;
+        case 'layer':
+          layers.set({ [focus.layer]: true });
+          return;
+        default:
+          return;
+      }
+    },
+    select(subject, opts = {}) {
+      if (disposed) return;
+      const sel: MapSelection | null = selectionOfSubject(subject);
+      handle.select?.(sel, { fit: opts.fit === true });
+    },
+    camera: () => handle.camera?.() ?? { center: [ZAGREB_CENTER[0], ZAGREB_CENTER[1]], zoom: STAGE_ZOOM },
+    onUserMove: (fn) => { moveListeners.add(fn); return () => { moveListeners.delete(fn); }; },
+    vehicles: () => (handle.vehicles?.() ?? []).map((v) => ({ id: v.id, route: v.routeId ?? null, lonLat: [v.lon, v.lat] as [number, number] })),
+    liveCounts: () => lastCounts,
+    resize: () => { handle.resize?.(); },
+    destroy: () => {
+      if (disposed) return;
+      disposed = true;
+      unbindDirector();
+      if (fitTimer !== null) clearTimeout(fitTimer);
+      offView();
+      offTheme();
+      offLayers();
+      offTick();
+      offFrames();
+      store?.destroy();
+      handle.destroy();
+    },
   };
+  // Until the shell binds the director with its hooks (a second bind replaces this one), the map follows the recording on its own.
+  const unbindDirector = bindDirector(ctx, map, { spot: () => {} });
+  frames.kick();
   return map;
 };

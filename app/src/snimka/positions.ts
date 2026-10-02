@@ -160,7 +160,7 @@ export function drawnAt(current: MotionChunk | null, next: MotionChunk | null, a
   return out;
 }
 
-/** The first comparison day (Thu 24 Sep); lane V2 matches the weekday (context.ts comparisonFor). */
+/** The first comparison day (Thu 24 Sep), the v1 alignment; the stage aligns to the weekday-matched day (compareInstantFor). */
 const COMPARISON_MIDNIGHT_MS = SNIMKA_COMPARISONS[0].fromSec * 1000;
 
 /** The instant of the comparison day (Thu 24 Sep) at the same Zagreb time of day as the window instant. */
@@ -168,10 +168,17 @@ export function compareInstant(atMs: number): number {
   return COMPARISON_MIDNIGHT_MS + zagrebTimeOfDay(atMs);
 }
 
-/** The comparison day's positions at the window instant `atMs`, aligned by time of day, as [lon, lat] for setGhosts. */
-export function ghostsAt(chunk: MotionChunk | null, next: MotionChunk | null, atMs: number, net: GraphNetwork): [number, number][] {
+/** The instant of a given comparison day at the same Zagreb time of day as the window instant (S-12: the weekday-matched
+ *  day, context.ts comparisonFor). */
+export function compareInstantFor(comparison: { fromSec: number }, atMs: number): number {
+  return comparison.fromSec * 1000 + zagrebTimeOfDay(atMs);
+}
+
+/** The comparison day's positions at the window instant `atMs`, aligned by time of day, as [lon, lat] for setGhosts;
+ *  `compareMs` is the aligned instant when the caller aligned it already (compareInstantFor), else Thu 24 Sep's. */
+export function ghostsAt(chunk: MotionChunk | null, next: MotionChunk | null, atMs: number, net: GraphNetwork, compareMs = compareInstant(atMs)): [number, number][] {
   if (!chunk) return [];
-  return placedAt(chunk, next, compareInstant(atMs), net).map((placed) => toLonLat(placed.p));
+  return placedAt(chunk, next, compareMs, net).map((placed) => toLonLat(placed.p));
 }
 
 export interface ChunkPair { current: MotionChunk | null; next: MotionChunk | null }

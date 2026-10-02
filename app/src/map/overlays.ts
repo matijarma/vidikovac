@@ -88,6 +88,10 @@ export const LAYERS = Object.freeze({
   selectionRing: 'selection-ring',
   /** One grey circle per ghost, under the vehicle marks (ghostLayer below); never in overlayLayers. */
   ghosts: 'ghosts',
+  /** /snimka/'s living network (liveNetworkLayers, liveStopsLayer below): added only under CityMapOptions.liveNetwork; never in overlayLayers. */
+  liveNetworkCasing: 'live-network-casing',
+  liveNetwork: 'live-network',
+  liveStops: 'live-stops',
 });
 
 /** Layers drawn under the basemap's own labels, so street names still read over the network. */
@@ -102,13 +106,15 @@ export const BELOW_LABELS: ReadonlySet<string> = new Set([
 export const OUTLINE_DASH: readonly number[] = Object.freeze([3, 3]);
 export const OUTLINE_WIDTH_PX = 2;
 
-/** A ghost's radius in CSS px before the surface's symbol scale: a little under a vehicle dot at city zoom. */
-export const GHOST_RADIUS_PX = 3.5;
-export const GHOST_OPACITY = 0.7;
+/** A ghost's ring radius in CSS px before the surface's symbol scale (snimka v2, decision S-17: a hollow ring, not a disc). */
+export const GHOST_RADIUS_PX = 4.5;
+export const GHOST_STROKE_PX = 1.5;
+/** The disc's own fill is off: a ghost is a ring a real pill can stand inside without hiding it. */
+export const GHOST_OPACITY = 0;
 
 /**
- * The ghost layer of /snimka/: the comparison day's vehicles as plain grey
- * discs in the network's own neutral (`rail`, the same in both palettes),
+ * The ghost layer of /snimka/: the comparison day's vehicles as hollow grey
+ * rings in the network's own neutral (`rail`, the same in both palettes),
  * under every vehicle mark. One layer, one source (SOURCES.ghosts), no label
  * and no heading: a ghost is a position, never a vehicle anyone can read a
  * line off. Not part of overlayLayers, so a surface that never calls
@@ -119,7 +125,7 @@ export function ghostLayer(p: OverlayPalette, scale = 1): StyleLayerLike {
     id: LAYERS.ghosts,
     type: 'circle',
     source: SOURCES.ghosts,
-    paint: { 'circle-radius': GHOST_RADIUS_PX * scale, 'circle-color': p.rail, 'circle-opacity': GHOST_OPACITY },
+    paint: { 'circle-radius': GHOST_RADIUS_PX * scale, 'circle-color': p.rail, 'circle-opacity': GHOST_OPACITY, 'circle-stroke-color': p.rail, 'circle-stroke-width': GHOST_STROKE_PX },
   };
 }
 
@@ -1192,4 +1198,73 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       paint: { 'icon-color': p.selection, 'icon-halo-color': p.selectionHalo, 'icon-halo-width': 1 },
     },
   ];
+}
+
+// --- The living network of /snimka/ (plan of 2 October 2026, decision S-16 and section 3.3) ---
+//
+// Three layers a page asks for with CityMapOptions.liveNetwork, never part of
+// overlayLayers: the kiosk and the phone get exactly the style they always
+// had. They draw from the network and stops sources the map already carries
+// and read their state off MapLibre feature state (`alive`, `dead` on a main
+// shape keyed by `sid`; `alive` on a stop keyed by its id), which the page
+// sets through CityMapHandle.setLiveNetwork for the shapes whose state
+// changed. Never a filter or setData for this: both re-tile the source. The
+// three looks follow strings.ts layers.liveNote: a line with a vehicle in the
+// last fifteen minutes lights in ZET's own colour over a halo casing, a line
+// scheduled and without one is a grey line at the lit width, and a line
+// outside its timetable stays the thin base network underneath.
+
+/** A bus line's share of the tram width (the base network keeps the same ratio). */
+export const LIVE_BUS_WIDTH = 0.7;
+/** The grey of a scheduled line nobody runs, over the base network. */
+export const LIVE_DEAD_OPACITY = 0.55;
+/** The lit stops draw from here: under it the dots were clutter on the whole-city view. */
+export const LIVE_STOPS_MIN_ZOOM = 12;
+
+/** The lit line and its halo casing on SOURCES.network, main shapes only; inserted before LAYERS.networkSelectedCasing. */
+export function liveNetworkLayers(p: OverlayPalette, scale = 1): StyleLayerLike[] {
+  const alive: Expr = ['boolean', ['feature-state', 'alive'], false];
+  const dead: Expr = ['boolean', ['feature-state', 'dead'], false];
+  const main: Expr = ['==', ['get', 'main'], true];
+  const round = { 'line-cap': 'round', 'line-join': 'round' };
+  /** A bus at LIVE_BUS_WIDTH of the tram width; the zoom interpolation stays outermost, as MapLibre requires of `zoom`. */
+  const kindWidth: Expr = ['match', ['get', 'kind'], 'bus', LIVE_BUS_WIDTH, 1];
+  const width = (at10: number, at16: number): Expr => ['interpolate', ['linear'], ['zoom'], 10, ['*', at10 * scale, kindWidth], 16, ['*', at16 * scale, kindWidth]];
+  const tramColour: Expr = ['match', ['get', 'route'], ...Object.entries(LINE_COLOURS.colours as Record<string, string>).flat(), p.routeTram];
+  const litColour: Expr = ['match', ['get', 'kind'], 'tram', tramColour, 'bus', p.routeBus, p.other];
+  return [
+    {
+      id: LAYERS.liveNetworkCasing,
+      type: 'line',
+      source: SOURCES.network,
+      filter: main,
+      layout: round,
+      paint: { 'line-color': p.selectionHalo, 'line-width': width(3.5, 8), 'line-opacity': ['case', alive, 1, 0], 'line-opacity-transition': LIT_FADE },
+    },
+    {
+      id: LAYERS.liveNetwork,
+      type: 'line',
+      source: SOURCES.network,
+      filter: main,
+      layout: round,
+      paint: { 'line-color': ['case', alive, litColour, p.rail], 'line-width': width(1.8, 4.2), 'line-opacity': ['case', alive, 1, dead, LIVE_DEAD_OPACITY, 0], 'line-opacity-transition': LIT_FADE },
+    },
+  ];
+}
+
+/** A stop served by some alive line: a filled dot in its mode's ink on SOURCES.stops; inserted before LAYERS.stops. */
+export function liveStopsLayer(p: OverlayPalette, scale = 1): StyleLayerLike {
+  const alive: Expr = ['boolean', ['feature-state', 'alive'], false];
+  return {
+    id: LAYERS.liveStops,
+    type: 'circle',
+    source: SOURCES.stops,
+    minzoom: LIVE_STOPS_MIN_ZOOM,
+    paint: {
+      'circle-radius': zoomInterpolate(LIVE_STOPS_MIN_ZOOM, 2.2 * scale, 16, 5 * scale),
+      'circle-color': ['case', ['boolean', ['get', 'tram'], false], p.routeTram, p.routeBus],
+      'circle-opacity': ['case', alive, 1, 0],
+      'circle-opacity-transition': LIT_FADE,
+    },
+  };
 }
