@@ -155,7 +155,7 @@
 @media (min-width: 60rem) { .st-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } .st-card-wide { grid-column: 1 / -1; } }
 .st-skeleton-tall { min-block-size: 18rem; grid-column: 1 / -1; }
 /* Layouts inside a card follow the card's own width (a container query, whose rem is the reader's text size), not the viewport's. */
-.st-card { container: st-card / inline-size; display: grid; align-content: start; gap: var(--sp-3); padding: clamp(1rem, 2.5vw, 1.5rem); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); min-inline-size: 0; }
+.st-card { container: st-card / inline-size; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3); padding: clamp(1rem, 2.5vw, 1.5rem); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); min-inline-size: 0; }
 .st-card h3 { font-size: var(--type-head); letter-spacing: -0.01em; }
 .st-card-lede { color: var(--tone-text-muted); font-size: var(--type-control); line-height: 1.5; max-inline-size: 70ch; }
 .st-card-text { font-size: var(--type-control); line-height: 1.5; }

@@ -1,20 +1,21 @@
-// The dossier of /snimka/: the four question chips of Ukratko, Brojke, Zaslon,
-// Tijek, Zamjene, Što se vidjelo, Otvoreni podaci and I danas (plan section
-// 4). Mounted once on the page (the entry passes document.body); it fills the
-// slots the static HTML holds (data-sn="questions", data-sn-mount="brojke",
-// "screen", "strip", "alternatives", "reckoning", "open", "live" and the
-// five data-sn="kpi-*" tiles). Lane V5 owns this file; screen.ts is V4's,
-// strip.ts V3's, both mounted here as in v1.
+// The dossier of /snimka/ (plan v3): Što snimka pokazuje (the three tiles,
+// the cards and the block "Čime se moglo umjesto tramvaja"), the band "I
+// danas", Zaslon, Tijek and Podaci i izvori, in page order. Mounted once on
+// the page (the entry passes document.body); it fills the slots the static
+// HTML holds (data-sn-mount="brojke", "reckoning", "alternatives", "live",
+// "screen", "strip", "open"). Lane W4b owns this file; reckoning.ts,
+// alternatives.ts and strip.ts are W4a's, mounted here unchanged. The hero
+// has no question chips in v3 (V3-19): seekAndShow is the one helper every
+// "Pokaži u snimci" uses.
 import { isScreenIndex, type ScreenIndex } from '../../../shared/snimka';
 import { SnimkaError } from '../../../shared/snimka-codec';
-import { mountAlternatives, showOnStage } from './alternatives';
-import type { Mount, SnimkaContext } from './context';
+import { mountAlternatives } from './alternatives';
+import type { Layers, Mount, SnimkaContext } from './context';
 import type { Subject } from './contracts';
 import { mountLive } from './live';
 import { mountOpen } from './open';
 import { renderHero, renderReckoning, type ReckoningComparison } from './reckoning';
 import { mountScreen } from './screen';
-import { SN, fill } from './strings';
 import { mountStrip } from './strip';
 // The .line badge of the miniature's rows, as every other page that draws one loads it.
 import '../ui/signage.css';
@@ -30,79 +31,30 @@ function ensureTip(doc: Document): void {
   doc.body.append(tip);
 }
 
-// ---- the four questions -----------------------------------------------------------------
+// ---- the one seek helper ---------------------------------------------------------------
 
-export type QuestionId = 'q1' | 'q2' | 'q3' | 'q4';
-export interface Question { id: QuestionId; chapter: string | null; subject: Subject | null; bikes: boolean; section: string }
+export interface SeekOptions {
+  /** The subject to set (as the user), or null to clear it; left out, the subject stays. */
+  subject?: Subject | null;
+  /** Layers to switch, for instance { bikes: true }. */
+  layers?: Partial<Layers>;
+}
 
-/** The four entries of plan section 4: the chapter each opens, the subject and the layer it sets, the section that answers. */
-export const QUESTIONS: readonly Question[] = [
-  { id: 'q1', chapter: 'prvo-jutro', subject: null, bikes: true, section: 'zamjene' },
-  { id: 'q2', chapter: 'trece-jutro', subject: { kind: 'route', id: '17' }, bikes: false, section: 'tijek' },
-  { id: 'q3', chapter: 'stanje-usluge', subject: null, bikes: false, section: 'otvoreno' },
-  { id: 'q4', chapter: null, subject: null, bikes: false, section: 'vidjelo' },
-];
-
-const SECTION_NAMES: Record<string, string> = { zamjene: SN.nav.alternatives, tijek: SN.nav.strip, otvoreno: SN.nav.open, vidjelo: SN.nav.reckoning };
-
-/** What a chip does: pause; seek to its chapter; set its layer and subject; bring the instrument into view (q4 opens no
- *  chapter and goes to the section that answers it). Returns the chapter's instant (epoch seconds) or null. */
-export function askQuestion(ctx: Pick<SnimkaContext, 'clock' | 'events' | 'layers' | 'view' | 'doc' | 'reducedMotion'>, q: Question): number | null {
-  const chapter = q.chapter ? ctx.events.find((e) => e.id === q.chapter) ?? null : null;
-  if (q.bikes) ctx.layers.set({ bikes: true });
-  if (q.subject) ctx.view.set({ subject: q.subject }, 'user');
-  if (q.chapter) {
-    showOnStage(ctx, chapter ? chapter.atSec : null);
-    return chapter ? chapter.atSec : null;
-  }
+/** What every "Pokaži u snimci" of the dossier does (the tiles, the alternatives' rows): pause, seek to the instant
+ *  (epoch seconds; null keeps the clock where it is), set the subject and the layers, and bring the instrument into
+ *  view. The stage carries `scroll-margin-top`, so scrollIntoView lands it under the sticky bar, not behind it. */
+export function seekAndShow(ctx: Pick<SnimkaContext, 'clock' | 'doc' | 'layers' | 'view' | 'reducedMotion'>, atSec: number | null, opts: SeekOptions = {}): void {
   ctx.clock.pause();
-  ctx.doc.getElementById(q.section)?.scrollIntoView?.({ block: 'start', behavior: ctx.reducedMotion ? 'auto' : 'smooth' });
-  return null;
+  if (atSec !== null) ctx.clock.seek(atSec * 1000);
+  if (opts.layers) ctx.layers.set(opts.layers);
+  if (opts.subject !== undefined) ctx.view.set({ subject: opts.subject }, 'user');
+  const stage = ctx.doc.querySelector<HTMLElement>('[data-sn-stage]') ?? ctx.doc.getElementById('snimka');
+  stage?.scrollIntoView?.({ block: 'start', behavior: ctx.reducedMotion ? 'auto' : 'smooth' });
 }
 
-/** Turns the static chip links of Ukratko into buttons that act on the instrument, each with a link beside it to the
- *  section that answers (visually hidden until focused). Without JavaScript the links stay as they are. */
-export function upgradeQuestions(ctx: SnimkaContext, root: ParentNode): () => void {
-  const doc = ctx.doc;
-  const nav = root.querySelector<HTMLElement>('[data-sn="questions"]');
-  if (!nav) return () => {};
-  const offs: (() => void)[] = [];
-  for (const q of QUESTIONS) {
-    const link = nav.querySelector<HTMLAnchorElement>(`a[data-sn-q="${q.id.slice(1)}"]`);
-    if (!link) continue;
-    const text = link.textContent?.trim() || SN.narration[q.id];
-    const chapterTitle = q.chapter ? ctx.events.find((e) => e.id === q.chapter)?.title ?? null : null;
-    const button = doc.createElement('button');
-    button.type = 'button';
-    button.className = link.className;
-    for (const [k, v] of Object.entries(link.dataset)) if (v !== undefined) button.dataset[k] = v;
-    button.textContent = text;
-    const section = SECTION_NAMES[q.section] ?? q.section;
-    const hints: HTMLElement[] = [];
-    if (chapterTitle) {
-      const hint = doc.createElement('span');
-      hint.id = `sn-q-hint-${q.id}`;
-      hint.className = 'visually-hidden';
-      hint.textContent = fill(SN.questions.goes, { chapter: chapterTitle, section });
-      button.setAttribute('aria-describedby', hint.id);
-      hints.push(hint);
-    }
-    const onClick = (): void => { askQuestion(ctx, q); };
-    button.addEventListener('click', onClick);
-    const to = doc.createElement('a');
-    to.className = 'sn-q-to';
-    to.href = `#${q.section}`;
-    to.dataset.snQTo = q.id;
-    to.textContent = `${SN.questions.section} ${section}`;
-    const item = doc.createElement('span');
-    item.className = 'sn-q-item';
-    item.append(button, ...hints, to);
-    link.replaceWith(item);
-    offs.push(() => button.removeEventListener('click', onClick));
-  }
-  nav.dataset.snQuestions = 'ready';
-  return () => { for (const off of offs) off(); };
-}
+/** The dossier's mounts in page order: Što snimka pokazuje (tiles, cards, alternatives), I danas, Zaslon, Tijek,
+ *  Podaci i izvori. mountReport fills them in this order. */
+export const REPORT_MOUNTS = ['brojke', 'reckoning', 'alternatives', 'live', 'screen', 'strip', 'open'] as const;
 
 const decodeIndex = (raw: unknown): ScreenIndex => {
   if (!isScreenIndex(raw)) throw new SnimkaError('screen index: not a screen index');
@@ -112,10 +64,10 @@ const decodeIndex = (raw: unknown): ScreenIndex => {
 export const mountReport: Mount = (ctx, root) => {
   const doc = ctx.doc;
   ensureTip(doc);
-  const slot = (name: string): HTMLElement | null => root.querySelector<HTMLElement>(`[data-sn-mount="${name}"]`);
+  const slot = (name: (typeof REPORT_MOUNTS)[number]): HTMLElement | null => root.querySelector<HTMLElement>(`[data-sn-mount="${name}"]`);
   const teardowns: (() => void)[] = [];
-  teardowns.push(upgradeQuestions(ctx, root));
 
+  // ---- Što snimka pokazuje -------------------------------------------------------------
   // The Thursday is the normal day of the v1 cards; the Monday tile and the peak card read the weekday-matched days (S-12).
   const thursday = ctx.comparisons.find((c) => c.id === 'cet-0924') ?? ctx.comparisons[0] ?? null;
   const monday = ctx.comparisons.find((c) => c.weekday === 1) ?? null;
@@ -127,9 +79,14 @@ export const mountReport: Mount = (ctx, root) => {
   const reckoningRoot = slot('reckoning');
   const reckoning = reckoningRoot ? renderReckoning(reckoningRoot, ctx.series, thursday?.series ?? null, { routes: ctx.routes, comparisons: normals }) : null;
 
-  const stripRoot = slot('strip');
-  if (stripRoot) teardowns.push(mountStrip(ctx, stripRoot));
+  const alternativesRoot = slot('alternatives');
+  if (alternativesRoot) teardowns.push(mountAlternatives(ctx, alternativesRoot));
 
+  // ---- I danas, right after Što snimka pokazuje ------------------------------------------
+  const liveRoot = slot('live');
+  if (liveRoot) teardowns.push(mountLive(liveRoot, ctx));
+
+  // ---- Zaslon ---------------------------------------------------------------------------
   const screenRoot = slot('screen');
   if (screenRoot) teardowns.push(mountScreen(ctx, screenRoot, (index) => reckoning?.setIndex(index, index === null)));
   // The sentences card reads the index itself too (cached by path), so it does not depend on the screen's callback.
@@ -139,12 +96,11 @@ export const mountReport: Mount = (ctx, root) => {
     () => { if (!disposed && !screenRoot) reckoning?.setIndex(null, true); },
   );
 
-  for (const [name, mount] of [['alternatives', mountAlternatives], ['open', mountOpen]] as const) {
-    const el = slot(name);
-    if (el) teardowns.push(mount(ctx, el));
-  }
-  const liveRoot = slot('live');
-  if (liveRoot) teardowns.push(mountLive(liveRoot));
+  // ---- Tijek, Podaci i izvori -----------------------------------------------------------
+  const stripRoot = slot('strip');
+  if (stripRoot) teardowns.push(mountStrip(ctx, stripRoot));
+  const openRoot = slot('open');
+  if (openRoot) teardowns.push(mountOpen(ctx, openRoot));
 
   return () => {
     disposed = true;

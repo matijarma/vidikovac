@@ -1,106 +1,82 @@
-// The dossier's entry (app/src/snimka/report.ts): the four question chips of
-// Ukratko become buttons that pause, seek to their chapter, set the layer
-// or the subject and bring the instrument into view, each with a link to the
-// section that answers; and the curation the page and the director read
-// (scripts/snimka/news-curated.json) carries a valid focus, facts and
-// mentions for every headline.
+// The dossier's entry (app/src/snimka/report.ts): the hero has no question
+// chips in v3 (V3-19); seekAndShow pauses, seeks, sets the subject and the
+// layers and brings the instrument into view; the dossier mounts in page
+// order with the band "I danas" right after Što snimka pokazuje; and the
+// curation the page and the director read (scripts/snimka/news-curated.json)
+// carries a valid focus, facts and mentions for every headline.
 import { readFileSync } from 'node:fs';
 import { Window } from 'happy-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { isFocus, isMentions, type SnimkaEvent } from '../../shared/snimka';
-import { QUESTIONS, askQuestion, upgradeQuestions } from '../../app/src/snimka/report';
+import { isFocus, isMentions } from '../../shared/snimka';
+import * as report from '../../app/src/snimka/report';
+import { REPORT_MOUNTS, seekAndShow } from '../../app/src/snimka/report';
 import { createLayerStore, createViewStore, type SnimkaContext } from '../../app/src/snimka/context';
-import { buildEvents } from '../../e2e/snimka-fixtures';
 
 const html = readFileSync(new URL('../../app/snimka/index.html', import.meta.url), 'utf8');
 
-const V2_QUESTIONS = '<nav class="chips sn-q-nav" aria-label="Ulazi u snimku" data-sn="questions">' +
-  '<a class="chip sn-q-chip" href="#zamjene" data-sn-q="1" data-sn-chapter="prvo-jutro" data-sn-layer="bikes" data-sn-section="zamjene" data-sn-text="narration.q1">Što sam mogao umjesto tramvaja?</a>' +
-  '<a class="chip sn-q-chip" href="#tijek" data-sn-q="2" data-sn-chapter="trece-jutro" data-sn-subject="route:17" data-sn-section="tijek" data-sn-text="narration.q2">Koliko je štrajk bio potpun?</a>' +
-  '<a class="chip sn-q-chip" href="#otvoreno" data-sn-q="3" data-sn-chapter="stanje-usluge" data-sn-section="otvoreno" data-sn-text="narration.q3">Što je grad mogao znati u svakoj minuti?</a>' +
-  '<a class="chip sn-q-chip" href="#vidjelo" data-sn-q="4" data-sn-section="vidjelo" data-sn-text="narration.q4">Odakle brojevi i kako ih provjeriti?</a></nav>';
-
-function page(): { doc: Document; ctx: SnimkaContext; clock: { pause: ReturnType<typeof vi.fn>; seek: ReturnType<typeof vi.fn> }; scrolled: string[] } {
+function page(): { doc: Document; ctx: SnimkaContext; clock: { pause: ReturnType<typeof vi.fn>; seek: ReturnType<typeof vi.fn> }; scrolled: { id: string; opts: unknown }[] } {
   const win = new Window({ url: 'http://localhost/snimka/' });
   const doc = win.document as unknown as Document;
   doc.write(html.replace(/<script[^>]*><\/script>/g, ''));
-  // v3 removed the question chips from the page (report.ts upgradeQuestions is dead until W4b deletes it): the v2
-  // markup is put back here so the module keeps its tests while it lives.
-  if (!doc.querySelector('[data-sn="questions"]')) doc.getElementById('ukratko')!.insertAdjacentHTML('beforeend', V2_QUESTIONS);
   const stage = doc.querySelector('[data-sn-mount="stage"]')!;
   stage.innerHTML = '<div class="sn-stage-root" data-sn-stage=""></div>';
-  const scrolled: string[] = [];
-  for (const el of [...doc.querySelectorAll('[data-sn-stage], section[id], span[id][hidden]')]) {
-    (el as HTMLElement).scrollIntoView = () => { scrolled.push((el as HTMLElement).id || 'stage'); };
+  const scrolled: { id: string; opts: unknown }[] = [];
+  for (const el of [...doc.querySelectorAll('[data-sn-stage], section[id]')]) {
+    (el as HTMLElement).scrollIntoView = (opts?: unknown) => { scrolled.push({ id: (el as HTMLElement).id || 'stage', opts }); };
   }
   const clock = { pause: vi.fn(), seek: vi.fn() };
-  const events: SnimkaEvent[] = buildEvents().events;
-  const ctx = { doc, clock, events, layers: createLayerStore({ bikes: false }), view: createViewStore(), reducedMotion: true } as unknown as SnimkaContext;
+  const ctx = { doc, clock, layers: createLayerStore({ bikes: false }), view: createViewStore(), reducedMotion: true } as unknown as SnimkaContext;
   return { doc, ctx, clock, scrolled };
 }
 
-const atOf = (id: string): number => buildEvents().events.find((e) => e.id === id)!.atSec;
-
-describe('the four questions', () => {
-  it('q1 pauses, seeks to the first morning, turns the bikes on and brings the instrument into view', () => {
-    const { ctx, clock, scrolled } = page();
-    expect(askQuestion(ctx, QUESTIONS[0]!)).toBe(atOf('prvo-jutro'));
-    expect(clock.pause).toHaveBeenCalled();
-    expect(clock.seek).toHaveBeenCalledWith(atOf('prvo-jutro') * 1000);
-    expect(ctx.layers.get().bikes).toBe(true);
-    expect(ctx.view.get().subject).toBeNull();
-    expect(scrolled).toEqual(['stage']);
-  });
-  it('q2 seeks to the third morning and sets line 17 as the subject, as the user', () => {
-    const { ctx, clock } = page();
-    const reasons: unknown[] = [];
-    ctx.view.onChange((_s, _p, reason) => reasons.push(reason));
-    askQuestion(ctx, QUESTIONS[1]!);
-    expect(clock.seek).toHaveBeenCalledWith(atOf('trece-jutro') * 1000);
-    expect(ctx.view.get().subject).toEqual({ kind: 'route', id: '17' });
-    expect(reasons).toEqual(['user']);
-  });
-  it('q3 seeks to the chapter of the service state; q4 seeks nothing and goes to Što se vidjelo', () => {
-    const { ctx, clock, scrolled } = page();
-    askQuestion(ctx, QUESTIONS[2]!);
-    expect(clock.seek).toHaveBeenLastCalledWith(atOf('stanje-usluge') * 1000);
-    clock.seek.mockClear();
-    expect(askQuestion(ctx, QUESTIONS[3]!)).toBeNull();
-    expect(clock.seek).not.toHaveBeenCalled();
-    expect(clock.pause).toHaveBeenCalledTimes(2);
-    expect(scrolled.at(-1)).toBe('vidjelo');
-  });
-  it('a chapter the events lack still pauses and scrolls, without a seek', () => {
-    const { ctx, clock } = page();
-    (ctx as { events: SnimkaEvent[] }).events = [];
-    expect(askQuestion(ctx, QUESTIONS[0]!)).toBeNull();
-    expect(clock.pause).toHaveBeenCalled();
-    expect(clock.seek).not.toHaveBeenCalled();
+describe('no question chips', () => {
+  it('the page has none and the module no longer exports their code', () => {
+    expect(html).not.toContain('data-sn="questions"');
+    expect(html).not.toContain('sn-q-chip');
+    for (const name of ['QUESTIONS', 'askQuestion', 'upgradeQuestions']) expect(name in report, name).toBe(false);
   });
 });
 
-describe('upgradeQuestions on the page', () => {
-  it('turns the four links into buttons with their text, each followed by a link to the answering section', () => {
-    const { doc, ctx, clock } = page();
-    const off = upgradeQuestions(ctx, doc);
-    const nav = doc.querySelector<HTMLElement>('[data-sn="questions"]')!;
-    expect(nav.dataset.snQuestions).toBe('ready');
-    const buttons = [...nav.querySelectorAll<HTMLButtonElement>('button.sn-q-chip')];
-    expect(buttons.map((b) => b.type)).toEqual(['button', 'button', 'button', 'button']);
-    // The accessible name is the question alone; the chapter and section are its description.
-    expect(buttons.map((b) => b.textContent)).toEqual(['Što sam mogao umjesto tramvaja?', 'Koliko je štrajk bio potpun?', 'Što je grad mogao znati u svakoj minuti?', 'Odakle brojevi i kako ih provjeriti?']);
-    expect(nav.querySelectorAll('a.sn-q-chip')).toHaveLength(0);
-    const hint = doc.getElementById(buttons[1]!.getAttribute('aria-describedby')!)!;
-    expect(hint.textContent).toBe('Otvara poglavlje Treće jutro; odgovor je u odjeljku Tijek.');
-    expect(buttons[3]!.hasAttribute('aria-describedby')).toBe(false);
-    const links = [...nav.querySelectorAll<HTMLAnchorElement>('a.sn-q-to')];
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['#zamjene', '#tijek', '#otvoreno', '#vidjelo']);
-    expect(links[0]!.textContent).toBe('Odgovor u odjeljku Zamjene');
-    for (const id of ['zamjene', 'tijek', 'otvoreno', 'vidjelo']) expect(doc.getElementById(id)).not.toBeNull();
-    buttons[1]!.click();
-    expect(clock.seek).toHaveBeenCalledWith(atOf('trece-jutro') * 1000);
-    expect(ctx.view.get().subject).toEqual({ kind: 'route', id: '17' });
-    off();
+describe('seekAndShow', () => {
+  it('pauses, seeks to the instant, sets the layers and the subject as the user, and brings the instrument into view', () => {
+    const { ctx, clock, scrolled } = page();
+    const reasons: unknown[] = [];
+    ctx.view.onChange((_s, _p, reason) => reasons.push(reason));
+    seekAndShow(ctx, 1_790_000_000, { subject: { kind: 'station', id: 'bajs-1' }, layers: { bikes: true } });
+    expect(clock.pause).toHaveBeenCalledTimes(1);
+    expect(clock.seek).toHaveBeenCalledWith(1_790_000_000_000);
+    expect(ctx.layers.get().bikes).toBe(true);
+    expect(ctx.view.get().subject).toEqual({ kind: 'station', id: 'bajs-1' });
+    expect(reasons).toEqual(['user']);
+    // Reduced motion: no smooth scroll.
+    expect(scrolled).toEqual([{ id: 'stage', opts: { block: 'start', behavior: 'auto' } }]);
+  });
+  it('null keeps the clock where it is; without options the subject and the layers stay', () => {
+    const { ctx, clock, scrolled } = page();
+    ctx.view.set({ subject: { kind: 'route', id: '228' } });
+    seekAndShow(ctx, null);
+    expect(clock.pause).toHaveBeenCalledTimes(1);
+    expect(clock.seek).not.toHaveBeenCalled();
+    expect(ctx.view.get().subject).toEqual({ kind: 'route', id: '228' });
+    expect(ctx.layers.get().bikes).toBe(false);
+    expect(scrolled).toHaveLength(1);
+  });
+  it('without the stage it brings #snimka into view', () => {
+    const { doc, ctx, scrolled } = page();
+    doc.querySelector('[data-sn-stage]')!.remove();
+    seekAndShow({ ...ctx, reducedMotion: false }, 10);
+    expect(scrolled).toEqual([{ id: 'snimka', opts: { block: 'start', behavior: 'smooth' } }]);
+  });
+});
+
+describe('the mounts', () => {
+  it('fill the page\'s dossier slots in page order, the band "I danas" right after Što snimka pokazuje', () => {
+    const order = [...html.matchAll(/data-sn-mount="([a-z]+)"/g)].map((m) => m[1]).filter((name) => name !== 'stage');
+    expect([...REPORT_MOUNTS]).toEqual(order);
+    const live = REPORT_MOUNTS.indexOf('live');
+    expect(REPORT_MOUNTS.slice(0, live)).toEqual(['brojke', 'reckoning', 'alternatives']);
+    expect(html.indexOf('data-sn-mount="live"')).toBeGreaterThan(html.indexOf('<section id="pokazuje"'));
+    expect(html.indexOf('data-sn-mount="live"')).toBeLessThan(html.indexOf('<section id="zaslon"'));
   });
 });
 

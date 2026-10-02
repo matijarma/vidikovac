@@ -3,8 +3,7 @@
 // click on the line-228 headline moves the replay to its minute and makes the
 // line the subject, "Sve teme" clears it; the subtitle marks the record
 // ("Zapis") inside a run and today's rules ("Današnja pravila") between runs;
-// the Zaslon section shows five mornings with every picture loaded in view,
-// and its source control switches the rows of the miniature.
+// Zaslon moved to e2e/snimka-report.spec.ts, describe('Zaslon'), in v3.
 import { expect, test, type Page } from '@playwright/test';
 import { buildSnimkaFixture, routeSnimka } from './snimka-fixtures';
 
@@ -13,7 +12,6 @@ const fixture = buildSnimkaFixture();
 const feed = (page: Page) => page.locator('[data-sn-slot="voices"]');
 const feedItems = (page: Page) => page.locator('[data-sn-slot="voices"] .sn-feed-list:not(.sn-feed-older-list) > .sn-feed-item');
 const subtitle = (page: Page) => page.locator('[data-sn-slot="subtitle"] .sn-sub');
-const screen = (page: Page) => page.locator('[data-sn-mount="screen"]');
 
 async function open(page: Page, path: string): Promise<void> {
   await page.setViewportSize({ width: 1366, height: 900 });
@@ -74,35 +72,5 @@ test.describe('/snimka/ voices', () => {
     await expect(subtitle(page)).toHaveAttribute('data-sn-sub-source', 'observed');
     await expect(subtitle(page).locator('.sn-sub-mark')).toHaveText('Zapis');
     await expect(subtitle(page).locator('.sn-sub-text')).toHaveText('Tramvaj 6 prema Črnomercu polazi u 07:52 po voznom redu.');
-  });
-
-  test('Zaslon shows five mornings with every picture loaded in view, and its source control switches the rows', async ({ page }) => {
-    await open(page, '/snimka/?t=2026-09-28T07:50&brzina=600');
-    await page.locator('#zaslon').scrollIntoViewIfNeeded();
-    await expect(screen(page)).toHaveAttribute('data-sn-screen-source', 'observed');
-    const rows = screen(page).locator('.sn-mini .sn-mini-row');
-    await expect(rows).toHaveCount(4);
-    await screen(page).getByRole('button', { name: 'Današnja pravila' }).click();
-    await expect(screen(page)).toHaveAttribute('data-sn-screen-source', 'replayed');
-    await expect(screen(page).locator('.sn-mini')).toHaveAttribute('data-view', 'replayed');
-    await expect(rows).toHaveCount(2);
-    await expect(screen(page).locator('.sn-screen-note')).toBeVisible();
-    await expect(screen(page).getByRole('button', { name: 'Današnja pravila' })).toHaveAttribute('aria-pressed', 'true');
-    await screen(page).getByRole('button', { name: 'Zapis' }).click();
-    await expect(rows).toHaveCount(4);
-
-    const mornings = screen(page).locator('.sn-quartet-item');
-    await expect(mornings).toHaveCount(5);
-    await expect(mornings.locator('figcaption')).toHaveCount(5);
-    await expect(mornings.nth(4).locator('figcaption')).toContainText('Drugo uobičajeno jutro.');
-    await page.locator('.sn-quartet').scrollIntoViewIfNeeded();
-    await expect(mornings.first().locator('.sn-screen-replayed-text')).toHaveText('U pokretu su 2 vozila, po voznom redu oko 230.');
-    const images = screen(page).locator('img');
-    expect(await images.count()).toBeGreaterThanOrEqual(3);
-    await expect.poll(() => images.evaluateAll((imgs) => imgs.every((i) => (i as HTMLImageElement).complete && (i as HTMLImageElement).naturalWidth > 0))).toBe(true);
-    for (const img of await screen(page).locator('.sn-quartet-item img').all()) {
-      await expect(img).toHaveAttribute('loading', 'eager');
-      await expect(img).toHaveAttribute('fetchpriority', 'low');
-    }
   });
 });

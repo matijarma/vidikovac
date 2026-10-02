@@ -42,15 +42,17 @@
 .sn-error { max-inline-size: 32rem; font-size: var(--type-body); }
 .sn-error .state-actions { display: flex; }
 
-/* Sources: the static list, then the manifest's attribution and footnotes. */
+/* Sources: the static list; the manifest's attribution and notes are snimka-report.css (sn-attr-). */
 .sn-sources { list-style: none; margin: 0 0 var(--sp-6); padding: 0; display: grid; gap: var(--sp-3); max-inline-size: 70ch; }
 .sn-sources li { line-height: 1.55; padding-inline-start: 1.25rem; position: relative; }
 .sn-sources li::before { content: ''; position: absolute; inset-inline-start: 0; inset-block-start: 0.7em; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--tone-action-brand); }
-.sn-attribution, .sn-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); max-inline-size: 70ch; font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: 1.55; }
-.sn-attribution a { color: var(--tone-text-primary); }
-.sn-adaptation { display: block; }
-.sn-notes-title { margin-block: var(--sp-5) var(--sp-2); font-size: var(--type-head); letter-spacing: -0.01em; }
 .sn-links { margin-block-start: clamp(2rem, 4vw, 3rem); }
+
+/* Touch: the map's control buttons and the attribution toggle at 44 px (V3-26; MapLibre draws them at 29 and 24). */
+@media (pointer: coarse) {
+  .sn-stage .maplibregl-ctrl-group button { inline-size: 44px; block-size: 44px; }
+  .sn-stage .maplibregl-ctrl-attrib-button { inline-size: 44px; block-size: 44px; background-position: center; }
+}
 
 @media print {
   .sn-stage, .sn-error { display: none; }

@@ -7,7 +7,7 @@
 // the slots the HTML holds. State lives in the address (?t=, &brzina=,
 // &usporedba=, &panel=, &linija=, &stanica=, &mreza=, &prati=), written by
 // replaceState, so a link shows what its sender saw. The only live read of
-// the page is the card "I danas" (app/src/snimka/live.ts, decision S-10);
+// the page is the band "I danas" (app/src/snimka/live.ts, decision S-10);
 // nothing here references the map library: the stage loads it on its own.
 import {
   isEventsFile, isNewsFile, isNoticesFile, isPlacesFile, isRoutesFile, isSeriesFile, SNIMKA_COMPARISONS,
@@ -22,9 +22,10 @@ import { createLayerStore, createViewStore, type LoadedComparison, type SnimkaCo
 import { createRefCache, loadManifest } from '../snimka/data';
 import { parseZagrebLocal } from '../snimka/format';
 import { createFrameLoop } from '../snimka/frames';
+import { attributionHtml, notesHtml, notesOf } from '../snimka/open';
 import { mountReport } from '../snimka/report';
 import { mountStage } from '../snimka/stage';
-import { SN, fill } from '../snimka/strings';
+import { SN } from '../snimka/strings';
 import '../ui/page.css';
 import '../ui/print.css';
 
@@ -69,6 +70,7 @@ const USER_REASONS = new Set<TickReason>(['play', 'pause', 'seek', 'speed', 'end
 
 const stageRoot = document.querySelector<HTMLElement>('[data-sn-mount="stage"]');
 const attributionRoot = document.querySelector<HTMLElement>('[data-sn="attribution"]');
+const notesRoot = document.querySelector<HTMLElement>('[data-sn="notes"]');
 
 const guard = <T,>(ok: (raw: unknown) => raw is T, what: string) => (raw: unknown): T => {
   if (!ok(raw)) throw new SnimkaError(`${what}: not a ${what} file`);
@@ -100,44 +102,18 @@ function renderError(root: HTMLElement, retry: () => void): void {
   root.removeAttribute('aria-busy');
 }
 
-function renderAttribution(root: HTMLElement, manifest: SnimkaManifest): void {
-  const list = document.createElement('ul');
-  list.className = 'sn-attribution';
-  for (const a of manifest.attribution) {
-    const li = document.createElement('li');
-    li.dataset.source = a.id;
-    if (a.url) {
-      const link = document.createElement('a');
-      link.href = a.url;
-      link.rel = 'noopener noreferrer';
-      link.textContent = a.text;
-      li.append(link);
-    } else li.append(a.text);
-    li.append(` · ${a.licence}`);
-    if (a.adaptation) {
-      const adaptation = document.createElement('span');
-      adaptation.className = 'sn-adaptation';
-      adaptation.textContent = a.adaptation;
-      li.append(' ', adaptation);
-    }
-    list.append(li);
+/** Podaci i izvori: the manifest's attribution as one list, and its notes once each in a disclosure that stands open
+ *  where there is room (desktop) and closed on a phone (V3-24). */
+function renderSources(manifest: SnimkaManifest): void {
+  if (attributionRoot) {
+    attributionRoot.innerHTML = attributionHtml(manifest.attribution);
+    attributionRoot.removeAttribute('aria-busy');
   }
-  root.replaceChildren(list);
-  const notes = [...manifest.notes, ...manifest.comparisons.flatMap((c) => c.notes)];
-  if (notes.length) {
-    const h3 = document.createElement('h3');
-    h3.className = 'sn-notes-title';
-    h3.textContent = fill(SN.attribution.notes, { n: notes.length });
-    const ul = document.createElement('ul');
-    ul.className = 'sn-notes';
-    for (const note of notes) {
-      const li = document.createElement('li');
-      li.textContent = note;
-      ul.append(li);
-    }
-    root.append(h3, ul);
+  if (notesRoot) {
+    let wide = true;
+    try { wide = globalThis.matchMedia('(min-width: 48rem)').matches; } catch { /* no media queries: open */ }
+    notesRoot.innerHTML = notesHtml(notesOf(manifest), wide);
   }
-  root.removeAttribute('aria-busy');
 }
 
 let teardown: (() => void) | null = null;
@@ -215,7 +191,7 @@ async function boot(): Promise<void> {
     doc: document,
   };
 
-  if (attributionRoot) renderAttribution(attributionRoot, manifest);
+  renderSources(manifest);
   const unmountStage = mountStage(ctx, stageRoot);
   const unmountReport = mountReport(ctx, document.body);
 

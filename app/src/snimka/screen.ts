@@ -1,33 +1,40 @@
-// Zaslon: a purpose-built miniature of the public screen at Trg bana J.
-// Jelačića (its own sheet, never kiosk.css, so the replay never depends on the
-// wall's styles), the nearest capture of the real screen, and five mornings at
-// 07:45 (Monday to Friday). The miniature has two sources (plan section 4,
-// decision S-15), chosen by a segmented control whose default is the one the
-// subtitle uses at the clock: "Zapis", the latest recorded reading at or
-// before the clock from the observed run whose span covers it (between runs
-// the next timetable departures of the recorded board, with a note saying
-// so); and "Današnja pravila", the sentence and the rows today's rules give
-// for the minute, computed afterwards and labelled so. It re-renders only
-// when what it shows changes, never on a frame that changes nothing. Every
-// picture loads eagerly at low priority: the empty pictures of 1 October were
-// lazy images never scrolled into view, not missing data.
-import { isBoardSeries, isScreenIndex, isScreenRun, VOICE_PLACE, ZAGREB_OFFSET_S, type BoardSeries, type ScreenIndex, type ScreenReading, type ScreenRow, type ScreenRun } from '../../../shared/snimka';
+// Zaslon (plan v3, decision V3-22): a purpose-built miniature of the public
+// screen on Trg bana Jelačića (its own sheet, never kiosk.css, so the replay
+// never depends on the screen's styles) that always draws the record: the
+// latest recorded reading at or before the clock from the observed run whose
+// span covers it, or between runs the next timetable departures of the
+// recorded board with a note saying so. Under it two lines: what the screen
+// showed ("Na zaslonu je pisalo:", or that the minute was not recorded) and
+// the sentence today's rules give for the minute ("Po današnjim pravilima
+// pisalo bi:", computed afterwards and labelled so). A photograph of the real
+// screen shows only while the clock is inside the shown run (±1 min), as a
+// small thumbnail that opens the full picture. Then "Pet jutara u 07:45": a
+// five-row table (the day, the moving fleet against the normal day, the
+// recorded sentence of the slot run's 07:45 reading, today's sentence).
+// Everything re-renders only when what it shows changes, never on a frame
+// that changes nothing.
+import { isBoardSeries, isScreenIndex, isScreenRun, VOICE_PLACE, ZAGREB_OFFSET_S, type BoardSeries, type ScreenIndex, type ScreenReading, type ScreenRow, type ScreenRun, type SeriesFile } from '../../../shared/snimka';
 import { SnimkaError } from '../../../shared/snimka-codec';
 import { escapeHtml } from '../ui/dom/escape';
-import type { SnimkaContext } from './context';
-import { WEEKDAYS, zagrebClock, zagrebDay } from './format';
-import { MORNING_S, midnightOf } from './reckoning';
+import { comparisonFor, comparisonMinute, type SnimkaContext } from './context';
+import { num, zagrebClock, zagrebDay } from './format';
 import { SN, fill } from './strings';
-import { voiceData, voiceRows, voiceSentence, type VoiceAt } from './voice-data';
+import { voiceData, voiceSentence } from './voice-data';
 
 export type IndexRun = ScreenIndex['runs'][number];
 
-/** The nearest capture beside the miniature must be at most this far from the clock. */
-export const CAPTURE_WITHIN_S = 6 * 3600;
+/** The photograph shows only while the clock is this close to the shown run's span. */
+export const CAPTURE_WITHIN_S = 60;
 /** A board sample older than this (two missed samples) is no longer "the next departures". */
 export const BOARD_MAX_AGE_S = 15 * 60;
-/** A slot run counts for a morning of the quartet when it starts this close to 07:45. */
-export const QUARTET_WITHIN_S = 20 * 60;
+/** A slot run counts for a morning when it starts this close to 07:45. */
+export const MORNING_WITHIN_S = 20 * 60;
+/** 07:45 in seconds after the Zagreb midnight: the observer's daily slot. */
+export const MORNING_S = 7 * 3600 + 45 * 60;
+const DAY_S = 86_400;
+
+/** The Zagreb midnight at or before an instant (seconds). */
+const midnightOf = (sec: number): number => Math.floor((sec + ZAGREB_OFFSET_S) / DAY_S) * DAY_S - ZAGREB_OFFSET_S;
 
 // ---- choosing what to show (pure) ----------------------------------------------------
 
@@ -86,39 +93,57 @@ export function boardAt(board: BoardSeries, tSec: number): BoardView | null {
   return { at: sample.at, next: sample.next.filter(([, , atSec]) => atSec >= tSec) };
 }
 
-/** The run with a kiosk capture nearest the instant (zero inside its span), within six hours. */
-export function nearestCapture(index: ScreenIndex, tSec: number, within = CAPTURE_WITHIN_S): IndexRun | null {
-  let best: IndexRun | null = null;
-  let bestD = Infinity;
-  for (const r of index.runs) {
-    if (!r.captures.kiosk) continue;
-    const d = tSec < r.fromSec ? r.fromSec - tSec : tSec > r.toSec ? tSec - r.toSec : 0;
-    if (d < bestD || (d === bestD && best && r.fromSec > best.fromSec)) { best = r; bestD = d; }
-  }
-  return bestD <= within ? best : null;
+/** The run whose photograph shows beside the miniature: the shown run, when it has one and the clock is within a
+ *  minute of its span; otherwise none (a picture of another hour would repeat the wrong moment). */
+export function captureInRun(index: ScreenIndex, tSec: number, within = CAPTURE_WITHIN_S): IndexRun | null {
+  const run = runShownAt(index, tSec);
+  if (!run || !run.captures.kiosk) return null;
+  return tSec >= run.fromSec - within && tSec <= run.toSec + within ? run : null;
 }
 
-export type QuartetKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri';
-const QUARTET_DAY: Partial<Record<number, QuartetKey>> = { 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri' };
+export type MorningKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri';
+const MORNING_DAY: Partial<Record<number, MorningKey>> = { 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri' };
 
-export interface QuartetSlot { key: QuartetKey; atSec: number; run: IndexRun | null }
+export interface MorningSlot { key: MorningKey; atSec: number; run: IndexRun | null }
 
 /** The mornings at 07:45 inside the window (Monday to Friday), each with the slot run nearest it within twenty minutes. */
-export function quartet(index: ScreenIndex, fromSec: number, toSec: number): QuartetSlot[] {
-  const out: QuartetSlot[] = [];
-  for (let day = midnightOf(fromSec); day < toSec; day += 86_400) {
+export function mornings(index: ScreenIndex, fromSec: number, toSec: number): MorningSlot[] {
+  const out: MorningSlot[] = [];
+  for (let day = midnightOf(fromSec); day < toSec; day += DAY_S) {
     const atSec = day + MORNING_S;
     if (atSec < fromSec || atSec >= toSec) continue;
-    const key = QUARTET_DAY[new Date((day + ZAGREB_OFFSET_S) * 1000).getUTCDay()];
+    const key = MORNING_DAY[new Date((day + ZAGREB_OFFSET_S) * 1000).getUTCDay()];
     if (!key) continue;
     let run: IndexRun | null = null;
     for (const r of index.runs) {
-      if (r.kind !== 'slot' || Math.abs(r.fromSec - atSec) > QUARTET_WITHIN_S) continue;
+      if (r.kind !== 'slot' || Math.abs(r.fromSec - atSec) > MORNING_WITHIN_S) continue;
       if (!run || Math.abs(r.fromSec - atSec) < Math.abs(run.fromSec - atSec)) run = r;
     }
     out.push({ key, atSec, run });
   }
   return out;
+}
+
+/** The sentence a slot run recorded for its morning: the reading at or before 07:45, else its first (the observer's
+ *  slots started a few seconds into the minute). */
+export function morningSentence(run: Pick<ScreenRun, 'readings'>, atSec: number): string | null {
+  const reading = run.readings[Math.max(0, readingIndexAt(run, atSec))];
+  return reading ? reading.sentence : null;
+}
+
+/** "2 (321)": the fleet moving at the instant and, in brackets, the weekday-matched normal day at the same time of
+ *  day; "bez podatka" for either one that is missing, never 0. */
+export function movingText(ctx: Pick<SnimkaContext, 'series' | 'comparisons'>, atSec: number): string {
+  const nv = (v: number | null | undefined): string => (typeof v === 'number' ? num(v) : SN.strip.noValue);
+  const s: SeriesFile = ctx.series;
+  const m = Math.floor((atSec - s.t0) / 60);
+  const seen = m >= 0 && m < s.n ? s.seen.all[m] : null;
+  let normal: number | null = null;
+  if (ctx.comparisons.length) {
+    const cm = comparisonMinute(ctx, atSec);
+    normal = cm === null ? null : comparisonFor(ctx, atSec).series.seen.all[cm] ?? null;
+  }
+  return `${nv(seen)} (${nv(normal)})`;
 }
 
 export interface Badge { label: string; kind: 'tram' | 'bus' | 'other'; rest: string }
@@ -201,23 +226,16 @@ export function screenSourceAt(index: ScreenIndex | null, tSec: number): ScreenS
 }
 export type ScreenSource = 'observed' | 'replayed';
 
-/** The miniature for one replayed minute: today's sentence and rows, marked as today's rules. */
-export function replayedHtml(place: string, voice: VoiceAt): string {
-  const sentence = voiceSentence(voice.file, voice.minute);
-  const rows: RowView[] = voiceRows(voice.file, voice.minute).map((row) => {
-    const badge = badgeOf({ kind: row.kind, title: row.title });
-    return { when: row.atSec === null ? null : zagrebClock(row.atSec * 1000), live: row.live, badge, title: badge ? badge.rest : row.title, sub: row.sub, timed: row.kind !== 'always', caveat: row.caveat };
-  });
-  return head(place, voice.minute.at, sentence ?? SN.screen.noReplayed, { key: 'replayed', text: SN.subtitle.markReplayed }) + nearby(rows, null);
-}
-
 const captureAlt = (run: IndexRun): string => fill(SN.screen.captureCaption, { day: zagrebDay(run.fromSec * 1000), time: zagrebClock(run.fromSec * 1000) });
 
-/** A capture of the real screen as a picture, its alt and caption naming the day and the time. */
-export function captureHtml(url: string, run: IndexRun, caption: string | null): string {
-  const alt = captureAlt(run);
-  return `<picture><source srcset="${escapeHtml(url)}" type="image/webp"><img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="1280" height="720" loading="eager" fetchpriority="low" decoding="async"></picture>` +
-    `<figcaption>${caption === null ? escapeHtml(alt) : caption}</figcaption>`;
+/** The photograph of the real screen as a small thumbnail: a link to the full picture (a new tab), its text naming
+ *  the day and the time. Eager at low priority: a lazy picture below the fold was never fetched on 1 October. */
+export function captureHtml(url: string, run: IndexRun): string {
+  return `<a class="sn-screen-capture-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">` +
+    `<img class="sn-screen-thumb" src="${escapeHtml(url)}" alt="" width="1280" height="720" loading="eager" fetchpriority="low" decoding="async">` +
+    `<span class="sn-screen-capture-text"><span class="sn-screen-capture-open">${escapeHtml(SN.screen.captureOpen)}</span>` +
+    `<span class="sn-screen-capture-when">${escapeHtml(captureAlt(run))}</span></span>` +
+    `<span class="visually-hidden"> ${escapeHtml(SN.news.newTab)}</span></a>`;
 }
 
 // ---- the mount ---------------------------------------------------------------------------
@@ -235,27 +253,34 @@ const decodeBoard = (raw: unknown): BoardSeries => {
   return raw;
 };
 
+const SKELETON_LINE = '<span class="skeleton sn-screen-line-skeleton"></span>';
+
 /** Zaslon on the page. Resolves the screen index for whoever else needs it (the reckoning's screen card). */
 export function mountScreen(ctx: SnimkaContext, root: HTMLElement, onIndex: (index: ScreenIndex | null) => void): () => void {
   const S = SN.screen;
   root.innerHTML =
-    `<div class="sn-screen-source" role="group" aria-label="${escapeHtml(S.sourceLabel)}">` +
-    `<span class="sn-screen-source-label" aria-hidden="true">${escapeHtml(S.sourceLabel)}</span>` +
-    `<button type="button" class="sn-screen-source-option" data-source="observed" aria-pressed="false">${escapeHtml(S.sourceObserved)}</button>` +
-    `<button type="button" class="sn-screen-source-option" data-source="replayed" aria-pressed="false">${escapeHtml(S.sourceReplayed)}</button>` +
-    `</div>` +
-    `<p class="sn-screen-note" hidden>${escapeHtml(S.replayedNote)}</p>` +
-    `<div class="sn-screen-grid">` +
+    '<div class="sn-screen-grid">' +
     `<div class="sn-mini" role="group" aria-label="${escapeHtml(S.miniLabel)}" data-view="loading" aria-busy="true"><span class="skeleton sn-mini-skeleton"></span></div>` +
-    `<figure class="sn-capture" data-view="none"><p class="sn-capture-none">${escapeHtml(S.noCapture)}</p></figure>` +
-    `</div>` +
-    `<section class="sn-quartet" aria-labelledby="sn-quartet-h"><h3 id="sn-quartet-h">${escapeHtml(S.quartetTitle)}</h3><p class="sn-quartet-lede">${escapeHtml(S.quartetLede)}</p><ol class="sn-quartet-list"></ol></section>`;
+    '<div class="sn-screen-side">' +
+    '<dl class="sn-screen-lines">' +
+    `<div class="sn-screen-line" data-line="wrote"><dt>${escapeHtml(S.wrote)}</dt><dd data-sn="screen-wrote" aria-busy="true">${SKELETON_LINE}</dd></div>` +
+    `<div class="sn-screen-line" data-line="would"><dt title="${escapeHtml(S.replayedNote)}">${escapeHtml(S.wouldWrite)}<span class="visually-hidden"> ${escapeHtml(S.replayedNote)}</span></dt><dd data-sn="screen-would" aria-busy="true">${SKELETON_LINE}</dd></div>` +
+    '</dl>' +
+    '<div class="sn-screen-capture" data-sn="screen-capture" hidden></div>' +
+    '</div></div>' +
+    '<section class="sn-screen-mornings" aria-labelledby="sn-mornings-h">' +
+    `<h3 id="sn-mornings-h" class="sn-screen-mornings-title">${escapeHtml(S.morningsTitle)}</h3>` +
+    `<p class="sn-screen-mornings-lede">${escapeHtml(S.morningsLede)}</p>` +
+    '<table class="sn-screen-table">' +
+    `<caption class="visually-hidden">${escapeHtml(S.morningsTitle)}</caption>` +
+    `<thead><tr><th scope="col">${escapeHtml(S.colDay)}</th><th scope="col">${escapeHtml(S.colMoving)}</th><th scope="col">${escapeHtml(S.colWrote)}</th><th scope="col">${escapeHtml(S.colWould)}</th></tr></thead>` +
+    '<tbody data-sn="mornings"></tbody></table></section>';
   root.removeAttribute('aria-busy');
   const mini = root.querySelector<HTMLElement>('.sn-mini')!;
-  const capture = root.querySelector<HTMLElement>('.sn-capture')!;
-  const list = root.querySelector<HTMLElement>('.sn-quartet-list')!;
-  const note = root.querySelector<HTMLElement>('.sn-screen-note')!;
-  const options = [...root.querySelectorAll<HTMLButtonElement>('.sn-screen-source-option')];
+  const wrote = root.querySelector<HTMLElement>('[data-sn="screen-wrote"]')!;
+  const would = root.querySelector<HTMLElement>('[data-sn="screen-would"]')!;
+  const capture = root.querySelector<HTMLElement>('[data-sn="screen-capture"]')!;
+  const body = root.querySelector<HTMLElement>('[data-sn="mornings"]')!;
 
   let destroyed = false;
   let index: ScreenIndex | null = null;
@@ -266,9 +291,7 @@ export function mountScreen(ctx: SnimkaContext, root: HTMLElement, onIndex: (ind
   const failed = new Set<string>();
   let miniKey = '';
   let captureKey = '';
-  /** The reader's choice; null follows the subtitle's source at the clock. */
-  let chosen: ScreenSource | null = null;
-  let shownSource: ScreenSource | null = null;
+  const lineKeys = { wrote: '', would: '' };
   const voice = voiceData(ctx);
 
   const setMini = (key: string, view: string, html: string): void => {
@@ -279,127 +302,143 @@ export function mountScreen(ctx: SnimkaContext, root: HTMLElement, onIndex: (ind
     if (view === 'loading') mini.setAttribute('aria-busy', 'true');
     else mini.removeAttribute('aria-busy');
   };
-
-  const setSource = (source: ScreenSource): void => {
-    if (source === shownSource) return;
-    shownSource = source;
-    root.dataset.snScreenSource = source;
-    for (const b of options) b.setAttribute('aria-pressed', b.dataset.source === source ? 'true' : 'false');
-    note.hidden = source !== 'replayed';
+  /** One of the two lines: its text, the skeleton while on its way (null), the muted look when it says "none". */
+  const setLine = (which: 'wrote' | 'would', text: string | null, none: boolean): void => {
+    const key = text === null ? '\u0000loading' : `${none ? '-' : '+'}${text}`;
+    if (lineKeys[which] === key) return;
+    lineKeys[which] = key;
+    const el = which === 'wrote' ? wrote : would;
+    if (text === null) { el.innerHTML = SKELETON_LINE; el.setAttribute('aria-busy', 'true'); return; }
+    el.textContent = text;
+    el.removeAttribute('aria-busy');
+    if (none) el.dataset.state = 'none';
+    else delete el.dataset.state;
   };
 
   const load = (run: IndexRun): void => {
     if (runs.has(run.id) || pending.has(run.id) || failed.has(run.id)) return;
     pending.add(run.id);
     ctx.data.get(run.file, decodeRun).then(
-      (value) => { pending.delete(run.id); runs.set(run.id, value); if (!destroyed) update(ctx.clock.now()); },
-      () => { pending.delete(run.id); failed.add(run.id); if (!destroyed) update(ctx.clock.now()); },
+      (value) => { pending.delete(run.id); runs.set(run.id, value); if (!destroyed) { update(ctx.clock.now()); renderMornings(); } },
+      () => { pending.delete(run.id); failed.add(run.id); if (!destroyed) { update(ctx.clock.now()); renderMornings(); } },
     );
   };
 
-  const showObserved = (tSec: number): void => {
-    const covering = runShownAt(index!, tSec);
-    const run = covering && !failed.has(covering.id) ? covering : null;
+  const showRecord = (tSec: number): void => {
+    const shown = runShownAt(index!, tSec);
+    const run = shown && !failed.has(shown.id) ? shown : null;
     if (run) {
       const loaded = runs.get(run.id);
       if (!loaded) {
         load(run);
         setMini(`loading:${run.id}`, 'loading', '<span class="skeleton sn-mini-skeleton"></span>');
-      } else {
-        // Before the first reading (a run starting within RUN_LEAD_S) the first one shows, with its own time.
-        const i = Math.max(0, readingIndexAt(loaded, tSec));
-        const reading = loaded.readings[i];
-        if (reading) setMini(`run:${run.id}:${i}`, 'reading', readingHtml(loaded, reading));
+        setLine('wrote', null, false);
+        return;
       }
-    } else {
-      const view = board ? boardAt(board, tSec) : null;
-      if (view) setMini(`board:${view.at}:${view.next.map((d) => d[2]).join(',')}`, 'board', boardHtml(board!.name, view));
-      else setMini('none', 'none', head(S.place, tSec, S.boardNote, null) + nearby([], S.boardNone));
+      // Before the first reading (a run starting within RUN_LEAD_S) the first one shows, with its own time.
+      const i = Math.max(0, readingIndexAt(loaded, tSec));
+      const reading = loaded.readings[i];
+      if (reading) {
+        setMini(`run:${run.id}:${i}`, 'reading', readingHtml(loaded, reading));
+        setLine('wrote', reading.sentence, false);
+        return;
+      }
     }
+    const view = board ? boardAt(board, tSec) : null;
+    if (view) setMini(`board:${view.at}:${view.next.map((d) => d[2]).join(',')}`, 'board', boardHtml(board!.name, view));
+    else setMini('none', 'none', head(S.place, tSec, S.boardNote, null) + nearby([], S.boardNone));
+    setLine('wrote', S.notRecorded, true);
   };
 
-  const showReplayed = (tSec: number): void => {
+  const showWould = (tSec: number): void => {
     const at = voice.minuteAt(tSec);
-    if (at === 'loading') setMini('voice:loading', 'loading', '<span class="skeleton sn-mini-skeleton"></span>');
-    else if (at === null) setMini(`voice:none:${Math.floor(tSec / 60)}`, 'none', head(S.place, Math.floor(tSec / 60) * 60, S.noReplayed, null) + nearby([], SN.strip.noValue));
-    else setMini(`voice:${at.file.day}:${at.i}`, 'replayed', replayedHtml(S.place, at));
+    if (at === 'loading') { setLine('would', null, false); return; }
+    const sentence = at ? voiceSentence(at.file, at.minute) : null;
+    setLine('would', sentence ?? S.noReplayed, sentence === null);
+  };
+
+  const showCapture = (tSec: number): void => {
+    const run = captureInRun(index!, tSec);
+    const key = run ? run.id : 'none';
+    if (key === captureKey) return;
+    captureKey = key;
+    capture.hidden = !run;
+    capture.innerHTML = run && run.captures.kiosk ? captureHtml(ctx.data.url(run.captures.kiosk), run) : '';
   };
 
   const update = (tMs: number): void => {
     if (!index) return;
     const tSec = Math.floor(tMs / 1000);
-    const source = chosen ?? screenSourceAt(index, tSec);
-    setSource(source);
-    if (source === 'observed') showObserved(tSec);
-    else showReplayed(tSec);
+    showRecord(tSec);
+    showWould(tSec);
+    showCapture(tSec);
     const next = nextRunAfter(index, tSec);
     if (next) load(next);
-    const near = nearestCapture(index, tSec);
-    const key = near ? near.id : 'none';
-    if (key !== captureKey) {
-      captureKey = key;
-      capture.dataset.view = near ? 'capture' : 'none';
-      capture.innerHTML = near && near.captures.kiosk
-        ? captureHtml(ctx.data.url(near.captures.kiosk), near, null)
-        : `<p class="sn-capture-none">${escapeHtml(S.noCapture)}</p>`;
-    }
   };
 
-  for (const b of options) {
-    b.addEventListener('click', () => {
-      chosen = b.dataset.source === 'replayed' ? 'replayed' : 'observed';
-      update(ctx.clock.now());
-    });
-  }
-
-  // ---- five mornings: the capture where one exists, and today's sentence for every morning ----
-  let slots: QuartetSlot[] = [];
-  const replayedLine = (slot: QuartetSlot): string => {
+  // ---- five mornings: the day, the fleet against the normal day, the record and today's sentence ----
+  let slots: MorningSlot[] = [];
+  let morningsWanted = false;
+  let morningsKey = '';
+  /** The voice index could not be had: every morning says it has no computed sentence. */
+  let voiceFailed = false;
+  const wroteCell = (slot: MorningSlot): string => {
+    const run = slot.run;
+    if (!run || failed.has(run.id)) return `<span class="sn-screen-none">${escapeHtml(S.notRecorded)}</span>`;
+    const loaded = runs.get(run.id);
+    if (!loaded) return SKELETON_LINE;
+    const sentence = morningSentence(loaded, slot.atSec);
+    // No photograph per morning (plan §9 cuts the thumbnails first): at table size it reads nothing.
+    return sentence ? `<span class="sn-screen-said">${escapeHtml(sentence)}</span>` : `<span class="sn-screen-none">${escapeHtml(S.notRecorded)}</span>`;
+  };
+  const wouldCell = (slot: MorningSlot): string => {
+    if (voice.index() === null && !voiceFailed) return SKELETON_LINE;
     const day = voice.dayAt(slot.atSec);
     const file = day ? voice.file(day.day) : null;
-    if (file === undefined) return `<p class="sn-screen-replayed" data-state="loading"><span class="sn-screen-replayed-kicker">${escapeHtml(SN.subtitle.replayed)}</span> <span class="skeleton sn-screen-replayed-skeleton"></span></p>`;
+    if (file === undefined) return SKELETON_LINE;
     const minute = file ? file.minutes[Math.floor((slot.atSec - file.t0) / file.step)] ?? null : null;
     const sentence = file && minute ? voiceSentence(file, minute) : null;
-    return `<p class="sn-screen-replayed"${sentence ? '' : ' data-state="none"'}><span class="sn-screen-replayed-kicker">${escapeHtml(SN.subtitle.replayed)}</span> ` +
-      `<span class="sn-screen-replayed-text">${escapeHtml(sentence ?? S.noReplayed)}</span></p>`;
+    return sentence ? escapeHtml(sentence) : `<span class="sn-screen-none">${escapeHtml(S.noReplayed)}</span>`;
   };
-  const renderQuartet = (): void => {
-    list.innerHTML = slots
-      .map((slot) => {
-        const day = `<strong class="sn-quartet-day">${escapeHtml(zagrebDay(slot.atSec * 1000))}</strong> ${escapeHtml(S.quartet[slot.key])}`;
-        const body = slot.run?.captures.kiosk
-          ? captureHtml(ctx.data.url(slot.run.captures.kiosk), slot.run, day)
-          : `<p class="sn-capture-none">${escapeHtml(S.noCapture)}</p><figcaption>${day}</figcaption>`;
-        return `<li class="sn-quartet-item" data-day="${slot.key}" data-weekday="${WEEKDAYS[new Date((slot.atSec + ZAGREB_OFFSET_S) * 1000).getUTCDay()]}"><figure class="sn-capture">${body}</figure>${replayedLine(slot)}</li>`;
-      })
-      .join('');
+  const renderMornings = (): void => {
+    if (!slots.length) return;
+    const html = slots.map((slot) =>
+      `<tr data-day="${slot.key}">` +
+      `<th scope="row"><span class="sn-screen-day">${escapeHtml(zagrebDay(slot.atSec * 1000))}</span><span class="sn-screen-caption">${escapeHtml(S.mornings[slot.key])}</span></th>` +
+      `<td class="sn-screen-moving" data-label="${escapeHtml(S.colMoving)}">${escapeHtml(movingText(ctx, slot.atSec))}</td>` +
+      `<td data-label="${escapeHtml(S.colWrote)}" data-sn="morning-wrote">${wroteCell(slot)}</td>` +
+      `<td data-label="${escapeHtml(S.colWould)}" data-sn="morning-would">${wouldCell(slot)}</td></tr>`).join('');
+    if (html === morningsKey) return;
+    morningsKey = html;
+    body.innerHTML = html;
   };
-  // The mornings' sentences are five day files: they load when the section comes near the view (at once without an observer).
-  let mornings: IntersectionObserver | null = null;
+  // The mornings' sentences are up to five run files and five day files: they load when the table comes near the
+  // view (at once without an observer).
+  let observer: IntersectionObserver | null = null;
   const loadMornings = (): void => {
-    mornings?.disconnect();
-    mornings = null;
-    void voice.loadIndex().then(() => {
+    observer?.disconnect();
+    observer = null;
+    if (morningsWanted) return;
+    morningsWanted = true;
+    for (const slot of slots) if (slot.run) load(slot.run);
+    void voice.loadIndex().then((ix) => {
       if (destroyed) return;
+      voiceFailed = ix === null;
       const days = new Set(slots.map((slot) => voice.dayAt(slot.atSec)?.day).filter((d): d is string => Boolean(d)));
-      if (!days.size) { renderQuartet(); return; }
       for (const day of days) void voice.load(day);
+      renderMornings();
     });
   };
   const watchMornings = (): void => {
     const IO = (globalThis as { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver;
     if (!IO) { loadMornings(); return; }
-    mornings = new IO((entries) => { if (entries.some((e) => e.isIntersecting)) loadMornings(); }, { rootMargin: '600px 0px' });
-    mornings.observe(list);
+    observer = new IO((entries) => { if (entries.some((e) => e.isIntersecting)) loadMornings(); }, { rootMargin: '600px 0px' });
+    observer.observe(body);
   };
-  let quartetKey = '';
   const offVoice = voice.onLoad(() => {
     if (destroyed) return;
-    if (slots.length) {
-      const key = slots.map((slot) => { const d = voice.dayAt(slot.atSec); return d ? String(voice.file(d.day) === undefined ? 'u' : voice.file(d.day) ? 'f' : 'n') : '-'; }).join('');
-      if (key !== quartetKey) { quartetKey = key; renderQuartet(); }
-    }
-    if (shownSource === 'replayed') update(ctx.clock.now());
+    renderMornings();
+    update(ctx.clock.now());
   });
 
   Promise.all([
@@ -411,8 +450,8 @@ export function mountScreen(ctx: SnimkaContext, root: HTMLElement, onIndex: (ind
       index = ix;
       board = b;
       onIndex(ix);
-      slots = quartet(ix, ctx.manifest.window.fromSec, ctx.manifest.window.toSec);
-      renderQuartet();
+      slots = mornings(ix, ctx.manifest.window.fromSec, ctx.manifest.window.toSec);
+      renderMornings();
       watchMornings();
       update(ctx.clock.now());
     },
@@ -420,14 +459,16 @@ export function mountScreen(ctx: SnimkaContext, root: HTMLElement, onIndex: (ind
       if (destroyed) return;
       onIndex(null);
       setMini('error', 'error', `<p class="state" data-kind="down">${escapeHtml(SN.error.load)}</p>`);
-      list.innerHTML = '';
+      setLine('wrote', S.notRecorded, true);
+      setLine('would', S.noReplayed, true);
+      body.innerHTML = '';
     },
   );
 
   const off = ctx.frames.subscribe(update);
   return () => {
     destroyed = true;
-    mornings?.disconnect();
+    observer?.disconnect();
     offVoice();
     off();
   };

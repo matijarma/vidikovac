@@ -26,9 +26,9 @@
 .sn-body .st-kpi-value { font-variant-numeric: normal; }
 .sn-body .st-kpi-sub { font-variant-numeric: tabular-nums; }
 
-/* ---- Zaslon: the miniature, the capture beside it, the quartet ----------------- */
-.sn-screen-grid { display: grid; gap: var(--sp-5); align-items: start; }
-@media (min-width: 64rem) { .sn-screen-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
+/* ---- Zaslon: the miniature, the two lines and the photograph beside it, the five mornings (lane W4b) ---- */
+.sn-screen-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
+@media (min-width: 64rem) { .sn-screen-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--sp-5); } }
 .sn-mini { container: sn-mini / inline-size; display: grid; align-content: start; gap: var(--sp-3); min-inline-size: 0; min-block-size: 18rem; padding: clamp(0.875rem, 2vw, 1.25rem); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
 .sn-mini-skeleton { display: block; min-block-size: 16rem; }
 .sn-mini-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'where time' 'sentence sentence'; gap: var(--sp-2) var(--sp-3); align-items: baseline; padding-block-end: var(--sp-3); border-block-end: 1px solid var(--tone-stroke); }
@@ -65,17 +65,44 @@
 .sn-mini-empty { margin: 0; font-size: var(--type-control); color: var(--tone-text-muted); }
 .sn-mini[data-view='error'] { place-content: center; }
 
-.sn-capture { margin: 0; display: grid; align-content: start; gap: var(--sp-2); min-inline-size: 0; }
-.sn-capture picture { display: block; }
-.sn-capture img { display: block; inline-size: 100%; block-size: auto; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--tone-stroke); border-radius: var(--r-md); background: var(--tone-surface-2); }
-.sn-capture figcaption { font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: 1.45; }
-.sn-capture-none { display: grid; place-content: center; aspect-ratio: 16 / 9; margin: 0; padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-md); background: var(--tone-surface-2); color: var(--tone-text-muted); font-size: var(--type-control); text-align: center; }
+.sn-screen-side { display: grid; gap: var(--sp-4); align-content: start; min-inline-size: 0; }
+.sn-screen-lines { display: grid; gap: var(--sp-3); margin: 0; }
+.sn-screen-line { display: grid; gap: 0.15rem; padding-inline-start: var(--sp-3); border-inline-start: 3px solid var(--tone-stroke-strong); }
+.sn-screen-line[data-line='wrote'] { border-inline-start-color: var(--tone-transit); }
+.sn-screen-line dt { font-size: var(--type-meta); font-weight: var(--weight-bold); color: var(--tone-text-secondary); }
+.sn-screen-line[data-line='would'] dt { cursor: help; text-decoration: underline dotted; text-underline-offset: 0.2em; }
+.sn-screen-line dd { margin: 0; font-size: var(--type-body); font-weight: var(--weight-medium); line-height: 1.4; overflow-wrap: anywhere; }
+.sn-screen-line dd[data-state='none'], .sn-screen-none { color: var(--tone-text-muted); font-weight: 400; }
+.sn-screen-line-skeleton { display: inline-block; inline-size: min(100%, 16rem); block-size: 1em; vertical-align: middle; }
+.sn-screen-capture[hidden] { display: none; }
+.sn-screen-capture-link { display: inline-flex; align-items: center; gap: var(--sp-3); min-block-size: var(--target); max-inline-size: 100%; color: inherit; text-decoration: none; }
+.sn-screen-thumb { flex: none; inline-size: 7.5rem; block-size: auto; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--tone-stroke); border-radius: var(--r-sm); background: var(--tone-surface-2); }
+.sn-screen-capture-text { display: grid; gap: 0.1rem; min-inline-size: 0; }
+.sn-screen-capture-open { font-size: var(--type-control); font-weight: var(--weight-medium); color: var(--tone-text-brand); text-decoration: underline; text-underline-offset: 0.2em; }
+.sn-screen-capture-when { font-size: var(--type-meta); color: var(--tone-text-muted); }
 
-.sn-quartet { display: grid; gap: var(--sp-3); margin-block-start: clamp(2rem, 4vw, 3rem); }
-.sn-quartet h3 { font-size: var(--type-title); letter-spacing: -0.02em; }
-.sn-quartet-lede { color: var(--tone-text-muted); line-height: 1.5; }
-.sn-quartet-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
-.sn-quartet-day { color: var(--tone-text-primary); font-weight: var(--weight-bold); }
+.sn-screen-mornings { display: grid; gap: var(--sp-2); margin-block-start: clamp(1.5rem, 3vw, 2.5rem); min-inline-size: 0; }
+.sn-screen-mornings-title { font-size: var(--type-head); letter-spacing: -0.01em; }
+.sn-screen-mornings-lede { margin: 0; color: var(--tone-text-muted); font-size: var(--type-control); line-height: 1.5; }
+.sn-screen-table { inline-size: 100%; border-collapse: collapse; font-size: var(--type-control); line-height: 1.45; }
+.sn-screen-table th, .sn-screen-table td { padding: var(--sp-2) var(--sp-3); border-block-end: 1px solid var(--tone-stroke); text-align: start; vertical-align: top; overflow-wrap: anywhere; }
+.sn-screen-table thead th { font-size: var(--type-meta); font-weight: var(--weight-bold); color: var(--tone-text-secondary); border-block-end-color: var(--tone-stroke-strong); }
+.sn-screen-table tbody th { font-weight: 400; inline-size: 12rem; }
+.sn-screen-day { display: block; font-weight: var(--weight-bold); }
+.sn-screen-caption { display: block; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-screen-moving { white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Phones: each morning a stacked row, each cell under its column's name. */
+@media (max-width: 40rem) {
+  .sn-screen-table thead { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+  .sn-screen-table, .sn-screen-table tbody, .sn-screen-table tr, .sn-screen-table th, .sn-screen-table td { display: block; }
+  .sn-screen-table { font-size: var(--type-secondary); line-height: 1.4; }
+  .sn-screen-table tr { padding-block: var(--sp-2); border-block-end: 1px solid var(--tone-stroke); }
+  .sn-screen-table th, .sn-screen-table td, .sn-screen-table tbody th { padding: 0.1rem 0; border: 0; inline-size: auto; }
+  .sn-screen-table td::before { content: attr(data-label) ': '; color: var(--tone-text-muted); font-size: var(--type-meta); }
+  .sn-screen-moving { white-space: normal; }
+  .sn-screen-day, .sn-screen-caption { display: inline; }
+  .sn-screen-caption::before { content: ' · '; }
+}
 
 /* ---- Tijek: the small multiples on one axis --------------------------------------- */
 .sn-strip-frame { container: sn-strip / inline-size; display: grid; gap: var(--sp-4); min-inline-size: 0; padding: clamp(0.875rem, 2.5vw, 1.5rem); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); }
@@ -181,14 +208,6 @@
   .sn-strip-frame { break-inside: avoid; }
 }
 
-/* ---- Ukratko: the four question chips (lane V5) ------------------------------------ */
-.sn-q-nav { margin-block-start: var(--sp-4); }
-.sn-q-item { position: relative; display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
-.sn-q-chip { min-block-size: var(--target); text-align: start; white-space: normal; }
-/* The link to the answering section: out of sight until focused, then a real, visible target. */
-.sn-q-to { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.sn-q-to:focus { position: static; inline-size: auto; block-size: auto; clip-path: none; display: inline-flex; align-items: center; min-block-size: var(--target); padding-inline: var(--sp-2); border-radius: var(--r-sm); background: var(--tone-surface-1); }
-
 /* ---- Brojke: the five tiles wrap on a narrow screen ---------------------------------- */
 .sn-numbers .st-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
 
@@ -209,31 +228,64 @@
 .sn-alt-link { display: inline-block; padding-block: 0.6rem; line-height: 1.4; overflow-wrap: anywhere; }
 .sn-alt-meta { font-size: var(--type-meta); color: var(--tone-text-muted); }
 
-/* ---- Otvoreni podaci (lane V5) ------------------------------------------------------- */
-.sn-open-body { display: grid; gap: var(--sp-5); }
-.sn-open-signals th[scope='row'] { font-weight: var(--weight-medium); }
-.sn-open-signals td, .sn-open-signals th { overflow-wrap: anywhere; }
-.sn-open-cols { display: grid; gap: var(--sp-5); }
-@media (min-width: 64rem) { .sn-open-cols { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); } }
-.sn-open-h { margin: 0 0 var(--sp-2); font-size: var(--type-head); }
-.sn-open-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
-.sn-open-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 var(--sp-3); border-block-end: 1px solid var(--tone-stroke); }
-.sn-open-file { display: inline-flex; align-items: center; min-block-size: var(--target); font-weight: var(--weight-medium); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.sn-open-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); font-size: var(--type-meta); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
-.sn-open-latest { display: inline-flex; align-items: center; min-block-size: var(--target); }
-.sn-open-licence, .sn-open-excluded { color: var(--tone-text-muted); font-size: var(--type-control); }
-.sn-open-notes > p { margin-block: 0 var(--sp-3); }
-.sn-open-notes .st-link { display: inline-flex; align-items: center; min-block-size: var(--target); }
+/* ---- Podaci i izvori (lane W4b): the sentences, the downloads, the sources ----------------- */
+/* minmax(0, 1fr): an implicit auto track took the width of its widest child and clipped the block at 390 px (R6). */
+.sn-open-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); max-inline-size: 70ch; }
+.sn-open-says { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); line-height: 1.55; }
+.sn-open-says li { padding-inline-start: var(--sp-3); border-inline-start: 3px solid var(--tone-action-brand); }
+.sn-open-downloads { display: grid; gap: var(--sp-2); min-inline-size: 0; }
+.sn-open-h { margin: 0; font-size: var(--type-head); }
+.sn-open-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.sn-open-item { display: grid; gap: 0.1rem; padding-block: var(--sp-1); border-block-end: 1px solid var(--tone-stroke); min-inline-size: 0; }
+.sn-open-file { display: grid; align-content: center; gap: 0.1rem; min-block-size: var(--target); padding-block: var(--sp-1); min-inline-size: 0; }
+.sn-open-title { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.sn-open-meta { font-size: var(--type-meta); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sn-open-name { font-family: var(--font-mono); }
+.sn-open-note { font-size: var(--type-meta); color: var(--tone-text-muted); line-height: 1.45; padding-block-end: var(--sp-1); }
+.sn-open-others { margin-block-start: var(--sp-2); }
+.sn-open-summary { display: flex; align-items: center; min-block-size: var(--target); font-weight: var(--weight-medium); cursor: pointer; }
+.sn-open-others > p { margin-block: var(--sp-2) 0; font-size: var(--type-control); line-height: 1.5; overflow-wrap: anywhere; }
+.sn-open-link { display: inline-flex; align-items: center; min-block-size: var(--target); }
+.sn-open-excluded { margin: var(--sp-2) 0 0; color: var(--tone-text-muted); font-size: var(--type-control); line-height: 1.5; }
 
-/* ---- I danas (lane V5) ------------------------------------------------------------- */
-.sn-live { margin-block-start: var(--sp-6); }
-.sn-live-card { display: grid; gap: var(--sp-2); max-inline-size: 44rem; padding: clamp(1rem, 2.5vw, 1.5rem); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-lg); background: var(--tone-surface-1); }
-.sn-live-kicker { margin: 0; font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-text-brand); }
-.sn-live-title { margin: 0; font-size: var(--type-head); }
-.sn-live-lede, .sn-live-now p { margin: 0; }
-.sn-live-line { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
-.sn-live-age { font-size: var(--type-control); color: var(--tone-text-muted); }
-.sn-live-skeleton { display: block; min-block-size: 1.5rem; }
-.sn-live-links { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-2) 0 0; }
-/* The signals are words, not numbers: they read from the start of the cell. */
-.sn-open-signals td, .sn-open-signals th { text-align: start; }
+/* The sources: the static notes, then the attribution (left) and the manifest's notes (right) from 64rem. */
+.sn-sources-block { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3) var(--sp-6); margin-block-start: clamp(2rem, 4vw, 3rem); min-inline-size: 0; }
+.sn-sources-block > * { grid-column: 1 / -1; min-inline-size: 0; }
+.sn-sources-block > h3 { font-size: var(--type-title); letter-spacing: -0.02em; }
+@media (min-width: 64rem) {
+  .sn-sources-block { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+  .sn-sources-block > .sn-attribution-slot { grid-column: 1; }
+  .sn-sources-block > .sn-notes-slot { grid-column: 2; }
+}
+.sn-attr { margin: 0; display: grid; }
+/* Each source: the name with its link on one row (the 44 px target), then what was taken, then the licence. */
+.sn-attr-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'name src' 'what what' 'licence licence'; column-gap: var(--sp-3); padding-block: var(--sp-1) var(--sp-2); border-block-end: 1px solid var(--tone-stroke); min-inline-size: 0; }
+.sn-attr-name { grid-area: name; align-self: center; min-block-size: var(--target); display: flex; align-items: center; font-weight: var(--weight-bold); }
+.sn-attr-what { grid-area: what; }
+.sn-attr-licence { grid-area: licence; color: var(--tone-text-muted); }
+.sn-attr-src { grid-area: src; margin: 0; align-self: center; }
+.sn-attr-what, .sn-attr-licence { margin: 0; font-size: var(--type-secondary); line-height: 1.5; overflow-wrap: anywhere; }
+.sn-attr-adaptation { display: block; color: var(--tone-text-muted); }
+.sn-attr-verbatim { font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-attr-quote { overflow-wrap: anywhere; word-break: break-word; }
+.sn-attr-link { display: inline-flex; align-items: center; min-block-size: var(--target); min-inline-size: var(--target); }
+.sn-attr-notes { font-size: var(--type-secondary); line-height: 1.55; }
+.sn-attr-summary { display: flex; align-items: center; min-block-size: var(--target); font-size: var(--type-head); font-weight: var(--weight-bold); cursor: pointer; }
+.sn-attr-notes-list { margin: var(--sp-2) 0 0; padding-inline-start: 1.1rem; display: grid; gap: var(--sp-2); color: var(--tone-text-muted); overflow-wrap: anywhere; }
+
+/* ---- I danas (lane W4b): a slim band after Što snimka pokazuje ------------------------------ */
+.sn-section-live { padding-block: var(--sp-4); }
+.sn-live { min-inline-size: 0; }
+.sn-live-band { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--tone-stroke); border-inline-start: 4px solid var(--tone-action-brand); border-radius: var(--r-md); background: var(--tone-surface-1); }
+@media (min-width: 64rem) { .sn-live-band { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--sp-6); } .sn-live-head { grid-column: 1 / -1; } }
+.sn-live-head { margin: 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-live-kicker { font-weight: var(--weight-bold); color: var(--tone-text-brand); }
+.sn-live-lines { display: grid; gap: 0.15rem; min-inline-size: 0; }
+.sn-live-lines p { margin: 0; }
+.sn-live-line { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sn-live-then { font-variant-numeric: tabular-nums; color: var(--tone-text-secondary); }
+.sn-live-then:empty { display: none; }
+.sn-live-age { font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-live-skeleton { display: block; min-block-size: 1.4rem; }
+.sn-live-links { display: flex; flex-wrap: wrap; gap: 0 var(--sp-4); margin: 0; }
+.sn-live-link { display: inline-flex; align-items: center; min-block-size: var(--target); }
