@@ -1,1 +1,90 @@
-/* snimka-voices.css: the voices feed, the agenda, the subtitle band and the fact chips. Owner: lane V4; class prefixes sn-feed-, sn-agenda-, sn-sub-. */
+/* snimka-voices.css: the voices feed, the agenda, the subtitle band, the fact chips and the Zaslon section's source control. Owner: lane V4; class prefixes sn-feed-, sn-agenda-, sn-sub-, sn-fact-, sn-screen- (new classes only; .sn-screen-grid is the report sheet's). Colours carry the tone only as a bar or a dot, never as text, so every text keeps the token contrast in both themes. */
+
+/* ---- the feed -------------------------------------------------------------------- */
+.sn-feed { display: grid; gap: var(--sp-3); min-inline-size: 0; }
+.sn-feed-head { display: grid; gap: var(--sp-1); }
+.sn-feed-title { margin: 0; font-size: var(--type-head); letter-spacing: -0.01em; }
+.sn-feed-lede { margin: 0; color: var(--tone-text-muted); font-size: var(--type-secondary); line-height: 1.45; }
+.sn-feed-filter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin: 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--tone-glass-stroke); border-radius: var(--r-md); background: var(--tone-surface-2); }
+.sn-feed-filter[hidden] { display: none; }
+.sn-feed-filter-text { font-weight: var(--weight-semi); }
+.sn-feed-hidden { color: var(--tone-text-muted); font-size: var(--type-secondary); }
+.sn-feed-clear { min-block-size: 44px; padding: 0 var(--sp-3); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-pill); background: var(--tone-surface-1); color: var(--tone-text-primary); font: inherit; font-size: var(--type-control); cursor: pointer; }
+.sn-feed-clear:hover { background: var(--tone-surface-3); }
+.sn-feed-empty { margin: 0; color: var(--tone-text-muted); }
+.sn-feed-empty[hidden] { display: none; }
+.sn-feed-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.sn-feed-item { position: relative; display: grid; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3) var(--sp-2) calc(var(--sp-3) + 3px); border: 1px solid var(--tone-glass-stroke); border-radius: var(--r-md); background: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); cursor: pointer; min-inline-size: 0; }
+.sn-feed-item::before { content: ''; position: absolute; inset-block: var(--sp-2); inset-inline-start: 0; inline-size: 3px; border-radius: var(--r-pill); background: var(--sn-feed-tone, var(--tone-stroke-strong)); }
+.sn-feed-tone-zet { --sn-feed-tone: var(--tone-transit); }
+.sn-feed-tone-court { --sn-feed-tone: var(--tone-civic); }
+.sn-feed-tone-press { --sn-feed-tone: var(--tone-events); }
+.sn-feed-tone-event { --sn-feed-tone: var(--tone-text-subtle); }
+.sn-feed-tone-companion { --sn-feed-tone: var(--tone-action-brand); }
+.sn-feed-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-2); margin: 0; font-size: var(--type-meta); color: var(--tone-text-secondary); }
+.sn-feed-kind { font-weight: var(--weight-bold); text-transform: uppercase; letter-spacing: 0.04em; }
+.sn-feed-beat { padding: 0 var(--sp-2); border: 1px solid var(--tone-stroke); border-radius: var(--r-pill); }
+.sn-feed-seek { display: inline-flex; align-items: center; min-block-size: 44px; margin-block: -10px; margin-inline-start: auto; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.sn-feed-seek:hover { background: var(--tone-surface-3); color: var(--tone-text-primary); }
+.sn-feed-headline { margin: 0; font-weight: var(--weight-semi); line-height: 1.35; overflow-wrap: anywhere; }
+.sn-feed-link { color: var(--tone-text-primary); text-decoration-thickness: 1px; text-underline-offset: 0.15em; }
+.sn-feed-text, .sn-feed-source { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-secondary); line-height: 1.45; overflow-wrap: anywhere; }
+.sn-feed-source .sn-feed-link { color: inherit; }
+.sn-feed-chips, .sn-agenda-chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin: 0; }
+.sn-feed-fold { font-size: var(--type-secondary); }
+.sn-feed-fold[hidden] { display: none; }
+.sn-feed-fold-summary, .sn-feed-older-summary { display: flex; align-items: center; min-block-size: 44px; cursor: pointer; color: var(--tone-text-secondary); }
+.sn-feed-fold-list { margin: 0; padding-inline-start: var(--sp-4); display: grid; gap: var(--sp-1); }
+.sn-feed-fold-meta { color: var(--tone-text-muted); }
+.sn-feed-older[hidden] { display: none; }
+.sn-feed-older-list { margin-block-start: var(--sp-2); }
+@media (prefers-reduced-motion: no-preference) {
+  .sn-feed-in { animation: sn-feed-in 220ms var(--ease-enter, ease-out) both; }
+}
+@keyframes sn-feed-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+/* ---- the fact chips -------------------------------------------------------------- */
+.sn-fact-chip { display: inline-flex; align-items: baseline; gap: 0.3em; padding: 0.1em var(--sp-2); border: 1px solid var(--tone-stroke); border-radius: var(--r-pill); background: var(--tone-surface-1); color: var(--tone-text-primary); font-size: var(--type-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sn-fact-chip[data-missing='true'] { border-style: dashed; color: var(--tone-text-secondary); }
+.sn-fact-retro { color: var(--tone-text-secondary); font-style: italic; }
+
+/* ---- the subtitle band ----------------------------------------------------------- */
+.sn-sub { position: relative; display: grid; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-block-start: 1px solid var(--tone-glass-stroke); background: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); }
+@supports (backdrop-filter: blur(8px)) { .sn-sub { backdrop-filter: blur(8px); } }
+.sn-sub-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-size: var(--type-meta); color: var(--tone-text-secondary); }
+.sn-sub-head[hidden] { display: none; }
+.sn-sub-kicker { font-weight: var(--weight-semi); }
+.sn-sub-mark { display: inline-flex; align-items: center; min-block-size: 44px; margin-block: -12px; padding: 0 var(--sp-1); border: 0; background: transparent; color: inherit; font: inherit; cursor: help; }
+.sn-sub-mark-text { padding: 0.05em var(--sp-2); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-pill); color: var(--tone-text-primary); }
+.sn-sub[data-sn-sub-source='replayed'] .sn-sub-mark-text { border-style: dashed; }
+.sn-sub-note { display: none; position: absolute; inset-inline: var(--sp-3); inset-block-end: calc(100% + var(--sp-1)); z-index: 2; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-md); background: var(--tone-surface-raised); color: var(--tone-text-primary); font-size: var(--type-secondary); line-height: 1.45; box-shadow: var(--tone-shadow-md); }
+.sn-sub-mark:hover + .sn-sub-note, .sn-sub-mark:focus-visible + .sn-sub-note, .sn-sub[data-open='true'] .sn-sub-note { display: block; }
+.sn-sub-text { font-size: var(--type-body); font-weight: var(--weight-semi); line-height: 1.35; overflow-wrap: anywhere; }
+.sn-sub[data-sn-sub-source='none'] .sn-sub-text { color: var(--tone-text-muted); font-weight: var(--weight-normal); }
+
+/* ---- the agenda ------------------------------------------------------------------ */
+.sn-agenda-face-label { display: block; font-size: var(--type-meta); color: var(--tone-text-secondary); }
+.sn-agenda-face-title { display: block; font-weight: var(--weight-bold); line-height: 1.3; }
+.sn-agenda-face-next { display: block; font-size: var(--type-meta); color: var(--tone-text-secondary); font-variant-numeric: tabular-nums; }
+.sn-agenda-lede, .sn-agenda-keys { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-secondary); line-height: 1.45; }
+.sn-agenda-list { list-style: none; margin: var(--sp-2) 0 0; padding: 0; display: grid; gap: var(--sp-2); }
+.sn-agenda-item { display: grid; gap: var(--sp-1); padding-block-end: var(--sp-2); border-block-end: 1px solid var(--tone-stroke); }
+.sn-agenda-step { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--sp-2); min-block-size: 44px; padding: var(--sp-1) var(--sp-2); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-primary); font: inherit; text-align: start; cursor: pointer; }
+.sn-agenda-step:hover { background: var(--tone-surface-3); }
+.sn-agenda-step[aria-current='step'] { border-color: var(--tone-stroke-strong); background: var(--tone-surface-2); }
+.sn-agenda-time { font-size: var(--type-meta); color: var(--tone-text-secondary); font-variant-numeric: tabular-nums; }
+.sn-agenda-title { font-weight: var(--weight-semi); }
+.sn-agenda-text { margin: 0; padding-inline: var(--sp-2); font-size: var(--type-secondary); color: var(--tone-text-secondary); line-height: 1.45; }
+.sn-agenda-chips { padding-inline: var(--sp-2); }
+
+/* ---- Zaslon: the source control and today's sentence of each morning --------------- */
+.sn-screen-source { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-block-end: var(--sp-3); }
+.sn-screen-source-label { font-size: var(--type-secondary); color: var(--tone-text-secondary); }
+.sn-screen-source-option { min-block-size: 44px; padding: 0 var(--sp-4); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-pill); background: var(--tone-surface-1); color: var(--tone-text-primary); font: inherit; font-size: var(--type-control); cursor: pointer; }
+.sn-screen-source-option[aria-pressed='true'] { background: var(--tone-action-brand); border-color: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
+.sn-screen-note { margin: 0 0 var(--sp-3); max-inline-size: 60ch; font-size: var(--type-secondary); color: var(--tone-text-secondary); line-height: 1.5; }
+.sn-screen-note[hidden] { display: none; }
+.sn-screen-replayed { margin: var(--sp-2) 0 0; font-size: var(--type-secondary); line-height: 1.45; }
+.sn-screen-replayed-kicker { color: var(--tone-text-secondary); font-weight: var(--weight-semi); }
+.sn-screen-replayed[data-state='none'] .sn-screen-replayed-text { color: var(--tone-text-muted); }
+.sn-screen-replayed-skeleton { display: inline-block; inline-size: 10rem; block-size: 0.9em; vertical-align: middle; }

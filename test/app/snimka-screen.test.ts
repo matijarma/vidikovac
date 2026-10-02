@@ -2,14 +2,16 @@
 // Zaslon (app/src/snimka/screen.ts): the reading shown is the latest at or
 // before the clock in the run that covers it; between runs the board's next
 // timetable departures, never padded; the capture is the nearest within six
-// hours; the quartet takes the four slot runs at 07:45; and on the page the
-// miniature is rewritten only when the reading it shows changes.
+// hours; the five mornings take the slot runs at 07:45; and on the page the
+// miniature is rewritten only when the reading it shows changes, the source
+// control follows the subtitle's source until the reader picks one, and every
+// picture loads eagerly at low priority.
 import { describe, expect, it } from 'vitest';
-import { SNIMKA_WINDOW, ZAGREB_OFFSET_S, type BoardSeries, type HashedRef, type ScreenIndex, type ScreenRun } from '../../shared/snimka';
+import { SNIMKA_WINDOW, ZAGREB_OFFSET_S, type BoardSeries, type HashedRef, type ScreenIndex, type ScreenRun, type VoiceFile, type VoiceIndex } from '../../shared/snimka';
 import type { SnimkaContext } from '../../app/src/snimka/context';
 import type { FrameLoop } from '../../app/src/snimka/frames';
 import {
-  RUN_LEAD_S, badgeOf, boardAt, boardHtml, captureHtml, mountScreen, nearestCapture, nextRunAfter, quartet, readingHtml, readingIndexAt, routeKind, runAt, runShownAt, type IndexRun,
+  RUN_LEAD_S, badgeOf, boardAt, boardHtml, captureHtml, mountScreen, nearestCapture, nextRunAfter, quartet, readingHtml, readingIndexAt, replayedHtml, routeKind, runAt, runShownAt, screenSourceAt, type IndexRun,
 } from '../../app/src/snimka/screen';
 
 const zg = (month: number, day: number, hour: number, minute = 0, second = 0): number => Date.UTC(2026, month - 1, day, hour, minute, second) / 1000 - ZAGREB_OFFSET_S;
@@ -89,16 +91,21 @@ describe('the run and the reading at an instant', () => {
   });
 });
 
-describe('the quartet', () => {
-  it('takes the slot run nearest 07:45 on each of the four mornings, never a series run', () => {
+describe('the five mornings', () => {
+  it('take the slot run nearest 07:45 on each morning from Monday to Friday, never a series run', () => {
     const slots = quartet(INDEX, SNIMKA_WINDOW.fromSec, SNIMKA_WINDOW.toSec);
-    expect(slots.map((s) => s.key)).toEqual(['mon', 'tue', 'wed', 'thu']);
-    expect(slots.map((s) => s.run?.id)).toEqual([MON.id, TUE.id, WED.id, THU.id]);
-    expect(slots.map((s) => s.atSec)).toEqual([zg(9, 28, 7, 45), zg(9, 29, 7, 45), zg(9, 30, 7, 45), zg(10, 1, 7, 45)]);
+    expect(slots.map((s) => s.key)).toEqual(['mon', 'tue', 'wed', 'thu', 'fri']);
+    expect(slots.map((s) => s.run?.id ?? null)).toEqual([MON.id, TUE.id, WED.id, THU.id, null]);
+    expect(slots.map((s) => s.atSec)).toEqual([zg(9, 28, 7, 45), zg(9, 29, 7, 45), zg(9, 30, 7, 45), zg(10, 1, 7, 45), zg(10, 2, 7, 45)]);
   });
   it('a morning without a slot run stays empty rather than borrowing another hour', () => {
     const slots = quartet({ v: 1, runs: [MON, WED_NOON, WED_SERIES] }, SNIMKA_WINDOW.fromSec, SNIMKA_WINDOW.toSec);
-    expect(slots.map((s) => s.run?.id ?? null)).toEqual([MON.id, null, null, null]);
+    expect(slots.map((s) => s.run?.id ?? null)).toEqual([MON.id, null, null, null, null]);
+  });
+  it('the subtitle\'s source at an instant: the record where a run shows, today\'s rules elsewhere', () => {
+    expect(screenSourceAt(INDEX, MON.fromSec + 60)).toBe('observed');
+    expect(screenSourceAt(INDEX, zg(9, 28, 15, 0))).toBe('replayed');
+    expect(screenSourceAt(null, MON.fromSec)).toBe('replayed');
   });
 });
 
@@ -139,6 +146,10 @@ describe('the capture beside the miniature', () => {
     expect(html).toContain('alt="Snimka zaslona, pon 28. 9. u 07:45"');
     expect(html).toContain('type="image/webp"');
     expect(html).toContain('<figcaption>Snimka zaslona, pon 28. 9. u 07:45</figcaption>');
+    // Eager at low priority: a lazy picture below the fold was never fetched on 1 October.
+    expect(html).toContain('loading="eager"');
+    expect(html).toContain('fetchpriority="low"');
+    expect(html).not.toContain('loading="lazy"');
   });
 });
 
@@ -165,6 +176,35 @@ describe('the rows', () => {
   });
 });
 
+// ---- the replayed voice ------------------------------------------------------------------
+
+/** Monday's voice from 07:30 to 08:15: two rows and the service sentence (the other days have no file). */
+const VOICE_MON: VoiceFile = {
+  v: 2, place: '106_1', day: '2026-09-28', t0: zg(9, 28, 0, 0), step: 60, n: 1440,
+  facts: [{ id: 'service:zet', kind: 'service', wording: 'silent', text: 'U pokretu su 2 vozila, po voznom redu oko 230.' }],
+  rows: [
+    { id: 'dep-6', kind: 'departure', source: 'zet-timetable', live: false, title: 'Tramvaj 6 prema Črnomercu', sub: 'vozni red', atSec: zg(9, 28, 7, 52), caveat: false },
+    { id: 'always:jelacic', kind: 'always', source: 'heritage', live: false, title: 'Spomenik banu Josipu Jelačiću', sub: null, atSec: null, caveat: false },
+  ],
+  sentences: ['U pokretu su 2 vozila, po voznom redu oko 230.'],
+  minutes: Array.from({ length: 1440 }, (_, m) => (m >= 450 && m <= 495 ? { at: zg(9, 28, 0, 0) + m * 60, f: [0], r: [0, 1], lead: 0, state: 'silent' as const, voice: 'none' as const, seen: 2, expected: 230, note: null } : null)),
+};
+const VOICE_INDEX: VoiceIndex = { v: 2, place: '106_1', days: [{ day: VOICE_MON.day, t0: VOICE_MON.t0, n: VOICE_MON.n, file: ref('voice/2026-09-28') }] };
+VOICE_INDEX.days[0]!.file.path = `voice/${VOICE_MON.day}.json`;
+
+describe('replayedHtml', () => {
+  it('the sentence marked as today\'s rules, the rows with their badges and times', () => {
+    const minute = VOICE_MON.minutes[465]!;
+    const html = replayedHtml('Trg bana J. Jelačića', { file: VOICE_MON, minute, i: 465 });
+    expect(html).toContain('data-kicker="replayed"');
+    expect(html).toContain('<span class="sn-mini-kicker">Današnja pravila</span> <span class="sn-mini-text">U pokretu su 2 vozila, po voznom redu oko 230.</span>');
+    expect(html).toContain('<span class="line" data-kind="tram" data-size="s">6</span>');
+    expect(html).toContain('07:52');
+    expect(html).toContain('Spomenik banu Josipu Jelačiću');
+    expect(replayedHtml('x', { file: VOICE_MON, minute: { ...minute, lead: null }, i: 465 })).toContain('Za ovu minutu nema izračunane rečenice.');
+  });
+});
+
 // ---- on the page --------------------------------------------------------------------------
 
 function page(runs: Map<string, ScreenRun>) {
@@ -172,10 +212,11 @@ function page(runs: Map<string, ScreenRun>) {
   const frames: FrameLoop = { subscribe(fn) { subs.add(fn); return () => { subs.delete(fn); }; }, kick() {}, destroy() {} };
   let now = MON.fromSec * 1000;
   const requested: string[] = [];
-  const objects = new Map<string, unknown>([['screen/index.json', INDEX], ['board.json', { v: 2, stop: '106_1', name: 'Trg bana J. Jelačića', place: 'jelacic', samples: [] }]]);
+  const objects = new Map<string, unknown>([['screen/index.json', INDEX], ['board.json', { v: 2, stop: '106_1', name: 'Trg bana J. Jelačića', place: 'jelacic', samples: [] }],
+    ['voice/index.json', VOICE_INDEX], [`voice/${VOICE_MON.day}.json`, VOICE_MON]]);
   for (const [id, run] of runs) objects.set(INDEX.runs.find((r) => r.id === id)!.file.path, run);
   const ctx = {
-    manifest: { window: { ...SNIMKA_WINDOW }, files: { screenIndex: 'screen/index.json', boards: [{ stop: '106_1', name: 'Trg bana J. Jelačića', samples: 0, path: 'board.json', bytes: 0, sha256: '' }] } },
+    manifest: { window: { ...SNIMKA_WINDOW }, files: { screenIndex: 'screen/index.json', voiceIndex: 'voice/index.json', boards: [{ stop: '106_1', name: 'Trg bana J. Jelačića', samples: 0, path: 'board.json', bytes: 0, sha256: '' }] } },
     clock: { now: () => now },
     frames,
     data: {
@@ -220,10 +261,16 @@ describe('mountScreen', () => {
     // The capture and the quartet: four mornings, each with its picture or the word for none.
     expect(root.querySelector('.sn-capture img')?.getAttribute('alt')).toBe('Snimka zaslona, pon 28. 9. u 07:45');
     const items = root.querySelectorAll('.sn-quartet-item');
-    expect(items.length).toBe(4);
+    expect(items.length).toBe(5);
     expect([...root.querySelectorAll('.sn-quartet-item img')].every((img) => (img.getAttribute('alt') ?? '').length > 0)).toBe(true);
-    // Between runs, with an empty board: the note and the word for no departures.
+    // Between runs, with an empty board: the note and the word for no departures (the record chosen; the default
+    // there is today's rules, whose voice has no minute at 15:00).
     emit(zg(9, 28, 15, 0) * 1000);
+    expect(root.dataset.snScreenSource).toBe('replayed');
+    await settle();
+    emit(zg(9, 28, 15, 0) * 1000 + 1000);
+    expect(mini.textContent).toContain('Za ovu minutu nema izračunane rečenice.');
+    root.querySelector<HTMLButtonElement>('[data-source="observed"]')!.click();
     expect(mini.dataset.view).toBe('none');
     expect(mini.textContent).toContain('U voznom redu nema sljedećih polazaka.');
     expect(root.querySelector('.sn-capture')?.textContent).toContain('Za ovo doba nema snimke zaslona.');
@@ -275,5 +322,78 @@ describe('mountScreen', () => {
     emit((TUE.fromSec + 70) * 1000);
     expect(requested.filter((p) => p === TUE.file.path).length).toBe(1);
     off();
+  });
+});
+
+describe('the source control and the five mornings', () => {
+  it('follows the subtitle\'s source until the reader picks one; the two sources show different rows', async () => {
+    const { ctx, emit } = page(new Map([[MON.id, screenRun(MON)], [TUE_EARLY.id, screenRun(TUE_EARLY)]]));
+    const root = document.createElement('div');
+    document.body.append(root);
+    const off = mountScreen(ctx, root, () => {});
+    await settle();
+    const control = root.querySelector('.sn-screen-source')!;
+    expect(control.getAttribute('role')).toBe('group');
+    expect(control.getAttribute('aria-label')).toBe('Izvor rečenice');
+    const [observed, replayed] = [...root.querySelectorAll<HTMLButtonElement>('.sn-screen-source-option')];
+    expect(observed!.textContent).toBe('Zapis');
+    expect(replayed!.textContent).toBe('Današnja pravila');
+    // Inside the Monday run: the record, pressed; the note about today's rules hidden.
+    expect(root.dataset.snScreenSource).toBe('observed');
+    expect(observed!.getAttribute('aria-pressed')).toBe('true');
+    expect(root.querySelector<HTMLElement>('.sn-screen-note')!.hidden).toBe(true);
+    const mini = root.querySelector<HTMLElement>('.sn-mini')!;
+    expect(mini.querySelectorAll('.sn-mini-row').length).toBe(3);
+    // Before the run, the subtitle uses today's rules and so does the miniature (its voice loads first).
+    emit(zg(9, 28, 7, 40) * 1000);
+    await settle();
+    emit(zg(9, 28, 7, 40) * 1000);
+    expect(root.dataset.snScreenSource).toBe('replayed');
+    expect(root.querySelector<HTMLElement>('.sn-screen-note')!.hidden).toBe(false);
+    expect(mini.dataset.view).toBe('replayed');
+    expect(mini.querySelectorAll('.sn-mini-row').length).toBe(2);
+    expect(mini.textContent).toContain('U pokretu su 2 vozila');
+    // The reader picks today's rules inside the run: the choice holds as the clock moves.
+    emit((MON.fromSec + 60) * 1000);
+    expect(root.dataset.snScreenSource).toBe('observed');
+    replayed!.click();
+    expect(root.dataset.snScreenSource).toBe('replayed');
+    expect(replayed!.getAttribute('aria-pressed')).toBe('true');
+    expect(mini.querySelectorAll('.sn-mini-row').length).toBe(2);
+    emit((MON.fromSec + 120) * 1000);
+    expect(root.dataset.snScreenSource).toBe('replayed');
+    observed!.click();
+    expect(mini.querySelectorAll('.sn-mini-row').length).toBe(3);
+    off();
+  });
+  it('five mornings, each with its caption, its picture where one exists (eager, low priority) and today\'s sentence', async () => {
+    const g = globalThis as { IntersectionObserver?: unknown };
+    const saved = g.IntersectionObserver;
+    delete g.IntersectionObserver;
+    try {
+      const { ctx } = page(new Map([[MON.id, screenRun(MON)]]));
+      const root = document.createElement('div');
+      document.body.append(root);
+      const off = mountScreen(ctx, root, () => {});
+      await settle();
+      await settle();
+      const items = [...root.querySelectorAll<HTMLElement>('.sn-quartet-item')];
+      expect(items.map((li) => li.dataset.day)).toEqual(['mon', 'tue', 'wed', 'thu', 'fri']);
+      expect(items.map((li) => li.querySelector('figcaption')!.textContent)).toEqual([
+        'pon 28. 9. Polasci iz voznog reda, izrečeni kao činjenica.', 'uto 29. 9. Isto, dok se ZET-ovi podaci ne mijenjaju.', 'sri 30. 9. Odstupanje izrečeno brojkama.',
+        'čet 1. 10. Uobičajeno jutro.', 'pet 2. 10. Drugo uobičajeno jutro.',
+      ]);
+      for (const img of root.querySelectorAll('.sn-quartet-item img')) {
+        expect(img.getAttribute('loading')).toBe('eager');
+        expect(img.getAttribute('fetchpriority')).toBe('low');
+      }
+      expect(items[4]!.querySelector('img')).toBeNull();
+      expect(items[0]!.querySelector('.sn-screen-replayed')!.textContent).toBe('Zaslon bi rekao U pokretu su 2 vozila, po voznom redu oko 230.');
+      // A morning whose day has no voice file says so in words.
+      expect(items[1]!.querySelector('.sn-screen-replayed-text')!.textContent).toBe('Za ovu minutu nema izračunane rečenice.');
+      off();
+    } finally {
+      if (saved !== undefined) g.IntersectionObserver = saved;
+    }
   });
 });
