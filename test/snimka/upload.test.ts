@@ -1,6 +1,5 @@
 // scripts/snimka/upload.mjs --only-changed: the keys absent from the remote listing or of another size go up, manifest.json always and last.
 import { describe, expect, it } from 'vitest';
-// @ts-expect-error the script is plain ESM without types
 import { changedOnly, PREFIX } from '../../scripts/snimka/upload.mjs';
 
 const item = (key: string, bytes: number) => ({ key, bytes, type: 'application/json' });
