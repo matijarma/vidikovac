@@ -32,9 +32,10 @@ const WHOLE = new Intl.NumberFormat('hr-HR', { maximumFractionDigits: 0 });
 /** A file's size in words: "3 KB" (never under 1 KB for a file that has bytes), "1,4 MB", "12 MB"; decimal units. */
 export function sizeWords(bytes: number): string {
   if (!(bytes >= 0)) return SN.strip.noValue;
-  if (bytes < MB) return fill(SN.size.kb, { n: WHOLE.format(Math.max(bytes > 0 ? 1 : 0, Math.round(bytes / KB))) });
+  const kb = Math.round(bytes / KB);
+  // 999,6 KB would read 1.000 KB: such a file is already a megabyte.
+  if (kb < 1000) return fill(SN.size.kb, { n: WHOLE.format(Math.max(bytes > 0 ? 1 : 0, kb)) });
   const mb = bytes / MB;
-  // 999,95 KB rounds to 1000 KB: such a file is already a megabyte.
   return fill(SN.size.mb, { n: mb < 10 ? ONE_DECIMAL.format(Math.round(mb * 10) / 10) : WHOLE.format(Math.round(mb)) });
 }
 
