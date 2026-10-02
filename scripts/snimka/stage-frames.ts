@@ -10,13 +10,23 @@
 // where its published plan puts it at T minus the header. No payload in the
 // 30 s before T: no sample (a gap, never a zero). Depot and parked vehicles
 // are not on the wire, so they are counted (feed.hidden*) and never placed.
+//
+// v2 (lane V1) adds, from the same pass: per 5-minute slot the distinct
+// published vehicles of each route with a position at any tick of the slot
+// (work/routes-seen-<segment>.json, the routes stage's input); per minute the
+// minute's last zet-rt payload trimmed to what the wall at Jelačić reads (the
+// vehicles within 3 km, every non-vehicle item, the sources and the header)
+// as one gzip JSON line (work/wall-window.jsonl.gz, window only, the voice
+// stage's input); and the feed columns frozen, alerts and cancelledTrips.
 
-import { gzipSync } from 'node:zlib';
+import { createWriteStream } from 'node:fs';
+import { join } from 'node:path';
+import { createGzip, gzipSync } from 'node:zlib';
 import { loadRealEngine, loadZetRoutesFile, replayPublished, type PublishedTick } from '../replay-core';
 import { evalFreePlan, evalPathPlan } from '../../shared/motion/plan';
 import type { FreeKnot, PathKnot } from '../../shared/motion/track';
 import { encodeMotionChunk, type MotionSample } from '../../shared/snimka-codec';
-import { MOTION_CHUNK_S, MOTION_STEP_S, MOTION_TICKS, ZAGREB_OFFSET_S, type Col, type SnimkaState } from '../../shared/snimka';
+import { FROZEN_AFTER_S, MOTION_CHUNK_S, MOTION_STEP_S, MOTION_TICKS, ROUTES_STEP_S, ZAGREB_OFFSET_S, type Col, type SnimkaState } from '../../shared/snimka';
 import type { ItemInput } from '../../worker/feed/payload';
 import { writeObject, writeWork, type Paths } from './paths';
 import { loadSegmentExpect, ROUTES_FILE, segmentOf, type SegmentKey } from './segments';
@@ -26,7 +36,41 @@ export const SAMPLE_HOLD_S = 30;
 /** Budget of one chunk, gzip bytes (brief section 5). */
 export const CHUNK_GZIP_MAX = 150_000;
 
-export type Hold = 'stale' | 'below-min' | 'no-calendar' | 'gap';
+export type Hold = 'below-min' | 'no-calendar' | 'gap';
+
+/** The wall's place (Trg bana J. Jelačića, stop 106_1) and the radius of the trimmed voice snapshot. */
+export const WALL_LONLAT: [number, number] = [15.97726, 45.81286];
+export const WALL_RADIUS_M = 3000;
+
+/** Distinct published vehicles per route and 5-minute slot; `covered[j]` false = no sampled tick in the slot. */
+export interface RoutesSeenWork { segment: SegmentKey; t0: number; step: 300; n: number; covered: boolean[]; routes: Record<string, number[]> }
+
+/** One line of work/wall-window.jsonl.gz: the minute's last zet-rt payload, trimmed. */
+export interface WallLine { m: number; h: number; sourceUpdatedAt: string | null; validUntil: string | null; sources: unknown; items: ItemInput[] }
+
+/** Metres between two lon/lat points (equirectangular; ample at 3 km). */
+export function metresBetween(a: readonly [number, number], b: readonly [number, number]): number {
+  const k = Math.PI / 180;
+  const x = (b[0] - a[0]) * k * Math.cos(((a[1] + b[1]) / 2) * k);
+  const y = (b[1] - a[1]) * k;
+  return Math.hypot(x, y) * 6_371_000;
+}
+
+/** The operator's own counts of a tick: the twin's summary where it computed one, else the frame's Alert entities and CANCELED trip updates. */
+export function operatorCounts(tick: PublishedTick): { alerts: number; cancelledTrips: number } {
+  const op = (tick.payload.sources?.['zet'] as { service?: { operator?: { cancelledTrips?: unknown; noServiceAlerts?: unknown } } } | undefined)?.service?.operator;
+  if (op && Number.isInteger(op.cancelledTrips) && Number.isInteger(op.noServiceAlerts)) return { alerts: op.noServiceAlerts as number, cancelledTrips: op.cancelledTrips as number };
+  return { alerts: tick.raw.alerts, cancelledTrips: tick.raw.canceled };
+}
+
+/** The wall's trimmed copy of a payload: every non-vehicle item, the vehicles within WALL_RADIUS_M of Jelačić. */
+export function trimForWall(items: readonly ItemInput[]): ItemInput[] {
+  return items.filter((item) => {
+    if (!item.id.startsWith('vehicle:')) return true;
+    if (!item.geo || item.geo.type !== 'Point') return false;
+    return metresBetween(WALL_LONLAT, item.geo.coordinates as [number, number]) <= WALL_RADIUS_M;
+  });
+}
 
 export interface MinutesWork {
   segment: SegmentKey;
@@ -36,7 +80,8 @@ export interface MinutesWork {
   dropped: number;
   seen: { all: Col<number>; tram: Col<number>; bus: Col<number> };
   service: { state: Col<SnimkaState>; since: Col<number>; ratio: Col<number>; hold: Col<Hold> };
-  feed: { headerAgeS: Col<number>; entities: Col<number>; rejectedFuture: Col<number>; hiddenDepot: Col<number>; hiddenParked: Col<number> };
+  feed: { headerAgeS: Col<number>; entities: Col<number>; rejectedFuture: Col<number>; hiddenDepot: Col<number>; hiddenParked: Col<number>;
+          frozen: Col<0 | 1>; alerts: Col<number>; cancelledTrips: Col<number> };
 }
 
 export interface ChunkWork { path: string; sha256: string; bytes: number; gzip: number; net: '395' | '396'; t0: number; vehicles: number }
@@ -74,7 +119,37 @@ export async function stageFrames(paths: Paths, key: SegmentKey, log: (line: str
     segment: key, t0, n, frames: 0, dropped: 0,
     seen: { all: blank(n), tram: blank(n), bus: blank(n) },
     service: { state: blank(n), since: blank(n), ratio: blank(n), hold: blank(n) },
-    feed: { headerAgeS: blank(n), entities: blank(n), rejectedFuture: blank(n), hiddenDepot: blank(n), hiddenParked: blank(n) },
+    feed: { headerAgeS: blank(n), entities: blank(n), rejectedFuture: blank(n), hiddenDepot: blank(n), hiddenParked: blank(n), frozen: blank(n), alerts: blank(n), cancelledTrips: blank(n) },
+  };
+  // ---- routes seen per 5-minute slot ----------------------------------------------
+  const slots = Math.ceil((n * 60) / ROUTES_STEP_S);
+  const covered = new Array<boolean>(slots).fill(false);
+  const seenIds = new Map<string, Set<string>[]>();
+  const markSeen = (T: number, route: string, id: string): void => {
+    const j = Math.floor((T - t0) / ROUTES_STEP_S);
+    let perSlot = seenIds.get(route);
+    if (!perSlot) {
+      perSlot = Array.from({ length: slots }, () => new Set<string>());
+      seenIds.set(route, perSlot);
+    }
+    perSlot[j].add(id);
+  };
+  // ---- the wall's trimmed payload per minute (window only) -------------------------
+  const wallOut = key === 'window' ? createGzip({ level: 6 }) : null;
+  const wallDone = wallOut ? new Promise<void>((resolve, reject) => {
+    const file = createWriteStream(join(paths.work, 'wall-window.jsonl.gz'));
+    file.on('finish', () => resolve());
+    file.on('error', reject);
+    wallOut.on('error', reject);
+    wallOut.pipe(file);
+  }) : Promise.resolve();
+  let wallPending: WallLine | null = null;
+  let wallLines = 0;
+  const flushWall = (): void => {
+    if (!wallOut || !wallPending) return;
+    wallOut.write(`${JSON.stringify(wallPending)}\n`);
+    wallLines++;
+    wallPending = null;
   };
   const lastHeaderOf: (number | null)[] = blank(n);
   const hadFrame: boolean[] = new Array<boolean>(n).fill(false);
@@ -133,6 +208,7 @@ export async function stageFrames(paths: Paths, key: SegmentKey, log: (line: str
     }
     if (!current || T - current.headerSec > SAMPLE_HOLD_S) return;
     builder.covered++;
+    if (T >= t0) covered[Math.floor((T - t0) / ROUTES_STEP_S)] = true;
     const k = (T - t0 - c * MOTION_CHUNK_S) / MOTION_STEP_S;
     for (const pin of current.pins) {
       // A vehicle that changes route inside a chunk is a new entry under the same id.
@@ -144,6 +220,7 @@ export async function stageFrames(paths: Paths, key: SegmentKey, log: (line: str
       }
       const s = pin.at(T - current.headerSec);
       v.samples[k] = s.on === 2 && !(Number.isFinite(s.lon) && Number.isFinite(s.lat)) ? null : s;
+      if (v.samples[k] !== null && pin.route !== null && T >= t0) markSeen(T, pin.route, pin.id);
     }
   };
   const flushBefore = (limitSec: number): void => {
@@ -161,6 +238,14 @@ export async function stageFrames(paths: Paths, key: SegmentKey, log: (line: str
     current = { headerSec: h, pins: tick.payload.items.filter((item) => item.id.startsWith('vehicle:')).map(pinOf) };
     const m = Math.floor((h - t0) / 60);
     if (m < 0 || m >= n) return;
+    if (wallOut) {
+      if (wallPending && wallPending.m !== m) flushWall();
+      const p = tick.payload;
+      wallPending = { m, h, sourceUpdatedAt: p.sourceUpdatedAt ?? null, validUntil: p.validUntil ?? null, sources: p.sources ?? null, items: trimForWall(p.items) };
+    }
+    const op = operatorCounts(tick);
+    minutes.feed.alerts[m] = op.alerts;
+    minutes.feed.cancelledTrips[m] = op.cancelledTrips;
     const pins = tick.payload.items.filter((item) => item.id.startsWith('vehicle:'));
     let tram = 0;
     for (const item of pins) if ((item.data as Record<string, unknown> | undefined)?.['routeType'] === 0) tram++;
@@ -187,6 +272,9 @@ export async function stageFrames(paths: Paths, key: SegmentKey, log: (line: str
   const result = await replayPublished(seg.dirs, engine, { expect, routes, fromSec: t0 - seg.warmupSec, toSec: end, onTick });
   flushBefore(end);
   finalize(builder);
+  flushWall();
+  wallOut?.end();
+  await wallDone;
   minutes.frames = result.frames;
   minutes.dropped = result.dropped;
 
@@ -197,14 +285,18 @@ export async function stageFrames(paths: Paths, key: SegmentKey, log: (line: str
     if (lastHeaderOf[m] !== null) lastHeader = lastHeaderOf[m];
     const minuteEnd = t0 + (m + 1) * 60;
     minutes.feed.headerAgeS[m] = lastHeader === null ? null : minuteEnd - lastHeader;
+    minutes.feed.frozen[m] = lastHeader === null ? null : minuteEnd - lastHeader > FROZEN_AFTER_S ? 1 : 0;
     if (!hadFrame[m]) {
       minutes.service.state[m] = m > 0 ? minutes.service.state[m - 1] : null;
       minutes.service.since[m] = m > 0 ? minutes.service.since[m - 1] : null;
       minutes.service.hold[m] = 'gap';
     }
   }
+  const routesSeen: RoutesSeenWork = { segment: key, t0, step: ROUTES_STEP_S, n: slots, covered, routes: {} };
+  for (const [route, perSlot] of [...seenIds].sort((a, b) => a[0].localeCompare(b[0]))) routesSeen.routes[route] = perSlot.map((ids) => ids.size);
+  writeWork(paths, `routes-seen-${key}.json`, routesSeen);
   writeWork(paths, `minutes-${key}.json`, minutes);
   writeWork(paths, `motion-${key}.json`, motion);
-  log(`frames ${key}: ${result.frames} frames (${result.dropped} dropped), ${motion.chunks.length} chunks, largest ${Math.max(0, ...motion.chunks.map((c) => c.gzip))} B gzip`);
+  log(`frames ${key}: ${result.frames} frames (${result.dropped} dropped), ${motion.chunks.length} chunks, largest ${Math.max(0, ...motion.chunks.map((c) => c.gzip))} B gzip, ${seenIds.size} routes seen, ${covered.filter(Boolean).length} of ${slots} slots covered${wallOut ? `, ${wallLines} wall minutes` : ''}`);
   return { minutes, motion };
 }

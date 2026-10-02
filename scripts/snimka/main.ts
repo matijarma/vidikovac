@@ -10,7 +10,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { filePrint, listingPrint, resolvePaths, type Paths } from './paths';
-import { EXPECT_FILES, ROUTES_FILE, segmentOf, type SegmentKey } from './segments';
+import { EXPECT_FILES, ROUTES_FILE, SEGMENT_KEYS, segmentOf, type SegmentKey } from './segments';
 import { stageFrames } from './stage-frames';
 import { stageBajs } from './stage-bajs';
 import { stageClosures } from './stage-closures';
@@ -35,7 +35,7 @@ function parseArgs(argv: string[]): Args {
   const stage = (value('--stage') ?? 'all') as Args['stage'];
   if (stage !== 'all' && !(STAGE_NAMES as readonly string[]).includes(stage)) throw new Error(`--stage takes all or one of ${STAGE_NAMES.join(', ')}, got ${stage}`);
   const segment = value('--segment') ?? null;
-  if (segment !== null && segment !== 'window' && segment !== 'day') throw new Error(`--segment takes window or day, got ${segment}`);
+  if (segment !== null && !(SEGMENT_KEYS as readonly string[]).includes(segment)) throw new Error(`--segment takes ${SEGMENT_KEYS.join(', ')}, got ${segment}`);
   return { stage, segment: segment as SegmentKey | null, force: argv.includes('--force'), inputs: value('--inputs'), out: value('--out') };
 }
 
@@ -50,7 +50,14 @@ function fingerprint(paths: Paths, stage: StageName, segment: SegmentKey | null)
     case 'frames': {
       const seg = segmentOf(paths, segment!);
       const files = EXPECT_FILES(paths);
-      return hashOf([seg, seg.dirs.map((d) => listingPrint(d, (n) => /^\d{6}-\d+\.pb$/.test(n))), filePrint(seg.network), filePrint(seg.trips), filePrint(seg.overrides),
+      // Only the frames whose header lies in the segment (warm-up included): later frames of 2 Oct never force a rerun.
+      const lo = seg.fromSec - seg.warmupSec;
+      const hi = seg.fromSec + seg.minutes * 60;
+      const inSegment = (name: string): boolean => {
+        const match = /^\d{6}-(\d+)\.pb$/.exec(name);
+        return match !== null && Number(match[1]) >= lo && Number(match[1]) < hi;
+      };
+      return hashOf([seg, seg.dirs.map((d) => listingPrint(d, inSegment)), filePrint(seg.network), filePrint(seg.trips), filePrint(seg.overrides),
         filePrint(files.e396), filePrint(files.e395), filePrint(ROUTES_FILE(paths)),
         code(paths, 'scripts/snimka/stage-frames.ts', 'scripts/snimka/segments.ts', 'scripts/snimka/expect-merge.ts', 'scripts/replay-core.ts', 'shared/snimka-codec.ts',
           'worker/twin/tick.ts', 'worker/twin/publish.ts', 'worker/twin/service.ts', 'worker/twin/engine.ts', 'shared/motion/plan.ts')]);
@@ -85,7 +92,7 @@ interface StateFile { fingerprint: string; finishedAt: string }
 export function stageInputs(paths: Paths): Record<string, string> {
   const out: Record<string, string> = {};
   for (const stage of STAGE_NAMES) {
-    for (const seg of stage === 'frames' ? (['window', 'day'] as const) : [null]) {
+    for (const seg of stage === 'frames' ? SEGMENT_KEYS : [null]) {
       const file = join(paths.state, `${stage}${seg ? `-${seg}` : ''}.json`);
       if (existsSync(file)) out[`${stage}${seg ? `-${seg}` : ''}`] = (JSON.parse(readFileSync(file, 'utf8')) as StateFile).fingerprint;
     }
@@ -129,7 +136,7 @@ export async function run(repo: string, argv: string[]): Promise<number> {
   const stages: StageName[] = args.stage === 'all' ? [...STAGE_NAMES] : [args.stage];
   let ok = true;
   for (const stage of stages) {
-    const segments: (SegmentKey | null)[] = stage === 'frames' ? (args.segment ? [args.segment] : ['window', 'day']) : [null];
+    const segments: (SegmentKey | null)[] = stage === 'frames' ? (args.segment ? [args.segment] : [...SEGMENT_KEYS]) : [null];
     for (const segment of segments) ok = (await runStage(paths, stage, segment, args.force, log)) && ok;
   }
   return ok ? 0 : 1;
