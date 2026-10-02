@@ -9,7 +9,7 @@ import { SPEEDS } from '../../shared/snimka';
 const html = readFileSync(new URL('../../app/snimka/index.html', import.meta.url), 'utf8');
 const LEAVES = leaves();
 /** The leaf count at W0 of the v3 pass; the orchestrator lowers it as the dead keys go. */
-const LEAF_FLOOR = 545;
+const LEAF_FLOOR = 380;
 const byKey = new Map(LEAVES);
 /** The leaves under a key marked "v3: delete after W<n>" in strings.ts (dead in v3, still imported until that lane lands). */
 const DEAD = ((): Set<string> => {
@@ -123,7 +123,7 @@ describe('the static HTML carries the same strings', () => {
   it('the title and the description are the page strings; the question chips are gone', () => {
     expect(html).toContain(`<title>${SN.page.title}</title>`);
     expect(html).toContain(`<meta name="description" content="${SN.page.description}">`);
-    expect(html).not.toContain(`aria-label="${SN.questions.label}"`);
+    expect(html).not.toContain('aria-label="Ulazi u snimku"');
     // Under reduced motion the entry swaps the instruction line for its reduced twin, which keeps the same tail.
     expect(SN.narration.howToReduced.endsWith(SN.narration.howTo.slice(SN.narration.howTo.indexOf('povuci')))).toBe(true);
   });

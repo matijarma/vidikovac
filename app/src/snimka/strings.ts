@@ -40,12 +40,6 @@ export const SN = {
     screen: 'Zaslon',
     strip: 'Tijek',
     data: 'Podaci i izvori',
-    /** v3: delete after W4b (report.ts names the question chips' sections with it) */
-    alternatives: 'Zamjene',
-    /** v3: delete after W4b (report.ts) */
-    reckoning: 'Što se vidjelo',
-    /** v3: delete after W4b (report.ts) */
-    open: 'Otvoreni podaci',
   },
   hero: {
     eyebrow: 'Snimka · od 27. rujna do 2. listopada 2026.',
@@ -56,20 +50,6 @@ export const SN = {
     /** The hero's one instruction line; the entry swaps in howToReduced under prefers-reduced-motion. */
     howTo: 'Snimka teče deset minuta u sekundi. Zaustavi je ili povuci crtu ispod karte; svaka brojka uspoređuje taj trenutak s običnim danom.',
     howToReduced: 'Pokreni snimku ili povuci crtu ispod karte; svaka brojka uspoređuje taj trenutak s običnim danom.',
-    /** v3: delete after W4b (report.ts upgradeQuestions; the chips left the HTML) */
-    q1: 'Što sam mogao umjesto tramvaja?',
-    /** v3: delete after W4b */
-    q2: 'Koliko je štrajk bio potpun?',
-    /** v3: delete after W4b */
-    q3: 'Što je grad mogao znati u svakoj minuti?',
-    /** v3: delete after W4b */
-    q4: 'Odakle brojevi i kako ih provjeriti?',
-  },
-  /** v3: delete after W4b (report.ts upgradeQuestions) */
-  questions: {
-    label: 'Ulazi u snimku',
-    goes: 'Otvara poglavlje {chapter}; odgovor je u odjeljku {section}.',
-    section: 'Odgovor u odjeljku',
   },
   kpi: {
     /** Forms after the figure (count() prepends it): "63 sata gotovo bez vozila". */
@@ -83,16 +63,6 @@ export const SN = {
     returnSub: 'u srijedu 30. 9. od {from} do {to}',
     /** A tile's seek button: the tile moves the instrument to its moment. */
     show: 'Pokaži u snimci',
-    /** v3: delete after W4a (the "2 vozila" tile goes) */
-    peak: ['vozilo u ponedjeljak u 07:45', 'vozila u ponedjeljak u 07:45', 'vozila u ponedjeljak u 07:45'],
-    /** v3: delete after W4a */
-    peakSub: 'običan četvrtak u isto doba: {normal}',
-    /** v3: delete after W4a */
-    peakDaySub: '{day}, običan dan u isto doba: {normal}',
-    /** v3: delete after W4a (the alerts tile goes: it summed alert-minutes) */
-    alerts: 'upozorenja u ZET-ovim podacima',
-    /** v3: delete after W4a */
-    alertsSub: '{alerts} upozorenja i {cancelled} otkazanih vožnji u {hours} sati snimke',
   },
   stage: {
     title: 'Snimka grada',
@@ -133,21 +103,9 @@ export const SN = {
     collapse: 'Zatvori',
     deeper: 'Više u odjeljku „{section}”',
     deckLabel: 'Pokazatelji',
-    /** v3: delete after W2 (Stanje merges into Vozila) */
-    state: 'Stanje',
-    /** v3: delete after W2 (Linije merges into Mreža) */
-    lines: 'Linije',
-    /** v3: delete after W2 and W4a (Vrijeme leaves the deck and the strip) */
-    weather: 'Vrijeme',
-    /** v3: delete after W3 (Poglavlja leaves the deck; agenda.ts) */
-    agenda: 'Poglavlja',
-    /** v3: delete after W2 (one close button, "Zatvori") */
-    back: 'Natrag na pregled',
   },
   readout: {
     moving: 'u pokretu',
-    /** v3: delete after W2 (readout.normalDay replaces it) */
-    normal: 'običan dan',
     normalDay: 'običan dan',
     normalDaySub: 'običan dan ({day}) u isto doba: {n}',
     expected: 'po voznom redu',
@@ -161,14 +119,8 @@ export const SN = {
     stations: 'Prazne sada, a u četvrtak 1. 10. nisu bile',
     stationsBikes: 'Broj bicikala',
     weatherClause: 'Sva tri dana suho, od 8 do 25 °C (DHMZ, Maksimir).',
-    /** v3: delete after W2 (the weather clause replaces the weather face) */
-    weather: '{temp} °C, {words}',
-    /** v3: delete after W2 */
-    weatherTempOnly: '{temp} °C',
     weatherNone: 'bez podatka DHMZ-a',
     dataPath: 'u ZET-ovim podacima {entities} vozila: u spremištu {depot}, stoji izvan spremišta {parked}, u pokretu {seen}; na zaslonu {published}',
-    /** v3: delete after W2 (Mreža's captions carry the counts: twins.count) */
-    linesCount: '{alive} od {scheduled} linija po voznom redu ima vozilo',
     // The state rules in words (worker/twin/service.ts); in v3 they move to the dossier card.
     rules: {
       title: 'Kako aplikacija određuje stanje usluge',
@@ -197,27 +149,12 @@ export const SN = {
     bikesLegend: 'Bicikli: tamnije je punije; crveni rub znači prazniju stanicu nego u četvrtak 1. 10. u isto doba.',
     bikesMissing: 'Bicikli: bez podataka do 22:05.',
     noVehiclesAtSpeed: 'Pri satu u sekundi karta pokazuje samo bicikle; vozila se vide pri 10 min/s i sporije.',
-    /** v3: delete after W1 (the camera toggle becomes director.toggle in the control stack) */
-    follow: 'Karta prati snimku',
-    /** v3: delete after W1 (Zatvorene ulice leave the stage) */
-    closures: 'Zatvorene ulice',
-    /** v3: delete after W1 (no chip group labels) */
-    sources: 'Izvori',
-    /** v3: delete after W1 */
-    derived: 'Kaj ima? izvodi',
-    /** v3: delete after W1 (Živa mreža goes) */
-    live: 'Živa mreža',
-    /** v3: delete after W1 and W2 */
-    liveNote: 'Linija svijetli dok je na njoj u zadnjih 15 minuta bilo vozilo; siva je linija po voznom redu bez vozila; tanka je linija izvan voznog reda.',
   },
   legend: {
-    ghost: 'vozilo na običan dan',
-    /** v3: delete after W1 and W2 (stage legend, Mreža depth and minimap legend) */
     alive: 'linija s vozilom',
-    /** v3: delete after W1 and W2 */
     dead: 'po voznom redu, bez vozila',
-    /** v3: delete after W1 and W2 */
     quiet: 'izvan voznog reda',
+    ghost: 'vozilo na običan dan',
   },
   twins: {
     title: 'Dvije mreže u istom trenutku',
@@ -238,10 +175,6 @@ export const SN = {
     goTo: 'Idi na: {title}',
     retro: 'izračunano naknadno',
     rug: 'ZET ne šalje podatke ili se ne osvježavaju',
-    /** v3: delete after W3 (the ZET/court marker row: timeline.marks) */
-    notices: 'Obavijesti i presude',
-    /** v3: delete after W3 (the press lane goes) */
-    press: 'Mediji',
   },
   director: {
     toggle: 'Karta prati događaje',
@@ -276,8 +209,6 @@ export const SN = {
     observedNote: 'Zapis javnog zaslona na Trgu bana Jelačića u toj minuti.',
     replayedNote: 'Rečenicu je naknadno izračunala današnja inačica aplikacije iz podataka te minute.',
     more: 'Što je pisalo na zaslonu →',
-    /** v3: delete after W3 (the subtitle never flashes "none"; the last line stays dimmed) */
-    none: 'Za ovu minutu nema rečenice.',
   },
   voices: {
     title: 'Objave',
@@ -287,10 +218,6 @@ export const SN = {
       court: 'Sud',
       press: 'Mediji',
       chapter: 'Poglavlje',
-      /** v3: delete after W3 (the app's own items leave the list) */
-      companion: 'Aplikacija',
-      /** v3: delete after W3 (recording-internal events leave the list; chapters are kind.chapter) */
-      event: 'Snimka',
     },
     atThatMinute: 'U toj minuti',
     atPublish: 'U minuti objave',
@@ -300,34 +227,6 @@ export const SN = {
     moreForms: ['{count} sličan naslov', '{count} slična naslova', '{count} sličnih naslova'],
     filtered: 'Samo {subject} · skriveno {n}',
     clear: 'Prikaži sve',
-    /** v3: delete after W3 */
-    lede: 'ZET, sud, mediji i sama aplikacija, redom kako su se oglašavali.',
-    /** v3: delete after W3 (no "Starije" cap) */
-    older: 'Starije',
-    /** v3: delete after W3 (voices.filtered carries the count) */
-    hiddenForms: ['{count} stavka bez te teme', '{count} stavke bez te teme', '{count} stavki bez te teme'],
-    /** v3: delete after W3 and W4a (beat pills go; the press links use alternatives.beat) */
-    beat: {
-      najava: 'Najava',
-      pocetak: 'Početak',
-      'prvo-jutro': 'Prvo jutro',
-      'jedan-tramvaj': 'Jedan tramvaj',
-      'linija-228': 'Linija 228',
-      'sud-privremeno': 'Sud, privremeno',
-      presuda: 'Presuda',
-      povratak: 'Povratak',
-      bajs: 'BAJS',
-      taksi: 'Taksi',
-      volonteri: 'Volonteri',
-      skole: 'Škole',
-      'drugi-dan': 'Drugi dan',
-      'treci-dan': 'Treći dan',
-      holding: 'Holding',
-      guzve: 'Gužve',
-      pregovori: 'Pregovori',
-      vlak: 'Vlak',
-      nakon: 'Nakon',
-    },
   },
   facts: {
     seen: 'u pokretu {n}',
@@ -347,8 +246,6 @@ export const SN = {
     station: '{name}: {bikes}',
     stationEmpty: '{name}: prazna',
     none: 'bez podatka',
-    /** v3: delete after W1 (the closures chip goes) */
-    closures: 'zatvorenih ulica {n}',
   },
   agenda: {
     title: 'Poglavlja',
@@ -403,28 +300,10 @@ export const SN = {
     boardNone: 'U voznom redu nema sljedećih polazaka.',
     replayedNote: 'Ovako bi pisalo na zaslonu da je nadogradnja od 29. rujna postojala od početka.',
     noReplayed: 'Za ovu minutu nema izračunane rečenice.',
-    /** v3: delete after W4b (screen.notRecorded replaces it) */
-    noCapture: 'Za ovo doba nema izgleda zaslona.',
-    /** v3: delete after W4b (screen.morningsTitle) */
-    quartetTitle: 'Isti zaslon, isti trenutak, pet jutara',
-    /** v3: delete after W4b (screen.morningsLede) */
-    quartetLede: 'Od ponedjeljka do petka u 07:45: zapis zaslona gdje postoji i rečenica današnjih pravila.',
-    /** v3: delete after W4b (screen.mornings) */
-    quartet: {
-      mon: 'Polasci iz voznog reda, izrečeni kao činjenica.',
-      tue: 'Isto, dok se ZET-ovi podaci ne mijenjaju.',
-      wed: 'Odstupanje izrečeno brojkama.',
-      thu: 'Uobičajeno jutro.',
-      fri: 'Drugo uobičajeno jutro.',
-    },
-    /** v3: delete after W4b (the source toggle goes) */
-    sourceLabel: 'Izvor rečenice',
-    /** v3: delete after W4b */
-    sourceObserved: 'Zapis',
-    /** v3: delete after W4b */
-    sourceReplayed: 'Današnja pravila',
   },
   strip: {
+    tram: 'Tramvaji',
+    bus: 'Autobusi',
     title: 'Tijek',
     lede: 'Gotovo pet dana na jednoj osi, prema običnom danu. Okomita crta pokazuje trenutak snimke; klikni ili povuci po grafu da je premjestiš.',
     fleet: 'Vozila u pokretu',
@@ -449,38 +328,6 @@ export const SN = {
     hour: 'Sat',
     stateRetro: 'izračunano naknadno',
     stateNone: 'bez procjene',
-    /** v3: delete after W4a (strip.fleetNormal) */
-    fleetCompare: 'običan dan',
-    /** v3: delete after W4a and W2 (the state band goes) */
-    state: 'Stanje usluge',
-    /** v3: delete after W4a and W2 (strip.bikesEmpty is the one bikes chart) */
-    bikes: 'Bicikli na stanicama',
-    /** v3: delete after W4a (ZET lanes go to the downloads) */
-    feedDepot: 'u spremištu',
-    /** v3: delete after W4a */
-    feedFuture: 'vrijeme unaprijed',
-    /** v3: delete after W4a (headlines per hour go) */
-    news: 'Medijski naslovi po satu',
-    /** v3: delete after W4a (the ghost columns become a card) */
-    ghosts: 'Vozila koja je zaslon brojio, a nisu imala položaj',
-    /** v3: delete after W4a (heatmap.title) */
-    lines: 'Sve linije, svaki sat',
-    /** v3: delete after W4a (heatmap.lede) */
-    linesLede: 'Udio vozila prema voznom redu po liniji i satu: tramvaji pa autobusi.',
-    /** v3: delete after W4a (heatmap.otherBuses) */
-    linesOtherBuses: 'Ostale autobusne linije ({n}), zajedno',
-    /** v3: delete after W4a (heatmap.allBuses) */
-    linesAll: 'Prikaži sve autobusne linije',
-    /** v3: delete after W4a (heatmap.cell) */
-    linesCell: 'linija {short}, {day} u {hour}: {seen} od {expected}',
-    /** v3: delete after W4a (heatmap.none) */
-    linesNone: 'ne vozi po voznom redu',
-    /** v3: delete after W2 and W4a (the tram/bus sub-plots go) */
-    tram: 'Tramvaji',
-    /** v3: delete after W2 and W4a */
-    bus: 'Autobusi',
-    /** v3: delete after W2 and W4a (temperature goes) */
-    weather: 'Temperatura i vrijeme',
   },
   heatmap: {
     title: 'Sve linije, svaki sat',
@@ -532,66 +379,6 @@ export const SN = {
     ghostsMax: 'Najveća razlika',
     ghostsMaxValue: '{count} više nego s položajem, {day} u {time}',
     ghostsMinutes: 'Minute s razlikom',
-    /** v3: delete after W4a (reckoning.mornings) */
-    peak: 'Pet jutara u 07:45',
-    /** v3: delete after W4a (reckoning.morningsMethod) */
-    peakMethod: 'Vozila u pokretu u 07:45 svakog dana i običnog četvrtka 24. rujna u isto doba.',
-    /** v3: delete after W4a */
-    peakCompare: 'čet 24. 9., običan dan',
-    /** v3: delete after W4a */
-    peakFive: 'Jutra u 07:45',
-    /** v3: delete after W4a */
-    peakFiveMethod: 'Vozila u pokretu u 07:45 svakog jutra snimke i dvaju običnih dana u isto doba: ponedjeljka 21. i četvrtka 24. rujna.',
-    /** v3: delete after W4a ("Bicikli kao zamjena" goes) */
-    bikes: 'Bicikli kao zamjena',
-    /** v3: delete after W4a */
-    bikesMethod: 'Najmanji zbroj bicikala i najveći broj praznih stanica po danu, iz podataka nextbikea svake minute.',
-    /** v3: delete after W4a */
-    bikesMin: 'najmanje bicikala',
-    /** v3: delete after W4a */
-    bikesEmptyMax: 'najviše praznih stanica',
-    /** v3: delete after W4a */
-    bikesDrained: 'bicikala manje na stanicama, od najvećeg zbroja do najmanjeg',
-    /** v3: delete after W4a (reckoning.zet) */
-    feed: 'ZET-ovi podaci',
-    /** v3: delete after W4a (reckoning.zetMethod) */
-    feedMethod: 'Minute u kojima ZET nije slao nijedno vozilo i minute u kojima se ZET-ovi podaci nisu mijenjali.',
-    /** v3: delete after W4a ("Što je zaslon govorio" goes) */
-    sentences: 'Što je zaslon govorio',
-    /** v3: delete after W4a */
-    sentencesMethod: 'Rečenice zaglavlja po vrsti, iz zapisa zaslona svakih 20 sekundi.',
-    /** v3: delete after W4a (reckoning.linesValueForms) */
-    linesValue: '{count} od {total} linija',
-    /** v3: delete after W4a */
-    linesMonday: 'U ponedjeljak 28. rujna',
-    /** v3: delete after W4a */
-    linesNone: 'nijedna',
-    /** v3: delete after W4a (reckoning.zet) */
-    alerts: 'Što je ZET rekao u podacima',
-    /** v3: delete after W4a (reckoning.zetMethod) */
-    alertsMethod: 'Upozorenja i otkazane vožnje u ZET-ovim podacima u stvarnom vremenu, zbrojeni po minutama snimke.',
-    /** v3: delete after W4a (reckoning.zetAlerts) */
-    alertsValue: '{alerts} upozorenja, {cancelled} otkazanih vožnji',
-    /** v3: delete after W4a */
-    liveRows: 'Redovi s polaskom uživo',
-    /** v3: delete after W4a */
-    liveRowsValue: '{live} od {rows} redova s polaskom',
-    /** v3: delete after W4a */
-    families: {
-      'departure-timetable': 'Polazak po voznom redu',
-      'departure-live': 'Polazak uživo',
-      'first-last': 'Prvi ili zadnji polazak',
-      service: 'Stanje usluge',
-      outage: 'Bez ZET-ovih podataka',
-      rail: 'Vlak',
-      bikes: 'Bicikli',
-      closure: 'Zatvorena ulica',
-      event: 'Događanje',
-      weather: 'Vrijeme',
-      solar: 'Izlazak ili zalazak sunca',
-      notice: 'Obavijest ZET-a',
-      other: 'Ostalo',
-    },
   },
   alternatives: {
     title: 'Čime se moglo umjesto tramvaja',
@@ -621,22 +408,6 @@ export const SN = {
       volonteri: 'Volonteri',
       bajs: 'BAJS',
     },
-    /** v3: delete after W4a */
-    pressLede: 'Taksi, volonteri, škole i gužve: naslovi s poveznicom na izvorni članak.',
-    /** v3: delete after W4a (the ranking by empty hours) */
-    emptyFrom: 'Prazna od',
-    /** v3: delete after W4a */
-    bikesAtFive: 'Bicikala u 05:00',
-    /** v3: delete after W4a (alternatives.line228Lede) */
-    line228Method: 'Vozila linije 228 u pokretu po satu od utorka 29. rujna, iz snimljenih položaja po liniji; obavijest ZET-a 10166.',
-    /** v3: delete after W4a (the rail card goes) */
-    rail: 'Vlak u zaglavlju zaslona',
-    /** v3: delete after W4a */
-    railMethod: 'Rečenice zaglavlja o vlaku po danu, iz zapisa zaslona. Vlakovi su se na zaslonu pojavili s nadogradnjom od 29. rujna; snimka ne govori o prometu vlakova, samo o zaslonu.',
-    /** v3: delete after W4a */
-    railValue: '{count} rečenica o vlaku',
-    /** v3: delete after W4a */
-    railNone: 'U zapisima zaslona nema rečenice o vlaku.',
   },
   live: {
     title: 'I danas',
@@ -661,8 +432,6 @@ export const SN = {
     age: 'Stanje od prije {age}.',
     app: 'Aplikacija uživo →',
     stats: 'Statistika usluge →',
-    /** v3: delete after W4b (the method line moves to Podaci i izvori: sources.live) */
-    method: 'Jedno čitanje javnog sažetka aplikacije kad se ova kartica pojavi; ništa se ne broji i ne šalje.',
   },
   data: {
     title: 'Podaci i izvori',
@@ -698,52 +467,6 @@ export const SN = {
     rowForms: ['redak', 'retka', 'redaka'],
     catalogEntry: 'Skup u popisu otvorenih podataka',
     commit: 'Inačica koda {commit}',
-    /** v3: delete after W4b (the signals table goes) */
-    signal: 'Podatak',
-    /** v3: delete after W4b */
-    signalSource: 'Iz čega',
-    /** v3: delete after W4b */
-    signalCadence: 'Korak',
-    /** v3: delete after W4b */
-    signalUse: 'Kome koristi',
-    /** v3: delete after W4b */
-    row: {
-      state: 'Stanje usluge po minuti',
-      stateUse: 'Gradu i ZET-u: kad je promet odstupao i koliko',
-      fleet: 'Vozila u pokretu i po voznom redu, po liniji',
-      fleetUse: 'ZET-u i medijima: koje su linije vozile',
-      feed: 'Pouzdanost ZET-ovih podataka: prazni i zamrznuti okviri, vremena iz budućnosti, upozorenja',
-      feedUse: 'ZET-u i timu za otvorene podatke',
-      bikes: 'Bicikli po stanici svakih pet minuta',
-      bikesUse: 'Gradu i nextbikeu: gdje je zamjena nestala prva',
-      closures: 'Zatvorene ulice po inačici skupa, s pomicanjem kraja',
-      closuresUse: 'Gradu: koji krajevi radova nisu stvarni',
-      voice: 'Rečenice zaslona, zapisane i izračunane',
-      voiceUse: 'Svima: što je grad mogao pročitati',
-    },
-    /** v3: delete after W4b */
-    cadence: {
-      minute: 'svaku minutu',
-      five: 'svakih pet minuta',
-      change: 'pri svakoj promjeni',
-    },
-    /** v3: delete after W4b */
-    source: {
-      zet: 'ZET, GTFS-RT',
-      nextbike: 'nextbike, GBFS',
-      city: 'Grad Zagreb, data.zagreb.hr',
-      kajima: 'Kaj ima?',
-    },
-    /** v3: delete after W4b (open.cite) */
-    licence: 'Otvorena dozvola, uz navođenje izvora',
-    /** v3: delete after W4b (one link per file) */
-    catalogLink: 'Katalog otvorenih podataka',
-    /** v3: delete after W4b (open.repro) */
-    reproText: 'Skup je izgrađen iz snimki naredbom npm run build:snimka na inačici koda {commit}; ugovor podataka i opis cjevovoda su u docs/snimka-2026-10.md, a sažetak svake datoteke u manifestu.',
-    /** v3: delete after W4b (open.reproBrief) */
-    brief: 'Opis cjevovoda',
-    /** v3: delete after W4b (the promise sentence goes) */
-    promise: 'Prijava Gradu obećava otvorene podatke u oba smjera: Grad daje, a Kaj ima? vraća ono što izvede. Ovo je prvi takav skup.',
   },
   sources: {
     title: 'Izvori i licence',
