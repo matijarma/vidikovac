@@ -65,6 +65,8 @@ export const EDGE_HZ = 4;
 export const STATION_ZOOM = FOCUS_ZOOM;
 /** Autoplay waits until this much of the map box is in the viewport (V3-18, phones). */
 export const IN_VIEW_RATIO = 0.5;
+/** A BAJS push that found no style yet asks again after this long (the map's status usually asks first). */
+export const BAJS_RETRY_MS = 250;
 
 export interface MapLayerHooks {
   /** The current chunk's state, whenever it changes: 'idle' while nothing is asked for (one hour per second, playing). */
@@ -186,6 +188,7 @@ export const mountMapLayer: MountMapLayer = async (ctx, host) => {
   let bajsApplied = new Map<string, StationState>();
   let lastBajsAt = -Infinity;
   let lastBajsSample = -2;
+  let bajsRetry: ReturnType<typeof setTimeout> | null = null;
   let bajsDrawn = 0;
   let bajsAnomalies = 0;
   let bajsMissing = true;
@@ -237,6 +240,8 @@ export const mountMapLayer: MountMapLayer = async (ctx, host) => {
       zoom: STAGE_ZOOM,
       pickRoutes: true,
       lineFocus: false,
+      // The style is up by the time the basemap reports: a BAJS push that found no style yet is retried from here.
+      onStatus: () => { nudgeDue = true; frames.kick(); },
       onUserMove: () => { userMoved = true; hideTip(); for (const fn of [...moveListeners]) fn(); },
       onNetwork: (net) => {
         net396 = net && 'paths' in net ? (net as GraphNetwork) : null;
@@ -277,11 +282,9 @@ export const mountMapLayer: MountMapLayer = async (ctx, host) => {
           ...m,
           step(now) {
             const drawn = m.step(now);
-            if (drawn.length !== drawnCount) {
-              drawnCount = drawn.length;
-              container.dataset.snDrawn = String(drawnCount);
-              frames.kick();
-            }
+            const count = String(drawn.length);
+            if (container.dataset.snDrawn !== count) container.dataset.snDrawn = count;
+            if (drawn.length !== drawnCount) { drawnCount = drawn.length; frames.kick(); }
             return drawn;
           },
         };
@@ -418,7 +421,12 @@ export const mountMapLayer: MountMapLayer = async (ctx, host) => {
     }
     let applied = 0;
     for (const [id, state] of changedStates(bajsApplied, next)) {
-      if (!handle.setFeatureState(BAJS_SOURCE, bajsFeatureId(id), { f: state.f, e: state.e, a: state.a, m: state.m, s: state.s })) return; // the style is not up: nothing was set, try again next frame
+      if (!handle.setFeatureState(BAJS_SOURCE, bajsFeatureId(id), { f: state.f, e: state.e, a: state.a, m: state.m, s: state.s })) {
+        // The style is not up: nothing was set. Asked again on the map's status and, failing that, in a moment.
+        lastBajsSample = -2;
+        if (!bajsRetry) bajsRetry = globalThis.setTimeout(() => { bajsRetry = null; nudgeDue = true; frames.kick(); }, BAJS_RETRY_MS);
+        return;
+      }
       applied += 1;
     }
     bajsApplied = next;
@@ -605,6 +613,7 @@ export const mountMapLayer: MountMapLayer = async (ctx, host) => {
       if (disposed) return;
       disposed = true;
       unbindDirector();
+      if (bajsRetry) { globalThis.clearTimeout(bajsRetry); bajsRetry = null; }
       observer?.disconnect();
       doc.removeEventListener(DIRECTOR_STATE_EVENT, onDirectorState);
       removeControl();
