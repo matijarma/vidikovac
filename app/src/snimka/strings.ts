@@ -3,7 +3,7 @@
 // (~/.claude/plans/look-at-the-page-generic-crown.md). The page is Croatian only, so there is no catalogue and no
 // locale: the strings live here, in one object, for the owner's read-through. `{name}` is a placeholder for fill().
 // "štrajk" stands only under narration.* and sources.* (test/app/snimka-strings.test.ts holds the rules). A key
-// marked `v3: delete after W<n>` is dead in v3 but still imported by a module lane W<n> rebuilds; the orchestrator
+// carrying the v3 dead-key comment (delete after lane W<n>) is dead in v3 but still imported by a module lane W<n> rebuilds; the orchestrator
 // deletes it once that lane lands.
 //
 // Plural forms: an array of three (one, few, many: 1 sat, 3 sata, 5 sati), picked by plural() from format.ts. Where
