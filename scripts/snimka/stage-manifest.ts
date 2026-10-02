@@ -41,6 +41,7 @@ export const NOTES: string[] = [
   'Lokalni snimači rade od nedjelje 27. rujna u 22:07: za ranije minute brojevi koje je aplikacija objavila, bicikli i zatvorene ulice nemaju podatka.',
   'U srijedu 30. rujna od 22:41 do 22:54 lokalni snimači nisu radili; ZET-ovi podaci snimljeni su bez prekida.',
   'Aplikacija objavljuje stanje usluge od utorka 29. rujna u 23:17; za ranije minute stanje je izračunano naknadno, istim pravilima, iz snimljenih podataka.',
+  'U utorak 29. rujna od 21:18 do 23:17 ZET-ovi podaci nisu se mijenjali gotovo dva sata; rečenice zaslona po današnjim pravilima u tom razdoblju govore o nepotvrđenim polascima.',
   'Od nedjelje u 20:00 do ponoći vozila su snimljena prema starom voznom redu ZET-a, a smještena na mrežu novoga; na dionicama s dva kolosijeka smjer vozila zato može biti pogrešan.',
   'Običan četvrtak 24. rujna nema snimljenih ZET-ovih podataka od ponoći do 02:00.',
   'Običnom ponedjeljku 21. rujna u snimci nedostaju dva okvira.',

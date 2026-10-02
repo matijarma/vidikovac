@@ -130,16 +130,26 @@ const cfEnv = () => {
 /** Every key under the prefix with its size, through cf's paginated list. */
 export function listRemote(prefix = PREFIX) {
   const sizes = new Map();
+  const perPage = 1000;
   let cursor;
+  let startAfter;
   for (let page = 0; page < 1000; page++) {
-    const args = ['r2', 'objects', 'list', '--bucket-name', BUCKET, '--prefix', prefix, '--per-page', '1000', ...(cursor ? ['--cursor', cursor] : [])];
+    // `cf r2 objects list` prints a bare, key-sorted array with no cursor: paginate by keyset (`--start-after` the
+    // last key of a full page). A body with a cursor (an object) still paginates by cursor.
+    const args = ['r2', 'objects', 'list', '--bucket-name', BUCKET, '--prefix', prefix, '--per-page', String(perPage),
+      ...(cursor ? ['--cursor', cursor] : []), ...(!cursor && startAfter ? ['--start-after', startAfter] : [])];
     const res = spawnSync('cf', args, { encoding: 'utf8', env: cfEnv(), maxBuffer: 64 * 1024 * 1024 });
     if (res.status !== 0) throw new Error(`cf r2 objects list failed: ${res.stderr || res.stdout}`);
     const body = JSON.parse(res.stdout);
     const items = Array.isArray(body) ? body : body.result ?? body.objects ?? [];
     for (const o of items) sizes.set(o.key, Number(o.size));
-    cursor = Array.isArray(body) ? undefined : body.cursor ?? body.result_info?.cursor;
-    const truncated = Array.isArray(body) ? false : body.truncated ?? body.result_info?.is_truncated ?? false;
+    if (Array.isArray(body)) {
+      if (items.length < perPage) break;
+      startAfter = items[items.length - 1].key;
+      continue;
+    }
+    cursor = body.cursor ?? body.result_info?.cursor;
+    const truncated = body.truncated ?? body.result_info?.is_truncated ?? false;
     if (!cursor || !truncated) break;
   }
   return sizes;
