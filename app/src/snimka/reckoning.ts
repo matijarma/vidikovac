@@ -1,7 +1,8 @@
-// Što se vidjelo and the hero numbers of /snimka/: every number the report
-// states, computed in the page from the window series (and the comparison day
-// and the screen index) by pure functions, each with its method line beside
-// it on the page. Times in and out are epoch SECONDS, as the dataset counts;
+// Što snimka pokazuje (v3): the three tiles at its head, each a button that
+// moves the instrument to its moment, and the six cards under them; every
+// number computed in the page from the window series (the comparison days and
+// the routes file) by pure functions, each with its method line beside it on
+// the page. Times in and out are epoch SECONDS, as the dataset counts;
 // the clock's milliseconds stay in strip.ts and screen.ts.
 //
 // Missing is never zero: a minute whose column is null counts for nothing,
@@ -9,11 +10,29 @@
 // "bez podatka" or "U snimci nema takvih minuta"), never a 0 it did not see.
 import { FROZEN_AFTER_S, ZAGREB_OFFSET_S, type ScreenIndex, type SentenceFamily, type SeriesFile } from '../../../shared/snimka';
 import { ROUTES_MISSING, decodeRoutes } from '../../../shared/snimka-codec';
-import { bars, card, empty } from '../statistika/charts';
+import { bars, card, empty, tableDetails } from '../statistika/charts';
+import { bindTileSeeks, showOnStage } from './alternatives';
+import type { Mount, SnimkaContext } from './context';
 import type { RoutesLike } from './contracts';
 import { escapeHtml } from '../ui/dom/escape';
-import { count, duration, num, plural, zagrebClock, zagrebDateTime, zagrebDay, type Forms } from './format';
+import { WEEKDAYS, duration, num, plural, zagrebClock, zagrebDateTime, zagrebDay } from './format';
+import { colMax, miniPlot } from './paths';
 import { SN, fill } from './strings';
+
+const zg = (month: number, day: number, hour: number, minute = 0): number => Date.UTC(2026, month - 1, day, hour, minute) / 1000 - ZAGREB_OFFSET_S;
+/** The strike's first minute (Mon 28 Sep 03:30 Zagreb) and the first minute of the normal state after it (Wed 30 Sep
+ *  20:16): the window of the alerts and the ghost rule (decision V3-21). */
+export const STRIKE_FROM_SEC = zg(9, 28, 3, 30);
+export const STRIKE_END_SEC = zg(9, 30, 20, 16);
+/** The lines card stops before the relight (Wed 30 Sep 18:00; the first trams left the depots at 18:10). */
+export const LINES_TO_SEC = zg(9, 30, 18, 0);
+/** The normal day of the bikes: Thursday 1 October, inside the window (the comparison days carry no bikes). */
+export const BIKES_REF_DAY_SEC = zg(10, 1, 0, 0);
+/** The return card's span: Wed 30 Sep 18:00 to 22:00. */
+export const RETURN_FROM_SEC = zg(9, 30, 18, 0);
+export const RETURN_TO_SEC = zg(9, 30, 22, 0);
+export interface Span { from: number; to: number }
+const STRIKE: Span = { from: STRIKE_FROM_SEC, to: STRIKE_END_SEC };
 
 /** ZET's data is "not changing" once the newest header is older than this: the one constant of decision S-19
  *  (shared/snimka.ts), re-exported for the callers that read it here. */
@@ -70,7 +89,6 @@ export function frozenAt(s: SeriesFile, m: number): boolean {
 export const MORNING_S = 7 * 3600 + 45 * 60;
 
 const DAY_S = 86_400;
-const VOZILO: Forms = ['vozilo', 'vozila', 'vozila'];
 
 /** The Zagreb midnight at or before an instant, epoch seconds. */
 export function midnightOf(sec: number): number {
@@ -197,9 +215,11 @@ export interface GhostResult {
 
 /** The number the product published against the vehicles with a position, minute by minute: how many minutes it
  *  counted vehicles that were not there (ghostSeries: a settled small fleet and at least two more, or any while none
- *  had a position), by how much at most, and when, in all and per day. Only minutes where both numbers exist are compared.
- *  Null without a published series (the comparison day). */
-export function ghostInflation(s: SeriesFile): GhostResult | null {
+ *  had a position), by how much at most, and when, in all and per day. Only minutes where both numbers exist are
+ *  compared, and only strike minutes count (v3): inside `span` (Mon 03:30 to Wed 20:16 by default) and in the
+ *  "gotovo bez vozila" or "smanjeno" state, so the midnight collapse before the strike and the night fleet of a
+ *  normal day are not ghosts. Null without a published series (the comparison day). */
+export function ghostInflation(s: SeriesFile, span: Span | null = STRIKE): GhostResult | null {
   const p = s.published;
   if (!p) return null;
   let max = 0;
@@ -215,6 +235,11 @@ export function ghostInflation(s: SeriesFile): GhostResult | null {
     const pub = p.vehicles[m];
     const seen = s.seen.all[m];
     if (pub === null || pub === undefined || seen === null || seen === undefined) continue;
+    if (span) {
+      const sec = atOf(s, m);
+      const state = s.service.state[m];
+      if (sec < span.from || sec >= span.to || (state !== 'silent' && state !== 'reduced')) continue;
+    }
     compared++;
     const row = byDay[days.indexOf(midnightOf(atOf(s, m)))];
     if (row) row.compared++;
@@ -365,12 +390,13 @@ export interface LinesDay { day: number; count: number; total: number; shortName
 
 /** Per Zagreb day, the routes with a vehicle in motion in any five-minute slot of that day (`count`, with their short
  *  names, trams first) against the routes scheduled or seen that day (`total`). A missing slot (255) counts for
- *  nothing; a day without one known slot is left out. */
-export function linesByDay(routes: RoutesLike): LinesDay[] {
+ *  nothing; a day without one known slot is left out. With `span`, only the slots starting inside it count. */
+export function linesByDay(routes: RoutesLike, span: Span | null = null): LinesDay[] {
   const { seen, expected } = decodeRoutes(routes as Parameters<typeof decodeRoutes>[0]);
   const step = routes.step;
   const out = new Map<number, { count: Set<number>; total: Set<number>; known: boolean }>();
   for (let j = 0; j < routes.n; j++) {
+    if (span && (routes.t0 + j * step < span.from || routes.t0 + j * step >= span.to)) continue;
     const day = midnightOf(routes.t0 + j * step);
     let row = out.get(day);
     if (!row) { row = { count: new Set(), total: new Set(), known: false }; out.set(day, row); }
@@ -393,89 +419,215 @@ export function linesByDay(routes: RoutesLike): LinesDay[] {
     .map(([day, r]) => ({ day, count: r.count.size, total: r.total.size, shortNames: [...r.count].sort(order).map((i) => routes.routes[i]!.shortName) }));
 }
 
-// ---- the hero numbers ----------------------------------------------------------
+export interface LinesRan {
+  /** Routes with a vehicle in motion in at least one five-minute slot of the span. */
+  count: number;
+  /** Every route the routes file carries (the timetable's lines). */
+  total: number;
+  /** Of `count`, the routes that never had more than one vehicle in a slot. */
+  single: number;
+  /** The routes that ran, trams first, each with its most vehicles in one slot and its slots with a vehicle. */
+  lines: { id: string; shortName: string; type: number; max: number; slots: number }[];
+}
 
-export interface HeroTile { key: 'silent' | 'peak' | 'bikes' | 'return' | 'alerts'; value: string; label: string; sub: string | null }
+/** The lines that ran during the strike (decision V3-21): a vehicle in motion in at least one five-minute slot from
+ *  Mon 03:30 to Wed 18:00 (on the real routes file: 8 of 154, 7 of them with one vehicle). A missing slot is no vehicle. */
+export function linesRan(routes: RoutesLike, span: Span = { from: STRIKE_FROM_SEC, to: LINES_TO_SEC }): LinesRan {
+  const { seen } = decodeRoutes(routes as Parameters<typeof decodeRoutes>[0]);
+  const j0 = Math.max(0, Math.ceil((span.from - routes.t0) / routes.step));
+  const j1 = Math.min(routes.n, Math.ceil((span.to - routes.t0) / routes.step));
+  const lines: LinesRan['lines'] = [];
+  routes.routes.forEach((r, i) => {
+    let max = 0;
+    let slots = 0;
+    for (let j = j0; j < j1; j++) {
+      const v = seen[i]![j]!;
+      if (v === ROUTES_MISSING || v === 0) continue;
+      slots++;
+      if (v > max) max = v;
+    }
+    if (slots > 0) lines.push({ id: r.id, shortName: r.shortName, type: r.type, max, slots });
+  });
+  lines.sort((a, b) => a.type - b.type || (Number(a.shortName) || 9999) - (Number(b.shortName) || 9999) || a.shortName.localeCompare(b.shortName));
+  return { count: lines.length, total: routes.routes.length, single: lines.filter((l) => l.max === 1).length, lines };
+}
 
-/** ZET's own alerts and cancelled trips summed over the window; null when the series carries neither column (never a 0 by assumption). */
-export function feedAlerts(s: SeriesFile): { alerts: number; cancelled: number; hours: number } | null {
+export interface AlertsEpisode { fromSec: number; toSec: number; alerts: number; cancelled: number; toEnd: boolean }
+export interface AlertsResult {
+  /** The most alerts (and cancelled trips) standing in ZET's data in any one minute of the span: a count, not alert-minutes. */
+  alerts: number; cancelled: number;
+  /** Hours of the span with a known value. */
+  hours: number;
+  /** After the span, the longest stretch of minutes with an alert standing (the Friday 2 October episode on the real data). */
+  episode: AlertsEpisode | null;
+}
+
+/** ZET's own alerts and cancelled trips (v3, decision V3-21): the most in any one minute of the strike, never the sum
+ *  over minutes (one alert standing for 54 hours is one alert); the episode after it counted on its own. Null when the
+ *  span has no known value (never a 0 by assumption). */
+export function feedAlerts(s: SeriesFile, span: Span = STRIKE): AlertsResult | null {
   let alerts = 0;
   let cancelled = 0;
-  let any = false;
+  let known = 0;
+  let best: AlertsEpisode | null = null;
+  let run: AlertsEpisode | null = null;
+  const close = (): void => {
+    if (run && (!best || run.toSec - run.fromSec > best.toSec - best.fromSec)) best = run;
+    run = null;
+  };
   for (let m = 0; m < s.n; m++) {
+    const sec = atOf(s, m);
     const a = s.feed.alerts[m];
     const c = s.feed.cancelledTrips[m];
-    if (a !== null && a !== undefined) { any = true; alerts += a; }
-    if (c !== null && c !== undefined) { any = true; cancelled += c; }
+    if (sec >= span.from && sec < span.to) {
+      if (a !== null && a !== undefined) { known++; alerts = Math.max(alerts, a); }
+      if (c !== null && c !== undefined) { known++; cancelled = Math.max(cancelled, c); }
+      continue;
+    }
+    if (sec < span.to) continue;
+    if (a === null || a === undefined) continue; // a missing minute neither breaks nor extends the episode
+    if (a > 0) {
+      if (!run) run = { fromSec: sec, toSec: sec + 60, alerts: 0, cancelled: 0, toEnd: false };
+      run.toSec = sec + 60;
+      run.alerts = Math.max(run.alerts, a);
+      run.cancelled = Math.max(run.cancelled, c ?? 0);
+      run.toEnd = m === s.n - 1;
+    } else close();
   }
-  return any ? { alerts, cancelled, hours: Math.round(s.n / 60) } : null;
+  close();
+  if (known === 0) return null;
+  return { alerts, cancelled, hours: Math.round((Math.min(span.to, atOf(s, s.n)) - Math.max(span.from, s.t0)) / 3600), episode: best };
 }
+
+export interface MorningRow { day: number; atSec: number; seen: number | null; frozen: boolean; empty: number | null }
+
+/** Every morning of the window at 07:45: vehicles in motion (frozen where the count is missing while ZET's data stood
+ *  still) and empty BAJS stations. */
+export function mornings(s: SeriesFile): MorningRow[] {
+  return peakAt0745(s, null).days.map((d) => {
+    const m = minuteOf(s, d.atSec);
+    const e = m === null ? null : s.bikes?.empty[m] ?? null;
+    return { day: d.day, atSec: d.atSec, seen: d.seen, frozen: d.frozen, empty: e };
+  });
+}
+
+/** The value of a bikes column at the same Zagreb time of day on Thursday 1 October (the bikes' normal day), or null. */
+export function bikesOnThursday(s: SeriesFile, atSec: number, col: 'empty' | 'total' = 'empty'): number | null {
+  const tod = atSec - midnightOf(atSec);
+  const m = minuteOf(s, BIKES_REF_DAY_SEC + tod);
+  return m === null || !s.bikes ? null : s.bikes[col][m] ?? null;
+}
+
+/** Trams and buses in motion as a percentage of their own timetable, per minute of the span (the return card): null
+ *  where either number is missing or nothing was scheduled. */
+export function returnShares(s: SeriesFile, span: Span = { from: RETURN_FROM_SEC, to: RETURN_TO_SEC }): { tram: (number | null)[]; bus: (number | null)[]; fromSec: number } {
+  const m0 = minuteOf(s, span.from);
+  const m1 = minuteOf(s, span.to - 60);
+  const out = { tram: [] as (number | null)[], bus: [] as (number | null)[], fromSec: span.from };
+  if (m0 === null || m1 === null) return out;
+  const share = (seen: number | null | undefined, exp: number | null | undefined): number | null =>
+    seen === null || seen === undefined || exp === null || exp === undefined || exp <= 0 ? null : Math.round((seen / exp) * 1000) / 10;
+  for (let m = m0; m <= m1; m++) {
+    out.tram.push(share(s.seen.tram[m], s.expected.tram[m]));
+    out.bus.push(share(s.seen.bus[m], s.expected.bus[m]));
+  }
+  return out;
+}
+
+// ---- the tiles -------------------------------------------------------------------
+
+export interface HeroTile { key: 'silent' | 'bikes' | 'return'; value: string; label: string; sub: string | null; /** The tile's moment (epoch seconds) the instrument seeks to; null when it has none. */ atSec: number | null }
 
 /** The normal day to set against a morning: its series and its first instant (for the day's name). */
 export interface PeakComparison { series: SeriesFile; fromSec: number }
 
-/** The five tiles of Brojke: values and the lines under them, from the series alone. The Monday tile reads
- *  `peakComparison` (Mon 21 Sep, weekday-matched) when given, else `comparison`; the alerts tile is left out when the
- *  series carries neither alerts nor cancellations. */
-export function heroTiles(s: SeriesFile, comparison: SeriesFile | null, peakComparison: PeakComparison | null = null): HeroTile[] {
+/** The three tiles at the head of Što snimka pokazuje (decision V3-21), from the window series alone: hours almost
+ *  without vehicles (seeks to the first such minute), the most empty BAJS stations against Thursday 1 October at the
+ *  same time of day (seeks to that minute), and the return (seeks to its first held ten). The comparison arguments
+ *  stay for the callers of v2 and are not read. */
+export function heroTiles(s: SeriesFile, _comparison: SeriesFile | null = null, _peak: PeakComparison | null = null): HeroTile[] {
+  void _comparison; void _peak;
   const none = SN.strip.noValue;
   const silent = silentMinutes(s);
-  const peak = peakAt0745(s, peakComparison?.series ?? comparison);
-  const monday = peak.days.find((d) => new Date((d.day + ZAGREB_OFFSET_S) * 1000).getUTCDay() === 1) ?? null;
   const bikes = bikeDrain(s);
   const back = returnDuration(s);
-  const alerts = feedAlerts(s);
+  const hours = Math.round(silent.total / 60);
+  const thu = bikes && bikes.maxEmptyAt !== null ? bikesOnThursday(s, bikes.maxEmptyAt) : null;
   return [
     {
       key: 'silent',
-      value: silent.total > 0 ? num(Math.round(silent.total / 60)) : none,
-      label: plural(Math.round(silent.total / 60), SN.kpi.silent),
+      value: silent.total > 0 ? num(hours) : none,
+      label: plural(hours, SN.kpi.silent),
       sub: silent.fromSec !== null && silent.toSec !== null ? fill(SN.kpi.silentSub, { from: dt(silent.fromSec), to: dt(silent.toSec) }) : null,
-    },
-    {
-      key: 'peak',
-      value: monday?.seen !== null && monday?.seen !== undefined ? num(monday.seen) : none,
-      label: plural(monday?.seen ?? 0, SN.kpi.peak),
-      sub: peakComparison
-        ? fill(SN.kpi.peakDaySub, { day: zagrebDay(peakComparison.fromSec * 1000), normal: peak.normal === null ? none : num(peak.normal) })
-        : fill(SN.kpi.peakSub, { normal: peak.normal === null ? none : num(peak.normal) }),
+      atSec: silent.fromSec,
     },
     {
       key: 'bikes',
       value: bikes && bikes.maxEmpty !== null ? num(bikes.maxEmpty) : none,
       label: fill(plural(bikes?.maxEmpty ?? 0, SN.kpi.bikes), { stations: bikes && bikes.stations !== null ? num(bikes.stations) : none }),
-      sub: bikes && bikes.maxEmptyAt !== null ? fill(SN.kpi.bikesSub, { day: zagrebDay(bikes.maxEmptyAt * 1000), time: zagrebClock(bikes.maxEmptyAt * 1000), normal: none }) : null,
+      sub: bikes && bikes.maxEmptyAt !== null
+        ? fill(SN.kpi.bikesSub, { day: zagrebDay(bikes.maxEmptyAt * 1000), time: zagrebClock(bikes.maxEmptyAt * 1000), normal: thu === null ? none : num(thu) })
+        : null,
+      atSec: bikes?.maxEmptyAt ?? null,
     },
     {
       key: 'return',
       value: back ? num(back.minutes) : none,
       label: plural(back?.minutes ?? 0, SN.kpi.return),
       sub: back ? fill(SN.kpi.returnSub, { from: zagrebClock(back.fromSec * 1000), to: zagrebClock(back.toSec * 1000) }) : null,
+      atSec: back?.fromSec ?? null,
     },
-    ...(alerts ? [{
-      key: 'alerts' as const,
-      value: num(alerts.alerts),
-      label: SN.kpi.alerts,
-      sub: fill(SN.kpi.alertsSub, { alerts: num(alerts.alerts), cancelled: num(alerts.cancelled), hours: num(alerts.hours) }),
-    }] : []),
   ];
 }
 
-/** Fills the tiles the HTML holds (data-sn="kpi-*") and clears the row's busy mark; the alerts tile is removed when
- *  the series has no such column (omitted, never a zero by assumption). */
-export function renderHero(doc: Document, s: SeriesFile, comparison: SeriesFile | null, peakComparison: PeakComparison | null = null): void {
+/** Fills the tiles the HTML holds (data-sn="kpi-*"): each a button "Pokaži u snimci" carrying its moment
+ *  (data-sn-seek, epoch seconds); a tile without a moment stays plain text. The v2 tiles (peak, alerts) are removed
+ *  if an old page still holds them. With `onSeek`, the row's clicks are bound here (alternatives.ts bindTileSeeks). */
+export function renderHero(doc: Document, s: SeriesFile, comparison: SeriesFile | null = null, peakComparison: PeakComparison | null = null, onSeek?: (atSec: number) => void): void {
   const tiles = heroTiles(s, comparison, peakComparison);
   for (const tile of tiles) {
     const el = doc.querySelector<HTMLElement>(`[data-sn="kpi-${tile.key}"]`);
     if (!el) continue;
-    el.innerHTML = `<p class="st-kpi-value">${escapeHtml(tile.value)}</p><p class="st-kpi-label">${escapeHtml(tile.label)}</p>${tile.sub ? `<p class="st-kpi-sub">${escapeHtml(tile.sub)}</p>` : ''}`;
+    const inner = `<span class="st-kpi-value sn-kpi-value">${escapeHtml(tile.value)}</span><span class="st-kpi-label sn-kpi-label">${escapeHtml(tile.label)}</span>` +
+      (tile.sub ? `<span class="st-kpi-sub sn-kpi-sub">${escapeHtml(tile.sub)}</span>` : '');
+    el.classList.add('sn-kpi');
+    el.innerHTML = tile.atSec === null
+      ? inner
+      : `<button type="button" class="sn-kpi-button" data-sn-seek="${tile.atSec}">${inner}<span class="sn-kpi-show">${escapeHtml(SN.kpi.show)}<span aria-hidden="true"> →</span></span></button>`;
   }
-  const alertsTile = doc.querySelector<HTMLElement>('[data-sn="kpi-alerts"]');
-  if (alertsTile && !tiles.some((t) => t.key === 'alerts')) alertsTile.remove();
-  doc.querySelector('[data-sn="kpis"]')?.removeAttribute('aria-busy');
+  for (const key of ['peak', 'alerts']) doc.querySelector(`[data-sn="kpi-${key}"]`)?.remove();
+  const row = doc.querySelector<HTMLElement>('[data-sn="kpis"]');
+  row?.removeAttribute('aria-busy');
+  if (row && onSeek) bindTileSeeks(row, onSeek);
 }
 
 // ---- the cards ---------------------------------------------------------------------
+
+const R = SN.reckoning;
+/** Strings this lane needs that Appendix A lacks (new for the read-through; they move into strings.ts reckoning.* at
+ *  integration: lane W4a may not edit strings.ts). */
+export const RECKONING_NEW = {
+  /** The legend of the ghost card's second line: the vehicles ZET's data placed on the map. */
+  ghostsSeen: 's položajem',
+  /** The silent card's days without a silent minute after the strike: "čet i pet: 0 min". */
+  silentNone: '{days}: 0 min',
+  /** The alerts line where the strike did carry alerts (never on the real data). */
+  zetAlertsSome: 'Od pon 28. 9. u 03:30 do sri 30. 9. u 20:16: najviše {alerts} upozorenja i {cancelled} otkazanih vožnji u istoj minuti',
+  /** The episode after the strike, with its real span (W0's zetFriday hard-codes 06:54 to 11:21; the real data holds alerts to the end). */
+  zetEpisode: 'U {weekday} {date} od {from} do {to} u podacima je stajalo do {n} upozorenja s otkazanim vožnjama.',
+  zetEpisodeToEnd: 'U {weekday} {date} od {from} do kraja snimke u {to} u podacima je stajalo do {n} upozorenja s otkazanim vožnjama.',
+  /** The lines card: the lines by name. */
+  linesList: 'linije: {lines}',
+  /** The plots' tables. */
+  ghostsTable: 'Ponedjeljak 28. 9.: brojevi po satu',
+  returnTable: 'Povratak: udio voznog reda po pola sata',
+  share: 'udio voznog reda',
+} as const;
+/** The weekday as it follows "u" (accusative), from Sunday. */
+const WEEKDAY_ACC = ['nedjelju', 'ponedjeljak', 'utorak', 'srijedu', 'četvrtak', 'petak', 'subotu'] as const;
+const weekdayOf = (sec: number): number => new Date((sec + ZAGREB_OFFSET_S) * 1000).getUTCDay();
+const dateOf = (sec: number): string => zagrebDay(sec * 1000).split(' ').slice(1).join(' ');
+const dayClock = (sec: number): string => `${WEEKDAYS[weekdayOf(sec)]} ${zagrebClock(sec * 1000)}`;
 
 /** One big number at the head of a card (the answer), proportional figures. */
 function figure(value: string, label?: string): HTMLElement {
@@ -493,176 +645,210 @@ function facts(rows: readonly [label: string, value: string][]): HTMLElement {
   return dl;
 }
 
+/** Sentences, one per line. */
+function lines(items: readonly string[]): HTMLElement {
+  const ul = document.createElement('ul');
+  ul.className = 'sn-card-lines';
+  ul.innerHTML = items.map((t) => `<li>${escapeHtml(t)}</li>`).join('');
+  return ul;
+}
+
 /** Bars that may hold a missing value: the row says "bez podatka" and its track stays hatched, never a zero bar. */
-function nullableBars(items: readonly { key: string; label: string; value: number | null; text: string }[], label: string): HTMLElement {
+function nullableBars(items: readonly { key: string; label: string; value: number | null; text: string; normal?: boolean }[], label: string): HTMLElement {
   const max = Math.max(0, ...items.map((i) => i.value ?? 0));
   const list = document.createElement('ul');
   list.className = 'st-bars';
   list.setAttribute('aria-label', label);
   list.innerHTML = items
-    .map((i) => `<li class="st-bar${i.value === null ? ' sn-bar-null' : ''}" data-key="${escapeHtml(i.key)}"><span class="st-bar-label">${escapeHtml(i.label)}</span>` +
+    .map((i) => `<li class="st-bar${i.value === null ? ' sn-bar-null' : ''}${i.normal ? ' sn-card-bar-normal' : ''}" data-key="${escapeHtml(i.key)}"><span class="st-bar-label">${escapeHtml(i.label)}</span>` +
       `<span class="st-bar-track" aria-hidden="true">${i.value === null ? '' : `<span class="st-bar-fill" style="--w:${max > 0 ? (i.value / max).toFixed(4) : 0}"></span>`}</span>` +
       `<span class="st-bar-value">${escapeHtml(i.text)}</span></li>`)
     .join('');
   return list;
 }
 
-function smallTable(caption: string, head: readonly string[], rows: readonly (readonly string[])[]): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'st-table sn-small-table';
-  wrap.innerHTML = `<div class="st-table-scroll" tabindex="0" role="region" aria-label="${escapeHtml(caption)}"><table><caption class="visually-hidden">${escapeHtml(caption)}</caption>` +
-    `<thead><tr>${head.map((h) => `<th scope="col">${escapeHtml(h)}</th>`).join('')}</tr></thead>` +
-    `<tbody>${rows.map((r) => `<tr>${r.map((c, i) => (i === 0 ? `<th scope="row">${escapeHtml(c)}</th>` : `<td>${escapeHtml(c)}</td>`)).join('')}</tr>`).join('')}</tbody></table></div>`;
-  return wrap;
+function tagged(el: HTMLElement, key: string): HTMLElement {
+  el.dataset.card = key;
+  return el;
 }
-
-const R = SN.reckoning;
-const FAMILY_LABELS: Record<SentenceFamily, string> = R.families;
 
 function silentCard(s: SeriesFile): HTMLElement {
   const r = silentMinutes(s);
-  const body = r.total > 0
-    ? [figure(minutesText(r.total), fill(R.span, { from: dt(r.fromSec!), to: dt(r.toSec!) })),
-      bars(r.byDay.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), count: d.minutes })), R.silent, { valueText: minutesText })]
-    : [empty(R.none)];
-  return card({ id: 'vidjelo-tisina', title: R.silent, body, method: R.silentMethod });
+  let body: HTMLElement[];
+  if (r.total === 0) body = [empty(R.none)];
+  else {
+    const withSilence = r.byDay.filter((d) => d.minutes > 0);
+    const lastSilent = withSilence[withSilence.length - 1]!.day;
+    // The days after the strike carry their counted zero in one line ("čet i pet: 0 min"), not as empty bars.
+    const after = r.byDay.filter((d) => d.minutes === 0 && d.day > lastSilent).map((d) => WEEKDAYS[weekdayOf(d.day)]!);
+    body = [
+      figure(minutesText(r.total), fill(R.span, { from: dt(r.fromSec!), to: dt(r.toSec!) })),
+      bars(withSilence.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), count: d.minutes })), R.silent, { valueText: minutesText }),
+      ...(after.length ? [lines([fill(RECKONING_NEW.silentNone, { days: after.join(' i ') })])] : []),
+    ];
+  }
+  return tagged(card({ id: 'vidjelo-tisina', title: R.silent, body, method: R.silentMethod }), 'silent');
 }
 
-function peakCard(s: SeriesFile, comparison: SeriesFile | null, normals: readonly ReckoningComparison[]): HTMLElement {
-  const r = peakAt0745(s, comparison);
-  const text = (v: number | null, frozen = false): string => (v === null ? (frozen ? R.feedFrozen : SN.strip.noValue) : count(v, VOZILO));
-  // Every loaded normal day at the same minute (Mon 21 and Thu 24 Sep); the v1 single row without them.
-  const normalRows = normals.length > 0
-    ? normals.map((c) => {
+function morningsCard(s: SeriesFile, normals: readonly ReckoningComparison[]): HTMLElement {
+  const rows = mornings(s);
+  const vehicle = (v: number | null, frozen = false): string => (v === null ? (frozen ? R.feedFrozen : SN.strip.noValue) : num(v));
+  const fleet = [
+    ...rows.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.seen, text: vehicle(d.seen, d.frozen) })),
+    ...normals.map((c) => {
       const v = peakAt0745(s, c.series).normal;
-      return { key: `normal-${c.id}`, label: fill(R.normalDay, { day: zagrebDay(c.fromSec * 1000) }), value: v, text: text(v) };
-    })
-    : [{ key: 'normal', label: R.peakCompare, value: r.normal, text: text(r.normal) }];
-  const items = [...r.days.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.seen, text: text(d.seen, d.frozen) })), ...normalRows];
-  const title = normals.length > 0 ? R.peakFive : R.peak;
-  return card({ id: 'vidjelo-jutra', title, body: [nullableBars(items, title)], method: normals.length > 0 ? R.peakFiveMethod : R.peakMethod });
+      return { key: `normal-${c.id}`, label: fill(R.normalDay, { day: zagrebDay(c.fromSec * 1000) }), value: v, text: vehicle(v), normal: true };
+    }),
+  ];
+  const empties = rows.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.empty, text: d.empty === null ? SN.strip.noValue : num(d.empty), normal: d.day >= BIKES_REF_DAY_SEC }));
+  const col = (title: string, items: typeof fleet): HTMLElement => {
+    const box = document.createElement('div');
+    box.className = 'sn-card-col';
+    const h = document.createElement('h4');
+    h.className = 'sn-card-col-title';
+    h.textContent = title;
+    box.append(h, nullableBars(items, title));
+    return box;
+  };
+  const cols = document.createElement('div');
+  cols.className = 'sn-card-cols';
+  cols.append(col(SN.strip.fleet, fleet), col(SN.strip.bikesEmpty, empties));
+  return tagged(card({ id: 'vidjelo-jutra', title: R.mornings, body: [cols], method: R.morningsMethod, wide: true }), 'mornings');
 }
-
-const LINIJA: Forms = ['linija', 'linije', 'linija'];
 
 function linesCard(routes: RoutesLike): HTMLElement {
-  const days = linesByDay(routes);
-  const monday = days.find((d) => new Date((d.day + ZAGREB_OFFSET_S) * 1000).getUTCDay() === 1) ?? null;
-  const body: HTMLElement[] = [];
-  if (days.length === 0) body.push(empty(SN.strip.noValue));
-  else {
-    body.push(nullableBars(days.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), value: d.count, text: fill(R.linesValue, { count: num(d.count), total: num(d.total) }) })), R.lines));
-    if (monday) body.push(facts([[R.linesMonday, monday.shortNames.length > 0 ? `${count(monday.shortNames.length, LINIJA)}: ${monday.shortNames.join(', ')}` : R.linesNone]]));
-  }
-  const el = card({ id: 'vidjelo-linije', title: R.lines, body, method: R.linesMethod });
-  el.dataset.card = 'lines';
-  return el;
+  const r = linesRan(routes);
+  const body = r.count === 0
+    ? [empty(SN.strip.noValue)]
+    : [
+      figure(fill(plural(r.total, R.linesValueForms), { n: num(r.count), total: num(r.total), single: num(r.single) })),
+      lines([fill(RECKONING_NEW.linesList, { lines: r.lines.map((l) => l.shortName).join(', ') }), R.linesModes]),
+    ];
+  return tagged(card({ id: 'vidjelo-linije', title: R.lines, body, method: R.linesMethod }), 'lines');
 }
 
-function alertsCard(s: SeriesFile): HTMLElement {
-  const r = feedAlerts(s);
-  const body = r
-    ? [figure(num(r.alerts), SN.kpi.alerts), facts([[R.alerts, fill(R.alertsValue, { alerts: num(r.alerts), cancelled: num(r.cancelled) })]])]
-    : [empty(SN.strip.noValue)];
-  const el = card({ id: 'vidjelo-upozorenja', title: R.alerts, body, method: R.alertsMethod });
-  el.dataset.card = 'alerts';
-  return el;
-}
-
-function bikesCard(s: SeriesFile): HTMLElement {
-  const r = bikeDrain(s);
-  const body = r
-    ? [figure(num(r.maxTotal - r.minTotal), R.bikesDrained),
-      smallTable(R.bikes, [R.day, R.bikesMin, R.bikesEmptyMax], r.byDay.map((d) => [zagrebDay(d.day * 1000), d.minTotal === null ? SN.strip.noValue : num(d.minTotal), d.maxEmpty === null ? SN.strip.noValue : num(d.maxEmpty)]))]
-    : [empty(SN.strip.noValue)];
-  return card({ id: 'vidjelo-bicikli', title: R.bikes, body, method: R.bikesMethod });
+/** The published number and the vehicles in motion at Monday 07:45 ("7 umjesto 2"), or null where either is missing. */
+export function ghostsAt(s: SeriesFile, atSec: number = zg(9, 28, 7, 45)): { shown: number; real: number } | null {
+  const m = minuteOf(s, atSec);
+  if (m === null || !s.published) return null;
+  const shown = s.published.vehicles[m];
+  const real = s.seen.all[m];
+  return shown === null || shown === undefined || real === null || real === undefined ? null : { shown, real };
 }
 
 function ghostsCard(s: SeriesFile): HTMLElement {
   const r = ghostInflation(s);
+  const at = ghostsAt(s);
+  const monday = zg(9, 28, 0, 0);
   let body: HTMLElement[];
-  if (!r) body = [empty(SN.strip.noValue)];
-  else if (r.minutes === 0 || r.maxAt === null) body = [empty(R.none)];
+  if (!r || !s.published) body = [empty(SN.strip.noValue)];
   else {
-    body = [
-      figure(`+${num(r.max)}`, plural(r.max, VOZILO)),
-      facts([
-        [R.ghostsMax, fill(R.ghostsMaxValue, { count: count(r.max, VOZILO), day: zagrebDay(r.maxAt * 1000), time: zagrebClock(r.maxAt * 1000) })],
-        [R.ghostsMinutes, `${R.total} ${minutesText(r.minutes)}`],
-      ]),
-      bars(r.byDay.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), count: d.minutes })), R.ghostsMinutes, { valueText: minutesText }),
-    ];
+    const mon = r.byDay.find((d) => d.day === monday) ?? null;
+    body = [];
+    if (at) body.push(figure(fill(R.ghostsValue, { shown: num(at.shown), real: num(at.real) }), zagrebDateTime(zg(9, 28, 7, 45) * 1000)));
+    body.push(facts([[R.ghostsMinutes, mon ? `${zagrebDay(monday * 1000)}: ${minutesText(mon.minutes)}` : SN.strip.noValue]]));
+    // The Monday from midnight to midnight, both numbers on one scale.
+    const m0 = minuteOf(s, monday);
+    if (m0 !== null) {
+      const m1 = Math.min(s.n, m0 + 1440);
+      const pub = s.published.vehicles.slice(m0, m1).map((v) => v ?? null);
+      const seen = s.seen.all.slice(m0, m1).map((v) => v ?? null);
+      const max = Math.max(1, colMax(pub, seen));
+      body.push(miniPlot(document, {
+        series: [{ values: seen, kind: 'line', tone: 'sn-card-tone-seen', label: RECKONING_NEW.ghostsSeen }, { values: pub, kind: 'line', tone: 'sn-card-tone-shown', label: SN.strip.productScreen }],
+        max, scale: num(max), label: R.ghostsLede,
+        ticks: [0, 6, 12, 18].map((h) => ({ x: h / 24, label: `${String(h).padStart(2, '0')}:00` })),
+      }));
+      const rows: string[][] = [];
+      for (let k = 0; k < pub.length; k += 60) rows.push([zagrebClock((monday + k * 60) * 1000), pub[k] === null ? SN.strip.noValue : num(pub[k]!), seen[k] === null ? SN.strip.noValue : num(seen[k]!)]);
+      body.push(tableDetails(RECKONING_NEW.ghostsTable, [SN.strip.hour, SN.strip.productScreen, RECKONING_NEW.ghostsSeen], rows, SN.strip.table));
+    }
   }
-  return card({ id: 'vidjelo-broj', title: R.ghosts, lede: R.ghostsLede, body, method: R.ghostsMethod });
+  return tagged(card({ id: 'vidjelo-broj', title: R.ghosts, lede: R.ghostsLede, body, method: R.ghostsMethod }), 'ghosts');
+}
+
+function zetCard(s: SeriesFile): HTMLElement {
+  const a = feedAlerts(s);
+  const h = feedHealth(s);
+  const items: string[] = [];
+  if (!a) items.push(`${R.zet}: ${SN.strip.noValue}`);
+  else if (a.alerts === 0 && a.cancelled === 0) items.push(R.zetAlerts);
+  else items.push(fill(RECKONING_NEW.zetAlertsSome, { alerts: num(a.alerts), cancelled: num(a.cancelled) }));
+  if (h.emptyLongest) {
+    const from = h.emptyLongest.fromSec;
+    items.push(fill(R.zetEmpty, { d: minutesText(h.emptyLongest.minutes), from: dayClock(from), to: dayClock(from + h.emptyLongest.minutes * 60) }));
+  }
+  if (h.frozenMinutes > 0) items.push(fill(R.zetFrozen, { d: minutesText(h.frozenMinutes) }));
+  const ep = a?.episode ?? null;
+  if (ep) {
+    items.push(fill(ep.toEnd ? RECKONING_NEW.zetEpisodeToEnd : RECKONING_NEW.zetEpisode, {
+      weekday: WEEKDAY_ACC[weekdayOf(ep.fromSec)]!, date: dateOf(ep.fromSec), from: zagrebClock(ep.fromSec * 1000), to: zagrebClock(ep.toSec * 1000), n: num(ep.alerts),
+    }));
+  }
+  const totals = facts([
+    [R.feedEmpty, `${R.total} ${minutesText(h.emptyMinutes)}`],
+    [R.feedFrozen, `${R.total} ${minutesText(h.frozenMinutes)}${h.frozenLongest ? `; ${fill(R.feedLongest, { duration: minutesText(h.frozenLongest.minutes), from: dt(h.frozenLongest.fromSec) })}` : ''}`],
+  ]);
+  return tagged(card({ id: 'vidjelo-podaci', title: R.zet, body: [lines(items), totals], method: R.zetMethod }), 'zet');
 }
 
 function returnCard(s: SeriesFile): HTMLElement {
   const r = returnDuration(s);
+  const shares = returnShares(s);
   const seenText = (v: number | null): string => (v === null ? '' : `, ${SN.strip.fleetSeen} ${num(v)}`);
-  const body = r
-    ? [figure(minutesText(r.minutes)), facts([[R.returnFrom, `${dt(r.fromSec)}${seenText(r.seenFrom)}`], [R.returnTo, `${dt(r.toSec)}${seenText(r.seenTo)}`]])]
-    : [empty(R.none)];
-  return card({ id: 'vidjelo-povratak', title: R.return, body, method: R.returnMethod });
-}
-
-function feedCard(s: SeriesFile): HTMLElement {
-  const r = feedHealth(s);
-  const rows: [string, string][] = [];
-  const emptyLongest = r.emptyLongest;
-  rows.push([R.feedEmpty, emptyLongest ? `${minutesText(r.emptyMinutes)}; ${fill(R.feedLongest, { duration: minutesText(emptyLongest.minutes), from: dt(emptyLongest.fromSec) })}` : minutesText(0)]);
-  const longest = r.frozenLongest;
-  rows.push([R.feedFrozen, longest ? `${minutesText(r.frozenMinutes)}; ${fill(R.feedLongest, { duration: minutesText(longest.minutes), from: dt(longest.fromSec) })}` : minutesText(0)]);
-  return card({ id: 'vidjelo-podaci', title: R.feed, body: [facts(rows)], method: R.feedMethod });
-}
-
-function sentencesCard(index: ScreenIndex | null, failed: boolean): HTMLElement {
-  let body: HTMLElement[];
-  if (failed) body = [empty(SN.error.load)];
-  else if (!index) {
-    const sk = document.createElement('span');
-    sk.className = 'skeleton sn-skeleton-card';
-    body = [sk];
-  } else {
-    const r = sentenceFamilies(index);
-    body = r.total > 0
-      ? [bars(r.families.map((f) => ({ key: f.family, label: FAMILY_LABELS[f.family] ?? FAMILY_LABELS.other, count: f.count })), R.sentences, { shares: true }),
-        facts([[R.liveRows, fill(R.liveRowsValue, { live: num(r.liveRows), rows: num(r.departureRows) })]])]
-      : [empty(R.none)];
+  const body: HTMLElement[] = [];
+  if (!r) body.push(empty(R.none));
+  else body.push(figure(minutesText(r.minutes)), facts([[R.returnFrom, `${dt(r.fromSec)}${seenText(r.seenFrom)}`], [R.returnTo, `${dt(r.toSec)}${seenText(r.seenTo)}`]]));
+  if (shares.tram.some((v) => v !== null) || shares.bus.some((v) => v !== null)) {
+    const max = Math.max(100, colMax(shares.tram, shares.bus));
+    const span = shares.tram.length;
+    body.push(miniPlot(document, {
+      series: [{ values: shares.tram, kind: 'line', tone: 'sn-card-tone-tram', label: SN.strip.tram }, { values: shares.bus, kind: 'line', tone: 'sn-card-tone-bus', label: SN.strip.bus }],
+      max, scale: `${num(Math.round(max))} %`, label: R.returnModes,
+      ticks: [0, 60, 120, 180].map((k) => ({ x: k / span, label: zagrebClock((shares.fromSec + k * 60) * 1000) })),
+    }));
+    const pct = (v: number | null | undefined): string => (v === null || v === undefined ? SN.strip.noValue : `${num(Math.round(v))} %`);
+    const rows: string[][] = [];
+    for (let k = 0; k < span; k += 30) rows.push([zagrebClock((shares.fromSec + k * 60) * 1000), pct(shares.tram[k]), pct(shares.bus[k])]);
+    body.push(tableDetails(RECKONING_NEW.returnTable, [SN.strip.hour, SN.strip.tram, SN.strip.bus], rows, SN.strip.table));
   }
-  const el = card({ id: 'vidjelo-recenice', title: R.sentences, body, method: R.sentencesMethod });
-  el.dataset.card = 'sentences';
-  if (!index && !failed) el.setAttribute('aria-busy', 'true');
-  return el;
+  body.push(lines([R.returnModes]));
+  return tagged(card({ id: 'vidjelo-povratak', title: R.return, body, method: R.returnMethod }), 'return');
 }
 
 export interface ReckoningHandle { setIndex(index: ScreenIndex | null, failed?: boolean): void }
 
-/** One loaded normal day as the peak card names it. */
+/** One loaded normal day as the mornings card names it. */
 export interface ReckoningComparison { id: string; fromSec: number; series: SeriesFile }
 
 export interface ReckoningExtras {
-  /** The window's per-line counts: adds the card "Linije s vozilom u pokretu". */
+  /** The window's per-line counts: the card "Što je vozilo". */
   routes?: RoutesLike | null;
-  /** The normal days for the peak card's rows (Mon 21 and Thu 24 Sep). */
+  /** The normal days for the mornings card (Mon 21 and Thu 24 Sep). */
   comparisons?: readonly ReckoningComparison[];
 }
 
-/** Fills Što se vidjelo: one card per insight (the seven of v1, then the lines and ZET's own alerts); the screen card
- *  waits for the index. */
-export function renderReckoning(root: HTMLElement, s: SeriesFile, comparison: SeriesFile | null, extras: ReckoningExtras = {}): ReckoningHandle {
+/** Fills the six cards of Što snimka pokazuje (decision V3-21). `setIndex` stays for the v2 caller and does nothing:
+ *  the screen's sentence families left the page. */
+export function renderReckoning(root: HTMLElement, s: SeriesFile, _comparison: SeriesFile | null = null, extras: ReckoningExtras = {}): ReckoningHandle {
+  void _comparison;
   const grid = document.createElement('div');
-  grid.className = 'st-grid sn-reckoning-grid';
-  let sentences = sentencesCard(null, false);
-  grid.append(silentCard(s), peakCard(s, comparison, extras.comparisons ?? []), ghostsCard(s), returnCard(s), bikesCard(s), feedCard(s), sentences);
+  grid.className = 'st-grid sn-reckoning-grid sn-card-grid';
+  grid.append(silentCard(s), morningsCard(s, extras.comparisons ?? []));
   if (extras.routes) grid.append(linesCard(extras.routes));
-  grid.append(alertsCard(s));
+  grid.append(ghostsCard(s), zetCard(s), returnCard(s));
   root.replaceChildren(grid);
   root.removeAttribute('aria-busy');
-  return {
-    setIndex(index, failed = false) {
-      const next = sentencesCard(index, failed);
-      sentences.replaceWith(next);
-      sentences = next;
-    },
-  };
+  return { setIndex() { /* v3: no card reads the screen index */ } };
 }
+
+/** Što snimka pokazuje on the page: the tiles (into [data-sn-mount="brojke"]) bound to the instrument, and the six
+ *  cards into `root` ([data-sn-mount="reckoning"]). */
+export const mountReckoning: Mount = (ctx: SnimkaContext, root: HTMLElement) => {
+  const doc = ctx.doc;
+  const normals: ReckoningComparison[] = [...ctx.comparisons].sort((a, b) => a.fromSec - b.fromSec).map((c) => ({ id: c.id, fromSec: c.fromSec, series: c.series }));
+  renderHero(doc, ctx.series, null, null, (atSec) => showOnStage(ctx, atSec));
+  doc.querySelector<HTMLElement>('[data-sn-mount="brojke"]')?.removeAttribute('aria-busy');
+  renderReckoning(root, ctx.series, null, { routes: ctx.routes, comparisons: normals });
+  return () => {};
+};

@@ -92,58 +92,6 @@
 .sn-panel-station-n { font-variant-numeric: tabular-nums; color: var(--tone-text-muted); white-space: nowrap; }
 .sn-panel-minis-large { min-block-size: 10rem; }
 
-/* Lanes the shell adds to Tijek's ZET panel: vehicles in the depots, future stamps as 1 px ticks. */
-.sn-panel-lane { position: absolute; inset-inline: 0; block-size: 0.75rem; border-radius: 2px; background: var(--tone-surface-2); }
-.sn-panel-lane[data-lane='depot'] { inset-block-start: 0.25rem; }
-.sn-panel-lane[data-lane='future'] { inset-block-end: 0.25rem; }
-.sn-panel-depot-on { background: color-mix(in oklab, var(--tone-transit) 70%, var(--tone-text-primary)); }
-.sn-panel-tick { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: 1px; background: var(--tone-text-primary); }
-.sn-panel-tone-depot { --key: color-mix(in oklab, var(--tone-transit) 70%, var(--tone-text-primary)); background: var(--key); }
-.sn-panel-tone-future { inline-size: 2px; background: var(--tone-text-primary); }
-.sn-panel-strip-lines { min-inline-size: 0; }
-
-/* ---- the heatmap ------------------------------------------------------------------------------------------- */
-.sn-hm { --sn-hm-c0: color-mix(in oklab, var(--tone-action-brand) 32%, var(--tone-surface-3)); --sn-hm-c1: color-mix(in oklab, var(--tone-action-brand) 49%, var(--tone-surface-3)); --sn-hm-c2: color-mix(in oklab, var(--tone-action-brand) 66%, var(--tone-surface-3)); --sn-hm-c3: color-mix(in oklab, var(--tone-action-brand) 83%, var(--tone-surface-3)); --sn-hm-c4: var(--tone-action-brand); --sn-hm-gap: var(--tone-surface-1); --sn-hm-label-w: 3.25rem; display: grid; gap: var(--sp-2); min-inline-size: 0; font-variant-numeric: tabular-nums; }
-.sn-hm-lede { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); }
-.sn-hm-legend { font-size: var(--type-meta); }
-.sn-hm-key { display: inline-block; inline-size: 0.875rem; block-size: 0.875rem; border-radius: 2px; }
-.sn-hm-key-c0 { background: var(--sn-hm-c0); }
-.sn-hm-key-c1 { background: var(--sn-hm-c1); }
-.sn-hm-key-c2 { background: var(--sn-hm-c2); }
-.sn-hm-key-c3 { background: var(--sn-hm-c3); }
-.sn-hm-key-c4 { background: var(--sn-hm-c4); }
-.sn-hm-key-off { background: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1px, var(--tone-surface-2) 1px 4px); }
-.sn-hm-key-none { box-shadow: inset 0 0 0 1px var(--tone-stroke-strong); }
-.sn-hm-axis { position: relative; block-size: 1.1rem; font-size: var(--type-meta); color: var(--tone-text-muted); }
-.sn-hm-corner { position: sticky; inset-inline-start: 0; z-index: 2; background: var(--tone-surface-1); border-inline-end: 1px solid var(--tone-stroke); }
-.sn-hm-day { position: absolute; inset-inline-start: calc(var(--x) * 100%); white-space: nowrap; }
-.sn-hm-scroll { overflow-x: auto; overscroll-behavior-x: contain; border-radius: var(--r-sm); }
-.sn-hm-scroll:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 2px; }
-.sn-hm-grid { display: grid; grid-template-columns: var(--sn-hm-label-w) minmax(42rem, 1fr); min-inline-size: 0; }
-.sn-hm-labels { position: sticky; inset-inline-start: 0; z-index: 2; display: grid; grid-auto-rows: 1.5rem; background: var(--tone-surface-1); border-inline-end: 1px solid var(--tone-stroke); }
-.sn-hm-label { display: flex; align-items: stretch; min-inline-size: 0; }
-/* The group seams are drawn inside the row (a border would take a pixel from the 24 px target). */
-.sn-hm-label[data-kind='aggregate'], .sn-hm-label[data-kind='tram'] + .sn-hm-label[data-kind='strike'] { box-shadow: inset 0 1px 0 var(--tone-stroke-strong); }
-.sn-hm-row, .sn-hm-name { display: flex; align-items: center; inline-size: 100%; padding: 0 var(--sp-2); font-size: var(--type-meta); font-weight: var(--weight-bold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sn-hm-row { min-block-size: 1.5rem; min-inline-size: 1.5rem; border: 0; background: transparent; color: var(--tone-text-primary); font-family: inherit; cursor: pointer; }
-.sn-hm-row:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; }
-@media (hover: hover) { .sn-hm-row:hover { background: var(--tone-surface-2); } }
-.sn-hm-name { color: var(--tone-text-muted); font-weight: var(--weight-medium); }
-.sn-hm-plot { position: relative; block-size: calc(var(--rows) * 1.5rem); cursor: crosshair; }
-.sn-hm-svg { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
-.sn-hm-svg rect { stroke: var(--sn-hm-gap); stroke-width: 1px; vector-effect: non-scaling-stroke; }
-.sn-hm-c0 { fill: var(--sn-hm-c0); }
-.sn-hm-c1 { fill: var(--sn-hm-c1); }
-.sn-hm-c2 { fill: var(--sn-hm-c2); }
-.sn-hm-c3 { fill: var(--sn-hm-c3); }
-.sn-hm-c4 { fill: var(--sn-hm-c4); }
-.sn-hm-hatch-bg { fill: var(--tone-surface-2); stroke: none !important; }
-.sn-hm-hatch-line { stroke: var(--tone-stroke-strong); stroke-width: 1.5; }
-.sn-hm-days { position: absolute; inset: 0; pointer-events: none; }
-.sn-hm-dayline { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: 2px; translate: -1px 0; background: var(--tone-surface-1); }
-.sn-hm-cursor { position: absolute; z-index: 1; inset-block: -0.25rem; inset-inline-start: calc(var(--x, 0) * 100%); inline-size: 2px; translate: -1px 0; background: var(--tone-text-primary); pointer-events: none; }
-.sn-hm-more > summary { min-block-size: var(--target); display: flex; align-items: center; font-size: var(--type-control); font-weight: var(--weight-bold); cursor: pointer; }
-
 /* ---- the timeline bar ---------------------------------------------------------------------------------------- */
 .sn-tl { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "controls scrub tail"; align-items: center; gap: var(--sp-1) var(--sp-4); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: color-mix(in oklab, var(--tone-glass-bg) 84%, transparent); border: 1px solid var(--tone-glass-stroke); font-variant-numeric: tabular-nums; }
 @supports (backdrop-filter: blur(8px)) { .sn-tl { backdrop-filter: blur(8px); } }
