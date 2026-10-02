@@ -6,19 +6,20 @@
 // changes on pause and seek only.
 import { Window } from 'happy-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { SNIMKA_WINDOW, type Col, type SeriesFile } from '../../shared/snimka';
+import { SNIMKA_COMPARISONS, SNIMKA_WINDOW, type Col, type SeriesFile } from '../../shared/snimka';
 import { createReplayClock } from '../../app/src/snimka/clock';
-import { createLayerStore, type SnimkaContext } from '../../app/src/snimka/context';
+import { createLayerStore, createViewStore, type SnimkaContext } from '../../app/src/snimka/context';
 import type { FrameLoop } from '../../app/src/snimka/frames';
 import {
   areaPath, comparisonMinute, cursorFraction, dayLines, linePath, mountStrip, readoutText, readoutValues, renderStrip, runsOf, seekTime, stateClass, subpaths, columnsPath,
 } from '../../app/src/snimka/strip';
-import { MARKS, buildComparisonSeries, buildWindowSeries } from '../../e2e/snimka-fixtures';
+import { MARKS, buildComparisonRoutes, buildComparisonSeries, buildRoutes, buildWindowSeries } from '../../e2e/snimka-fixtures';
 
 const START = SNIMKA_WINDOW.fromSec * 1000;
 const END = SNIMKA_WINDOW.toSec * 1000;
 const series = buildWindowSeries();
 const comparison = buildComparisonSeries();
+const routes = buildRoutes();
 const minuteOf = (sec: number): number => (sec - series.t0) / 60;
 
 describe('linePath', () => {
@@ -147,8 +148,8 @@ function context(at: number, playing = false) {
   const frames = stubFrames();
   const ctx = {
     manifest: { serviceLiveFromSec: MARKS.serviceLive, window: { ...SNIMKA_WINDOW } },
-    series, comparison, events: [], clock, frames, data: { get: vi.fn(), url: (r: { path: string } | string) => String(typeof r === 'string' ? r : r.path) },
-    comparisons: [{ id: 'cet-0924', day: '2026-09-24', weekday: 4, fromSec: comparison.t0, series: comparison, routes: null }],
+    series, routes, comparison, events: [], clock, frames, view: createViewStore(), data: { get: vi.fn(), url: (r: { path: string } | string) => String(typeof r === 'string' ? r : r.path) },
+    comparisons: [{ id: 'cet-0924', day: '2026-09-24', weekday: 4, fromSec: SNIMKA_COMPARISONS[0].fromSec, series: comparison, routes: buildComparisonRoutes() }],
     layers: createLayerStore({ compare: false }), lagano: false, reducedMotion: false, theme: { resolved: () => 'light', onChange: () => () => {} }, doc: document,
   } as unknown as SnimkaContext;
   return { ctx, clock, frames };
@@ -171,16 +172,16 @@ afterAll(async () => {
 afterEach(() => { if (page) document.body.innerHTML = ''; });
 
 describe('mountStrip', () => {
-  it('draws six panels, each with a legend in words and its table of hours', () => {
+  it('draws its panels, each with a legend in words and its table of hours, the heatmap last', () => {
     const { ctx } = context(MARKS.monday0745 * 1000);
     const root = document.createElement('div');
     root.setAttribute('aria-busy', 'true');
     document.body.append(root);
     const off = mountStrip(ctx, root);
     const panels = [...root.querySelectorAll<HTMLElement>('.sn-panel')].map((p) => p.dataset.panel);
-    expect(panels).toEqual(['fleet', 'state', 'bikes', 'feed', 'ghosts', 'news']);
+    expect(panels).toEqual(['fleet', 'state', 'bikes', 'feed', 'weather', 'ghosts', 'news', 'lines']);
     expect(root.hasAttribute('aria-busy')).toBe(false);
-    for (const p of root.querySelectorAll('.sn-panel')) {
+    for (const p of root.querySelectorAll('.sn-panel:not([data-panel="lines"])')) {
       expect(p.querySelector('.st-table summary')?.textContent).toBe('Brojevi po satu');
       expect(p.querySelectorAll('.st-table tbody tr').length).toBe(112);
     }
@@ -196,7 +197,7 @@ describe('mountStrip', () => {
     document.body.append(root);
     const off = mountStrip(ctx, root);
     const cursors = [...root.querySelectorAll<HTMLElement>('.sn-cursor')];
-    expect(cursors.length).toBe(7); // fleet, state, two bike plots, feed, ghosts, news
+    expect(cursors.length).toBe(11); // fleet with its tram and bus plots, state, two bike plots, two feed plots, weather, ghosts, news
     expect(cursors.every((c) => c.style.transform === 'translateX(0.0000%)')).toBe(true);
     frames.emit(END);
     expect(cursors.every((c) => c.style.transform === 'translateX(100.0000%)')).toBe(true);
@@ -283,7 +284,7 @@ describe('mountStrip', () => {
     const root = document.createElement('div');
     document.body.append(root);
     const handle = renderStrip(root, { series: bare, comparison: null, startMs: START, endMs: END, serviceLiveFromSec: MARKS.serviceLive, compare: false, onSeek: () => {} });
-    expect([...root.querySelectorAll<HTMLElement>('.sn-panel')].map((p) => p.dataset.panel)).toEqual(['fleet', 'state', 'feed']);
+    expect([...root.querySelectorAll<HTMLElement>('.sn-panel')].map((p) => p.dataset.panel)).toEqual(['fleet', 'state', 'feed', 'weather']);
     handle.setReadout(MARKS.monday0745 * 1000);
     expect(root.querySelector('.sn-strip-readout')!.textContent).not.toContain('bicikli');
     handle.destroy();
