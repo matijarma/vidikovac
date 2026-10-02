@@ -147,7 +147,7 @@ export const ARCHIVE_DATASETS: readonly OpenArchiveDataset[] = [
     description:
       'Stanje usluge po minuti, vozila u pokretu i po voznom redu po liniji, pouzdanost ZET-ovih podataka, bicikli po stanici, zatvorene ulice i poglavlja snimke od nedjelje 27. rujna u 20:00 do petka 2. listopada 2026. u 12:00. ' +
       'Skup je izveden iz snimljenih otvorenih izvora, objavljen jednom i ne osvježava se; ne sadrži sirove ZET-ove okvire, naslove medija ni ijednu brojku o ljudima.',
-    keywords: ['promet', 'ZET', 'tramvaj', 'bicikli', 'BAJS', 'zatvaranja', 'arhiva', 'Zagreb'],
+    keywords: ['promet', 'ZET', 'tramvaj', 'bicikli', 'BAJS', 'zatvorene ulice', 'arhiva', 'Zagreb'],
     temporal: { start: '2026-09-27T18:00:00Z', end: '2026-10-02T10:00:00Z' },
     issued: '2026-10-02',
     provenance:
@@ -166,12 +166,13 @@ export const ARCHIVE_DATASETS: readonly OpenArchiveDataset[] = [
     ],
     distributions: [
       { path: `${ARCHIVE}series.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Jedan redak po minuti: vozila u pokretu i po voznom redu, stanje usluge, pouzdanost ZET-ovih podataka, bicikli i zatvorene ulice.' },
-      { path: `${ARCHIVE}hourly.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Jedan redak po satu: temperatura i vrijeme (DHMZ, Zagreb-Maksimir).' },
+      { path: `${ARCHIVE}hourly.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Jedan redak po satu: temperatura i vrijeme (DHMZ, Zagreb-Maksimir) i broj relevantnih medijskih naslova (samo broj, bez naslova).' },
       { path: `${ARCHIVE}routes-5min.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Po liniji i svakih pet minuta: vozila u pokretu i po voznom redu; prazno znači da podatka nema.' },
       { path: `${ARCHIVE}bikes-5min.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Bicikli po stanici svakih pet minuta, jedan stupac po stanici; prazno znači da podatka nema.' },
       { path: `${ARCHIVE}stations.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Popis stanica BAJS-a s nazivom i položajem; stupci datoteke s biciklima nose njihove oznake.' },
+      { path: `${ARCHIVE}sentences.csv`, format: 'CSV', mediaType: 'text/csv', description: 'Po minuti: kako bi zaslon na Trgu bana Jelačića čitao ZET i koju bi rečenicu rekao po današnjim pravilima aplikacije; izračunano naknadno, bez zapisa stvarnog zaslona.' },
       { path: `${ARCHIVE}events.json`, format: 'JSON', mediaType: 'application/json', description: 'Poglavlja i događaji snimke s vremenom, izvorom i poveznicama.' },
-      { path: `${ARCHIVE}closures.geojson`, format: 'GeoJSON', mediaType: 'application/geo+json', description: 'Zatvorene ulice kao GeoJSON, jedan objekt po zatvaranju, s krajevima kako su bili objavljeni u svakoj inačici skupa.' },
+      { path: `${ARCHIVE}closures.geojson`, format: 'GeoJSON', mediaType: 'application/geo+json', description: 'Zatvorene ulice kao GeoJSON, jedan objekt po zatvaranju, s datumom završetka kako ga je objavila svaka inačica skupa.' },
       { path: `${ARCHIVE}opis.json`, format: 'JSON', mediaType: 'application/json', description: 'Opis skupa: licenca, atribucija i svaki stupac svake datoteke.' },
     ],
   },

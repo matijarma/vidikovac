@@ -4,6 +4,8 @@
 // strike notices (ids 10164 to 10168) from its recorded news RSS: the title as
 // first recorded, the link and the time. The notice text is not republished:
 // ZET's RSS terms are unpublished (docs/izvori.md), so the page links to it.
+// v3 (lane W5): an event may carry `noticeId` (the ZET notice it repeats; Objave dedupe by it, validated here
+// against the notices) and `internal: true` (a recording-internal event: never on the plate, never in Objave).
 // v2 (lane V1): every event and notice carries focus, facts and mentions (and
 // an event spot and dwellS), from its entry or the defaults of
 // focus-defaults.ts, each id validated against the routes file, the stations
@@ -31,7 +33,7 @@ type Rule =
   | { kind: 'seen-rising-past'; value: number; after: string; holdMin?: number }
   | { kind: 'first-state'; value: SnimkaState; after: string };
 
-interface EventEntry extends Partial<Pointers> { id: string; at?: string; rule?: Rule; kind: SnimkaEvent['kind']; title: string; text: string | null; sources: SnimkaEvent['sources']; chapter: boolean }
+interface EventEntry extends Partial<Pointers> { id: string; at?: string; rule?: Rule; kind: SnimkaEvent['kind']; title: string; text: string | null; sources: SnimkaEvent['sources']; chapter: boolean; noticeId?: number; internal?: boolean }
 interface NoticeFocusEntry extends Partial<Pointers> { id: number }
 
 /** The ids an item may point at: the window's routes, the BAJS stations, places.json and the network's stops. */
@@ -150,10 +152,13 @@ export async function stageEvents(paths: Paths, log: (line: string) => void): Pr
     if (e.kind !== 'recording' && e.rule === undefined && e.sources.length === 0) throw new Error(`events: ${e.id} is human-sourced and has no source`);
     const atSec = e.rule ? resolveRule(series, e.rule) : isoSec(e.at!);
     if (atSec === null) throw new Error(`events: the rule of ${e.id} (${JSON.stringify(e.rule)}) finds nothing in the window series`);
+    if (e.noticeId !== undefined && !notices.items.some((n) => n.id === e.noticeId)) throw new Error(`events: ${e.id} repeats ZET notice ${e.noticeId}, which is not one of ${NOTICE_IDS.join(', ')}`);
+    if (e.internal !== undefined && e.internal !== true) throw new Error(`events: ${e.id} internal is true or absent`);
     const p = resolvePointers(`event ${e.id}`, withDefaults(e, eventDefaults(e.id)), known);
     if (e.chapter && p.spot === undefined) throw new Error(`events: chapter ${e.id} has no spot`);
     events.push({ id: e.id, atSec, kind: e.kind, title: e.title, text: e.text, sources: e.sources, derived: e.rule !== undefined, chapter: e.chapter, focus: p.focus, facts: p.facts, mentions: p.mentions,
-      ...(p.spot !== undefined ? { spot: p.spot } : {}), ...(p.dwellS !== undefined ? { dwellS: p.dwellS } : {}) });
+      ...(p.spot !== undefined ? { spot: p.spot } : {}), ...(p.dwellS !== undefined ? { dwellS: p.dwellS } : {}),
+      ...(e.noticeId !== undefined ? { noticeId: e.noticeId } : {}), ...(e.internal ? { internal: true } : {}) });
   }
   events.sort((a, b) => a.atSec - b.atSec || a.id.localeCompare(b.id));
   const eventsRef = writeJsonObject(paths, 'events/window', { v: 1, events } satisfies EventsFile);

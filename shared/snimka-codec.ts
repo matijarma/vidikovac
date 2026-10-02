@@ -325,7 +325,7 @@ export function checkRefPath(ref: HashedRef, where: string): void {
 }
 
 const FILE_KEYS = ['series', 'motionIndex', 'routes', 'stations', 'bajs', 'closures', 'events', 'notices', 'news', 'places', 'screenIndex', 'voiceIndex', 'opis'] as const;
-const ATTRIBUTION_IDS = new Set(['zet', 'zet-rss', 'nextbike', 'zagreb-closures', 'dhmz', 'news', 'osm', 'kajima']);
+const ATTRIBUTION_IDS = new Set(['zet', 'zet-rss', 'nextbike', 'zagreb-closures', 'dhmz', 'news', 'court', 'osm', 'kajima']);
 const EXPORT_EXT: Record<string, string> = { csv: 'csv', json: 'json', geojson: 'geojson' };
 
 function checkRef(ref: unknown, where: string): asserts ref is HashedRef {

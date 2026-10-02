@@ -25,6 +25,10 @@
 //                  the screen index with run 0928-0745 and its kiosk capture,
 //                  board 106_1, the voice index with the Monday voice day,
 //                  opis and series.csv, both networks.
+//   --only-changed (production only) lists the remote prefix once (read-only, the same paginated listing) and puts
+//                  only the keys that are absent or have a different size; manifest.json is always put, last, since
+//                  it is the one mutable object and the commit point. The size check still covers every key of the
+//                  list. With --dry-run it prints the changed keys and their commands.
 //   --dry-run      print the commands, run nothing.
 // `npm run snimka:upload` is the same.
 
@@ -73,6 +77,7 @@ function parseArgs(argv) {
     persistTo: value('--persist-to'),
     subset: subset ?? null,
     dryRun: argv.includes('--dry-run'),
+    onlyChanged: argv.includes('--only-changed'),
   };
 }
 
@@ -83,6 +88,13 @@ export function readList(out) {
     const [key, bytes, type] = line.split('\t');
     return { key, bytes: Number(bytes), type: type || contentTypeOf(key) };
   });
+}
+
+/** What --only-changed puts: the keys absent from the remote listing or of another size, then manifest.json (always, last). */
+export function changedOnly(list, remote, prefix = PREFIX) {
+  const changed = list.filter((item) => item.key !== 'manifest.json' && remote.get(`${prefix}${item.key}`) !== item.bytes);
+  const manifest = list.find((item) => item.key === 'manifest.json');
+  return manifest ? [...changed, manifest] : changed;
 }
 
 /** The dev subset, picked by the manifest's own refs. */
@@ -193,8 +205,16 @@ async function main() {
     console.log(`snimka list: ${remote.size} keys under r2://${BUCKET}/${o.prefix}`);
     return;
   }
+  if (o.onlyChanged && (o.local || o.subset)) throw new Error('--only-changed compares with the production prefix: it does not combine with --local or --subset');
   let list = readList(o.out);
   if (list.at(-1)?.key !== 'manifest.json') throw new Error('upload-list.txt must end with manifest.json');
+  const all = list;
+  if (o.onlyChanged) {
+    const remote = listRemote();
+    console.log(`snimka upload: ${remote.size} keys already under r2://${BUCKET}/${PREFIX}`);
+    list = changedOnly(list, remote);
+    console.log(`snimka upload: --only-changed keeps ${list.length} of ${all.length} objects: ${list.map((i) => i.key).join(', ')}`);
+  }
   if (o.subset === 'dev') {
     const manifest = JSON.parse(readFileSync(join(o.out, 'objects', 'manifest.json'), 'utf8'));
     manifest.__objects = join(o.out, 'objects');
@@ -208,7 +228,7 @@ async function main() {
       const { cmd, args } = commandFor(o, item);
       console.log([cmd, ...args].map(quote).join(' '));
     }
-    if (!o.local) console.log(`cf r2 objects list --bucket-name ${BUCKET} --prefix ${PREFIX} --per-page 1000   # paginated, then a size check of all ${list.length} keys`);
+    if (!o.local) console.log(`cf r2 objects list --bucket-name ${BUCKET} --prefix ${PREFIX} --per-page 1000   # paginated, then a size check of all ${all.length} keys`);
     return;
   }
   const manifestItem = list.at(-1);
@@ -224,10 +244,10 @@ async function main() {
     return;
   }
   if (o.local) return;
-  const remote = listRemote();
-  const wrong = list.filter((item) => remote.get(`${PREFIX}${item.key}`) !== item.bytes);
-  for (const item of wrong) console.error(`size check: ${PREFIX}${item.key} is ${remote.get(`${PREFIX}${item.key}`) ?? 'absent'}, expected ${item.bytes}`);
-  console.log(`size check: ${list.length - wrong.length} of ${list.length} keys match`);
+  const after = listRemote();
+  const wrong = all.filter((item) => after.get(`${PREFIX}${item.key}`) !== item.bytes);
+  for (const item of wrong) console.error(`size check: ${PREFIX}${item.key} is ${after.get(`${PREFIX}${item.key}`) ?? 'absent'}, expected ${item.bytes}`);
+  console.log(`size check: ${all.length - wrong.length} of ${all.length} keys match`);
   if (wrong.length > 0) process.exitCode = 1;
 }
 
