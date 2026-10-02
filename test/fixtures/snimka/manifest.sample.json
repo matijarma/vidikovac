@@ -1,25 +1,25 @@
 {
  "version": 2,
- "builtAt": "2026-10-02T12:57:27.039Z",
+ "builtAt": "2026-10-02T13:25:47.950Z",
  "title": "Tri dana bez tramvaja",
  "build": {
-  "commit": "ee09c9be8ad6ae98e7a8d526367581011eb353bf",
+  "commit": "d93ec87426d260f43058e88451269005658b4a2b",
   "inputs": {
-   "frames-window": "91e555f1a770c9c26cc3a7d1cc18ec86cd5b8f33fd08c1c8cc90bdefdf68fb77",
-   "frames-day-0924": "887e443263cd5c65e01cdae4003923d4554829c30d6fde4ea0ff514b22e8c0b0",
-   "frames-day-0921": "b1a41098d82d02b8d73487b36320e8354b209052cc24335510591ba5d0fdb4a0",
-   "bajs": "69016ae7904db2732d4dbe0e8e8d2b7eb164e862c9a1b71cf8b38fac6c8bf0ed",
-   "closures": "1561ad727ddc32a2f10a95b08ed0eb20a80927549226eba2f3238110c4231860",
-   "news": "a578a37e1f1e7a6b11acd161ac3bfa33ded3221ce4520064556c975ccd00cd2c",
-   "series": "07f0d509b276107c834a4560c0078527504f9ea4d26d74b2209cab8219e79962",
+   "frames-window": "773ff2b55d25c909c26331bc808f314175e80b3bdaa69cd2146c549b7920ac77",
+   "frames-day-0924": "8bbd535922b96c609ba93482cf3eef1d8361d5f810cbeb01f92d9a66b646cb44",
+   "frames-day-0921": "27a900842463356ba2e233ca66deecb71d15f70701de2c13e42923c13aad4017",
+   "bajs": "9cf6fad0c50e862db763320833d0c94dbbe864e8ad09c61f61f022a3605f6d09",
+   "closures": "2e00eb0b71ba18f919cc2b06cc2a800b76903a84fecbcd5c3b6e2649cf0902f3",
+   "news": "ce37eae38afcbafd041eb8238ccbf8dd55206ad16608866f346b8d0bb62ed97c",
+   "series": "c53befe97eb61ed1b8b810efd65d4c41ba9f678d9bec5887bdc30e7d73b8e8a9",
    "routes": "e766d1aa8ccc5cde3eb068274f4513fa8a4976a7d2d1af300f734bbf8e59c9b3",
    "places": "b1040d54c28a938880bf7f71799a2a1bf090f72eb37e24d9c017f97271acf8d7",
-   "events": "d91bac08251f0fa8a145e672fd6b7648e43d532c7f425745be631bef333f9085",
+   "events": "7291f6271bc928adc0c322c3096cb706ede1e93fdc59d4ee1e09e5869b6310eb",
    "screen": "4eac2d276fd0d9a9f1f53e253714ba89759ee4b636fab5245bfabbe8c459522c",
    "boards": "813fafa31e4a21f7fcf956bb974ee8ff644f60128f9f663d986408bbfa478348",
    "voice": "f37d01cf09ed7767eec41778ed9af5e6240356ca74aebce991e305ea80fdf695",
    "captures": "b5b06eaef588cbdae55d1c0652b0653f8882aae90de5b2d2a510acebc89f42db",
-   "exports": "4db508908280b40843034dc2991828e6b46bd732eb2436587e72b3524a7f7654",
+   "exports": "cb72fd1101b8260fcae3f06e2c6ae5c47892f9e8a1a6d87339c62b6acfd17c03",
    "manifest": "d31e381c6fe67ddfd44b08ec2f607a6762d67f2bcb576f663cc6b26d5f2e99da"
   }
  },
@@ -131,9 +131,9 @@
    "sha256": "33f7e34c7b674b8965e236cb4d294c08609b4cb182510a87f6676117dbaf1cd0"
   },
   "events": {
-   "path": "events/window.0d392486941dae66.json",
-   "bytes": 9828,
-   "sha256": "0d392486941dae66ffa51f4a9a99b3d35a4d381cf99285a84bd54761d2092fc1"
+   "path": "events/window.723f5d382034f6b4.json",
+   "bytes": 10261,
+   "sha256": "723f5d382034f6b4e95bc197e1d219e448d211b833d4437b6daada6b112e7bd5"
   },
   "notices": {
    "path": "notices/window.8a375f8e2c27fd2d.json",
@@ -141,9 +141,9 @@
    "sha256": "8a375f8e2c27fd2dc7d09008e71217e70392d27f0f46f1144bd214f1c18616cb"
   },
   "news": {
-   "path": "news/window.18244b8521df836e.json",
-   "bytes": 26834,
-   "sha256": "18244b8521df836e38426d3f0477b2c6129d0128efe56de4b80486567077570b"
+   "path": "news/window.be85669c220326f4.json",
+   "bytes": 29832,
+   "sha256": "be85669c220326f4dcf4d3900137470dcbd5c576d3dafbde343b2ee0cb3f0021"
   },
   "places": {
    "path": "places.b5bb7afaae062d1e.json",
@@ -288,9 +288,9 @@
     "rows": 6721
    },
    {
-    "path": "exports/events.0d392486941dae66.json",
-    "bytes": 9828,
-    "sha256": "0d392486941dae66ffa51f4a9a99b3d35a4d381cf99285a84bd54761d2092fc1",
+    "path": "exports/events.723f5d382034f6b4.json",
+    "bytes": 10261,
+    "sha256": "723f5d382034f6b4e95bc197e1d219e448d211b833d4437b6daada6b112e7bd5",
     "name": "events",
     "format": "json",
     "mediaType": "application/json",
@@ -308,9 +308,9 @@
     "rows": null
    },
    {
-    "path": "exports/opis.5acbe46a4f939404.json",
-    "bytes": 36357,
-    "sha256": "5acbe46a4f939404f8d29d8687ed92100882093440690a194e0fb3d3deec90f7",
+    "path": "exports/opis.5bc671448be7a48d.json",
+    "bytes": 36358,
+    "sha256": "5bc671448be7a48d905b21b905fa4fadcfda8134e2df20fed60e94786b1f83e4",
     "name": "opis",
     "format": "json",
     "mediaType": "application/json",
@@ -319,9 +319,9 @@
    }
   ],
   "opis": {
-   "path": "exports/opis.5acbe46a4f939404.json",
-   "bytes": 36357,
-   "sha256": "5acbe46a4f939404f8d29d8687ed92100882093440690a194e0fb3d3deec90f7"
+   "path": "exports/opis.5bc671448be7a48d.json",
+   "bytes": 36358,
+   "sha256": "5bc671448be7a48d905b21b905fa4fadcfda8134e2df20fed60e94786b1f83e4"
   },
   "grid": null
  },
@@ -387,6 +387,7 @@
   "Lokalni snimači rade od nedjelje 27. rujna u 22:07: za ranije minute brojevi koje je aplikacija objavila, bicikli i zatvorene ulice nemaju podatka.",
   "U srijedu 30. rujna od 22:41 do 22:54 lokalni snimači nisu radili; ZET-ovi podaci snimljeni su bez prekida.",
   "Aplikacija objavljuje stanje usluge od utorka 29. rujna u 23:17; za ranije minute stanje je izračunano naknadno, istim pravilima, iz snimljenih podataka.",
+  "U utorak 29. rujna od 21:18 do 23:17 ZET-ovi podaci nisu se mijenjali gotovo dva sata; rečenice zaslona po današnjim pravilima u tom razdoblju govore o nepotvrđenim polascima.",
   "Od nedjelje u 20:00 do ponoći vozila su snimljena prema starom voznom redu ZET-a, a smještena na mrežu novoga; na dionicama s dva kolosijeka smjer vozila zato može biti pogrešan.",
   "Običan četvrtak 24. rujna nema snimljenih ZET-ovih podataka od ponoći do 02:00.",
   "Običnom ponedjeljku 21. rujna u snimci nedostaju dva okvira.",
