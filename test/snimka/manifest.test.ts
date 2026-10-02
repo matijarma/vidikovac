@@ -3,7 +3,9 @@
 // not the constants', a missing file key, a board without its stop, an
 // export whose name does not end in its format, a path that is absolute or
 // climbs, and a ref whose name does not carry its own hash.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { contentTypeOf } from '../../scripts/snimka/stage-manifest';
 import { SNIMKA_COMPARISONS, SNIMKA_WINDOW, type BoardRef, type ExportRef, type HashedRef, type SnimkaManifest } from '../../shared/snimka';
 import { SnimkaError, checkRefPath, contentPath, decodeManifest, type ContentExt } from '../../shared/snimka-codec';
 
@@ -219,5 +221,37 @@ describe('decodeManifest', () => {
     const n = clone();
     n.notes = [1];
     expect(() => decodeManifest(n)).toThrow(SnimkaError);
+  });
+});
+
+describe('the built v2 manifest (test/fixtures/snimka/manifest.sample.json, re-cut from the real build)', () => {
+  const built = decodeManifest(JSON.parse(readFileSync('test/fixtures/snimka/manifest.sample.json', 'utf8')) as unknown);
+
+  it('decodes, names every comparison\'s files and notes, and says the plan\'s caveats', () => {
+    expect(built.version).toBe(2);
+    for (const c of built.comparisons) {
+      expect(c.files.routes.path).toMatch(/^routes\/day-09(24|21)\.[0-9a-f]{16}\.json$/);
+      expect(c.notes.length).toBeGreaterThan(0);
+    }
+    const notes = built.notes.join(' ');
+    expect(notes).toContain('petak 2. listopada u 12:00');
+    expect(notes).toContain('dva okvira');
+    expect(notes).toContain('od ponoći do 02:00');
+    expect(notes).toContain('predložaka');
+    expect(notes).toContain('spremište');
+  });
+
+  it('lists the routes, places, voice index and opis as hashed json refs, every export under exports/', () => {
+    for (const ref of [built.files.routes, built.files.places, built.files.voiceIndex, built.files.opis]) expect(ref.path).toMatch(/\.[0-9a-f]{16}\.json$/);
+    for (const e of built.files.exports) expect(e.path.startsWith(`exports/${e.name}.`)).toBe(true);
+    expect(built.files.exports.find((e) => e.name === 'series')!.rows).toBe(6721);
+  });
+
+  it('gives every uploaded object its content type by extension', () => {
+    expect(contentTypeOf('exports/series.0123456789abcdef.csv')).toBe('text/csv; charset=utf-8');
+    expect(contentTypeOf('exports/closures.0123456789abcdef.geojson')).toBe('application/geo+json');
+    expect(contentTypeOf('screen/0928-0745-kiosk.0123456789abcdef.webp')).toBe('image/webp');
+    expect(contentTypeOf('manifest.json')).toBe('application/json');
+    expect(() => contentTypeOf('x.0123456789abcdef.txt')).toThrow();
   });
 });
