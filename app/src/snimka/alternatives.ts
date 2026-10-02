@@ -57,8 +57,9 @@ export interface EmptiedStation { id: string; name: string; emptySec: number; at
 
 /**
  * The stations whose count first fell to zero after `fromSec` and before the end of that Zagreb day, the earliest
- * first (ties: the fuller one at `fromSec` first, then by name), at most `limit`. A station already empty at the first
- * known slot is not one that emptied; a missing or not-renting slot neither empties nor refills a station.
+ * first (ties: the fuller one at `fromSec` first, then by name), at most `limit`. A station already empty at `fromSec`
+ * (or at its first known slot after it) is not one that emptied; a missing or not-renting slot neither empties nor
+ * refills a station.
  */
 export function emptiedFirst(bajs: BajsFile, stations: StationsFile, fromSec: number, limit = 10): EmptiedStation[] {
   const matrix = decodeBajs(bajs);
@@ -70,16 +71,17 @@ export function emptiedFirst(bajs: BajsFile, stations: StationsFile, fromSec: nu
     const row = matrix[i]!;
     const first = row[j0];
     const atFive = first !== undefined && known(first) ? first : null;
-    let last: number | null = atFive;
+    if (atFive === 0) return; // already empty at fromSec: it did not empty after it
+    let seenBikes = atFive !== null;
     for (let j = j0 + (atFive === null ? 0 : 1); j < jEnd; j++) {
       const v = row[j]!;
       if (!known(v)) continue;
-      if (v === 0 && last !== null && last > 0) {
-        out.push({ id, name: names.get(id) ?? id, emptySec: bajs.t0 + j * bajs.step, atFive });
+      if (v === 0) {
+        // Empty at its first known slot: it did not empty after fromSec either.
+        if (seenBikes) out.push({ id, name: names.get(id) ?? id, emptySec: bajs.t0 + j * bajs.step, atFive });
         return;
       }
-      if (v === 0 && last === null) return; // empty at its first known slot: it did not empty after fromSec
-      last = v;
+      seenBikes = true;
     }
   });
   return out

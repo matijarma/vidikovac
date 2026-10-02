@@ -32,7 +32,7 @@ describe('emptiedFirst', () => {
       (j: number) => (j >= five + 12 ? 0 : 3),
       // s2: already empty at 05:00 and all day: it did not empty
       () => 0,
-      // s3: empty at 05:00, refilled at 06:00, empty again at 08:00: counts at 08:00
+      // s3: empty at 05:00, refilled at 06:00, empty again at 08:00: it was empty already, so it is not listed
       (j: number) => (j < five + 12 ? 0 : j < five + 36 ? 2 : 0),
       // s4: missing and not renting slots do not empty it; empties on Tuesday only (not that day)
       (j: number) => (j === five + 5 ? BAJS_MISSING : j === five + 6 ? BAJS_NOT_RENTING : j >= five + 24 * 12 ? 0 : 4),
@@ -42,17 +42,18 @@ describe('emptiedFirst', () => {
     const matrix = rows.map((f) => Uint8Array.from({ length: N }, (_, j) => f(j)));
     const bajs = encodeBajs(T0, BAJS_STEP_S, rows.map((_, i) => `s${i}`), matrix);
     const r = emptiedFirst(bajs, stations(6), MONDAY_FIVE_S);
-    expect(r.map((s) => s.id)).toEqual(['s1', 's5', 's0', 's3']);
+    expect(r.map((s) => s.id)).toEqual(['s1', 's5', 's0']);
     // A tie at 06:00: the fuller station at 05:00 first, a station without a count after it.
     expect(r[0]).toEqual({ id: 's1', name: 'Stanica B', emptySec: MONDAY_FIVE_S + 3600, atFive: 3 });
     expect(r[1]!.atFive).toBeNull();
-    expect(r[3]).toEqual({ id: 's3', name: 'Stanica D', emptySec: MONDAY_FIVE_S + 3 * 3600, atFive: 0 });
+    expect(r.every((s) => s.atFive !== 0)).toBe(true);
     expect(emptiedFirst(bajs, stations(6), MONDAY_FIVE_S, 2)).toHaveLength(2);
   });
-  it('on the fixture: the seven stations that run dry (every ninth), in time order, each after 05:00 on Monday', () => {
+  it('on the fixture: the two stations of the dry ones (every ninth) that still had bikes at 05:00, in time order', () => {
     const bajs = buildBajs(buildWindowSeries());
     const r = emptiedFirst(bajs, buildStations(), MONDAY_FIVE_S);
-    expect(r).toHaveLength(7);
+    expect(r).toHaveLength(2);
+    for (const s of r) expect(s.atFive).toBeGreaterThan(0);
     for (let i = 1; i < r.length; i++) expect(r[i]!.emptySec).toBeGreaterThanOrEqual(r[i - 1]!.emptySec);
     for (const s of r) {
       expect(s.emptySec).toBeGreaterThan(MONDAY_FIVE_S);
@@ -150,7 +151,7 @@ describe('the section on a page', () => {
     const { ctx, clock } = context();
     const off = mountAlternatives(ctx, root);
     expect(root.hasAttribute('aria-busy')).toBe(false);
-    await vi.waitFor(() => expect(root.querySelectorAll('#zamjene-bajs tbody tr')).toHaveLength(7));
+    await vi.waitFor(() => expect(root.querySelectorAll('#zamjene-bajs tbody tr')).toHaveLength(2));
     const first = root.querySelector<HTMLTableRowElement>('#zamjene-bajs tbody tr')!;
     const button = first.querySelector('button')!;
     expect(button.textContent).toBe('Pokaži na karti');

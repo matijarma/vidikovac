@@ -422,6 +422,8 @@ export const RECKONING_TEXT = {
   /** The normal day's row in the peak card: "pon 21. 9., običan dan". */
   normalDay: '{day}, običan dan',
   linesMonday: 'U ponedjeljak 28. rujna',
+  /** The bikes card's figure: v1 labelled it with kpi.bikes, which v2 turned into the empty-stations tile. */
+  bikesDrained: 'bicikala manje na stanicama, od najvećeg zbroja do najmanjeg',
   linesNone: 'nijedna',
 } as const;
 
@@ -586,7 +588,7 @@ function alertsCard(s: SeriesFile): HTMLElement {
 function bikesCard(s: SeriesFile): HTMLElement {
   const r = bikeDrain(s);
   const body = r
-    ? [figure(num(r.maxTotal - r.minTotal), SN.kpi.bikes),
+    ? [figure(num(r.maxTotal - r.minTotal), RECKONING_TEXT.bikesDrained),
       smallTable(R.bikes, [R.day, R.bikesMin, R.bikesEmptyMax], r.byDay.map((d) => [zagrebDay(d.day * 1000), d.minTotal === null ? SN.strip.noValue : num(d.minTotal), d.maxEmpty === null ? SN.strip.noValue : num(d.maxEmpty)]))]
     : [empty(SN.strip.noValue)];
   return card({ id: 'vidjelo-bicikli', title: R.bikes, body, method: R.bikesMethod });

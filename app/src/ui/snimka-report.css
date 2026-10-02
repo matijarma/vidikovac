@@ -235,3 +235,5 @@
 .sn-live-age { font-size: var(--type-control); color: var(--tone-text-muted); }
 .sn-live-skeleton { display: block; min-block-size: 1.5rem; }
 .sn-live-links { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-2) 0 0; }
+/* The signals are words, not numbers: they read from the start of the cell. */
+.sn-open-signals td, .sn-open-signals th { text-align: start; }
