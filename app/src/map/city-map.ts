@@ -31,7 +31,7 @@ import { vehicleKind, type VehicleKind } from './vehicle-mark';
 import { tr } from '../transport/strings';
 import type { CityLabels } from './city-layers';
 import type { BasemapProfile, BasemapStyleOptions, MapTheme, OverlayPalette, StyleLayerLike, StyleOp } from './basemap';
-import type { OverlayOptions, ProzorOptions } from './overlays';
+import type { GlyphMode, OverlayOptions, ProzorOptions } from './overlays';
 import { idsInFrame, frameRadiusFor, type FrameCircle } from './frame';
 import type { RenderedFeature, SourcePoint } from './name-census';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
@@ -499,11 +499,7 @@ export interface CityMapOptions {
   /** CSS px of the map covered by something (the sheet along the bottom): every
    *  fit keeps its geometry inside the uncovered part. Changed live with setFitPadding. */
   fitPadding?: FitPadding;
-  /** /snimka/'s living network (overlays.ts liveNetworkLayers, liveStopsLayer): the network source is keyed by its
-   *  shapes' `sid` and the three live layers go on with the style, their state set through setLiveNetwork. Absent,
-   *  nothing is added: the kiosk and the phone draw exactly what they drew. */
-  liveNetwork?: boolean;
-  /** A tap on a drawn line (lit, live or the base network) selects the route (map-pointer.ts); absent, a line is not a target. */
+  /** A tap on a drawn line (lit or the base network) selects the route (map-pointer.ts); absent, a line is not a target. */
   pickRoutes?: boolean;
   /** Pointer selection on the map: a vehicle, a stop, a closure, or nothing. */
   onSelect?: (selection: MapSelection | null) => void;
@@ -571,10 +567,18 @@ export interface CityMapHandle {
    *  (overlays.ts ghostLayer). The source and the layer exist only once a page has called this; a
    *  surface that never does draws exactly what it drew before. [] clears them. */
   setGhosts?(points: readonly (readonly [number, number])[]): void;
-  /** /snimka/'s living network (CityMapOptions.liveNetwork): which routes are alive and dead and which stops are
-   *  served by an alive route. Kept per feature and applied through feature state only where it changed; null
-   *  clears every state. Ignored on a map built without the option. */
-  setLiveNetwork?(state: LiveNetworkState | null): void;
+  /** /snimka/'s glyph mode (overlays.ts GlyphMode, decision V3-10): 'dots' draws every vehicle as its dot at every
+   *  zoom and merges nothing, 'pills' draws the pills from zoom 0, null keeps the surface's own thresholds. */
+  setGlyphMode?(mode: GlyphMode | null): void;
+  /** A page's own source and circle layer (/snimka/'s BAJS stations, bajs-layer.ts), added once the style is up and
+   *  repainted on a theme flip from its builder; a surface that never calls this draws exactly what it drew. */
+  addStageLayer?(spec: StageLayerSpec): void;
+  /** Feature state on a stage layer's source; false while the style or the source is not up yet (nothing was set). */
+  setFeatureState?(source: string, id: string, state: Record<string, unknown>): boolean;
+  /** A MapLibre control (IControl) in the map's own control stack, added once the map exists; returns its remover. */
+  addControl?(control: MapControl, position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'): () => void;
+  /** [lon, lat] to CSS px of the container on the current camera; null before the map exists. */
+  project?(lonLat: readonly [number, number]): { x: number; y: number } | null;
   /** Ambient emphasis never changes personal selection, camera or follow. */
   setHighlight?(highlight: MapHighlight | null): void;
   setPresentationProfile?(profile: MapPresentation, symbolScale?: number): void;
@@ -599,8 +603,20 @@ export interface CityMapHandle {
   placedNames?(layerId: string): string[];
 }
 
-/** What setLiveNetwork takes: route ids (the network's), stop ids (the artefact's platforms). */
-export interface LiveNetworkState { alive: ReadonlySet<string>; dead: ReadonlySet<string>; stopsAlive: ReadonlySet<string> }
+/** A page's own layer on the city map (CityMapHandle.addStageLayer): one GeoJSON source, keyed by `promoteId` for
+ *  feature state, and one layer built from the palette so a theme flip repaints it. `before` names the layer it
+ *  goes under (the vehicle dots by default). `pick: 'place'` makes a tap on one of its features a place selection
+ *  by the feature's `id` property (map-pointer.ts). */
+export interface StageLayerSpec {
+  source: string;
+  promoteId?: string;
+  data: unknown;
+  layer: (palette: OverlayPalette, scale: number) => StyleLayerLike;
+  before?: string;
+  pick?: 'place';
+}
+/** The slice of MapLibre's IControl this wrapper adds (CityMapHandle.addControl). */
+export interface MapControl { onAdd(map: unknown): HTMLElement; onRemove(map: unknown): void }
 
 export type MapFactory = (options: CityMapOptions) => CityMapHandle;
 
@@ -856,8 +872,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  draws the wall's picture inside it (overlays.ts DESK_FRAME_UNTIL_ZOOM); a move the person makes keeps it,
    *  the next frame move replaces it. Only the desktop profile; the phone's stage frames the whole screen. */
   let deskFrame: FrameCircle | null = null;
-  /** The zoom the pills draw and merge from here (overlays.ts pillZoomOf): the surface's markZoom, else the public screen's. */
-  const pillZoomNow = (l: MaplibreModule): number => l.pillZoomOf({ markZoom: markZoom ?? prozor?.markZoom ?? null });
+  /** The zoom the pills draw and merge from here (overlays.ts pillZoomFor): the glyph mode's answer, else the surface's markZoom or the public screen's. */
+  const pillZoomNow = (l: MaplibreModule): number => l.pillZoomFor(glyphMode, { markZoom: markZoom ?? prozor?.markZoom ?? null });
   let cityLabels: CityLabels = cityLabelsOf(options.cityLabels);
   let hitTolerance = options.hitTolerancePx ?? profile.hitTolerancePx;
   let closuresVisible = options.closures !== false;
@@ -886,13 +902,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** setGhosts: null until a page asks for ghosts; from then on what the ghost source is set from. */
   let ghosts: readonly (readonly [number, number])[] | null = null;
   let ghostsOnStyle = false;
-  /** setLiveNetwork: the last state handed in (applied once the style and the artefact are up), the live layers as
-   *  the style carries them, and what each main shape and stop was last set to, so only a change is a call. */
-  let liveState: LiveNetworkState | null = null;
-  let liveOnStyle = false;
-  let liveLayers: StyleLayerLike[] = [];
-  const liveShapeApplied = new Map<number, 'alive' | 'dead' | 'quiet'>();
-  const liveStopsApplied = new Set<string>();
+  /** The ghost layer as the style carries it (the theme diff reads it). */
+  let ghostApplied: StyleLayerLike | null = null;
+  /** addStageLayer: the specs handed in, each with the layer as the style carries it once added (for the theme diff). */
+  const stageLayers: { spec: StageLayerSpec; applied: StyleLayerLike | null }[] = [];
+  /** addControl: the controls handed in, added to the map once it exists and taken off it on destroy. */
+  const controls: { control: MapControl; position: string; added: boolean }[] = [];
+  /** setGlyphMode: /snimka/'s dots-or-pills switch; null is every other surface's own thresholds. */
+  let glyphMode: GlyphMode | null = null;
   let lastDrawn: Drawn[] = [];
   let lastPushedSignature = '';
   /** The model's output as the last frame saw it (vehicle-features.ts stepSignature): whether the fleet still moves. */
@@ -973,7 +990,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       ? null
       : { routeId, colour: l.lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
     const shape = tripShape();
-    return { scale, modes, closuresVisible, selection, emphasis, prozor, markZoom, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames,
+    return { scale, modes, closuresVisible, selection, emphasis, prozor, markZoom, glyphMode, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames,
       ...(shape !== null ? { trip: { shape } } : {}),
       // Decision 58: a placed wall's frame draws the stops inside it alone; the desk's presented frame the same (D-F4).
       ...(prozor?.frame ? { frameStopIds: idsInFrame(stopsData.features, prozor.frame) }
@@ -1366,8 +1383,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // handed. An artefact fills them in slices (queueNamedSources); none
       // empties them at once.
       dropSlices();
-      liveShapeApplied.clear();
-      if (net) { queueNamedSources(); if (liveOnStyle && map) applyLiveState(map); }
+      if (net) queueNamedSources();
       else {
         const empty = { type: 'FeatureCollection', features: [] };
         setData(lib.SOURCES.network, empty);
@@ -1528,6 +1544,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       locale: controlStrings(),
     }) as unknown as MapApi;
     map = created;
+    for (const entry of controls) putControl(created, entry);
     // MapLibre names its canvas a focusable region called "Map" (English,
     // whatever the page's language). It becomes the image with the same
     // label as the region -- aria-labelledby, so the per-poll label rewrite
@@ -1601,6 +1618,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         selection: () => selection,
         ownStop: () => stop,
         ...(options.pickRoutes === true ? { pickRoutes: () => true } : {}),
+        pickPlaceLayers: () => stageLayers.filter((s) => s.applied && s.spec.pick === 'place').map((s) => s.applied!.id),
         choose: (next) => {
           select(next);
           options.onSelect?.(next);
@@ -1653,7 +1671,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // after this task (queueNamedSources), so the first vehicles and the
     // overlays are on the screen before the artefact's 2,000 platforms and
     // every shape are built and re-tiled.
-    created.addSource(l.SOURCES.network, options.liveNetwork ? { ...geojson(empty), promoteId: 'sid' } : geojson(empty));
+    created.addSource(l.SOURCES.network, geojson(empty));
     stopsData = empty;
     // Keyed by the platform id, so the name hysteresis addresses one stop's
     // name by feature state (decision 19).
@@ -1687,7 +1705,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addLayer({id:'ambient-highlight-line',type:'line',source:'ambient-highlight',filter:['!=',['geometry-type'],'Point'],paint:{'line-color':palette.selection,'line-width':3*scale}});
     created.addLayer({id:'ambient-highlight-point',type:'circle',source:'ambient-highlight',filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':18*scale,'circle-opacity':0,'circle-stroke-color':palette.selection,'circle-stroke-width':2*scale}});
     if (ghosts !== null) putGhosts(created, l);
-    if (options.liveNetwork) putLiveLayers(created, l);
+    for (const entry of stageLayers) putStageLayer(created, l, entry);
     styled = true;
     refreshTileLabels();
     // A resize or a deliberate presentation can arrive before the library or
@@ -1871,66 +1889,35 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     tripApplied = tripShape();
     fadeInLit(map, l, litRouteOf(options));
     writeFocusProbe(map, l);
-    if (ghostsOnStyle) applyOps(map, [{ id: l.LAYERS.ghosts, kind: 'paint', key: 'circle-stroke-color', value: palette.rail }, { id: l.LAYERS.ghosts, kind: 'paint', key: 'circle-radius', value: l.GHOST_RADIUS_PX * scale }]);
-    if (liveOnStyle) {
-      const next = liveLayerSpecs(l, palette);
-      applyOps(map, l.styleDiff(liveLayers, next));
-      liveLayers = next;
+    if (ghostsOnStyle) {
+      const next = l.ghostLayer(palette, scale);
+      applyOps(map, l.styleDiff([ghostApplied ?? next], [next]));
+      ghostApplied = next;
+    }
+    for (const entry of stageLayers) {
+      if (!entry.applied) continue;
+      const next = entry.spec.layer(palette, scale);
+      applyOps(map, l.styleDiff([entry.applied], [next]));
+      entry.applied = next;
     }
   }
 
-  /** The three live layers for a palette (overlays.ts): the network pair and the stops, in insertion order. */
-  function liveLayerSpecs(l: MaplibreModule, palette: OverlayPalette): StyleLayerLike[] {
-    return [...l.liveNetworkLayers(palette, scale), l.liveStopsLayer(palette, scale)];
+  /** A page's own layer (addStageLayer), added once with the style: its source keyed for feature state, its layer
+   *  under the vehicle dots unless the spec names another layer. */
+  function putStageLayer(m: MapApi, l: MaplibreModule, entry: { spec: StageLayerSpec; applied: StyleLayerLike | null }): void {
+    if (entry.applied) return;
+    const { spec } = entry;
+    m.addSource(spec.source, { type: 'geojson', data: spec.data, ...(spec.promoteId ? { promoteId: spec.promoteId } : {}) });
+    const layer = spec.layer(l.overlayPalette(theme), scale);
+    m.addLayer(layer as unknown as Record<string, unknown>, spec.before ?? l.LAYERS.vehicleDots);
+    entry.applied = layer;
   }
 
-  /** The living network's layers, added once with the style (CityMapOptions.liveNetwork): the lit lines under the
-   *  selected line's casing, the lit stops under the stop rings; then whatever state is already in hand. */
-  function putLiveLayers(m: MapApi, l: MaplibreModule): void {
-    if (liveOnStyle) return;
-    liveLayers = liveLayerSpecs(l, l.overlayPalette(theme));
-    for (const layer of liveLayers) m.addLayer(layer as unknown as Record<string, unknown>, layer.id === l.LAYERS.liveStops ? l.LAYERS.stops : l.LAYERS.networkSelectedCasing);
-    liveOnStyle = true;
-    liveShapeApplied.clear();
-    liveStopsApplied.clear();
-    applyLiveState(m);
-  }
-
-  /** Feature state for what changed since the last call: a route's state goes to its main shapes (the features'
-   *  `sid`, mainShapes), a stop's to its id. Nothing before the artefact is in; null state clears every mark. */
-  function applyLiveState(m: MapApi): void {
-    const l = lib;
-    if (!liveOnStyle || !l || !m.setFeatureState) return;
-    const state = liveState;
-    const shapeState = new Map<number, 'alive' | 'dead' | 'quiet'>();
-    if (state && net) {
-      for (const routeId of net.routes.keys()) {
-        const next = state.alive.has(routeId) ? 'alive' : state.dead.has(routeId) ? 'dead' : 'quiet';
-        if (next === 'quiet') continue;
-        for (const sid of mainShapes(net, routeId)) shapeState.set(sid, next);
-      }
-    }
-    for (const [sid, was] of liveShapeApplied) {
-      if (shapeState.has(sid)) continue;
-      if (was !== 'quiet') m.setFeatureState({ source: l.SOURCES.network, id: String(sid) }, { alive: false, dead: false });
-      liveShapeApplied.delete(sid);
-    }
-    for (const [sid, next] of shapeState) {
-      if (liveShapeApplied.get(sid) === next) continue;
-      m.setFeatureState({ source: l.SOURCES.network, id: String(sid) }, { alive: next === 'alive', dead: next === 'dead' });
-      liveShapeApplied.set(sid, next);
-    }
-    const stops = state?.stopsAlive ?? new Set<string>();
-    for (const id of liveStopsApplied) {
-      if (stops.has(id)) continue;
-      m.setFeatureState({ source: l.SOURCES.stops, id }, { alive: false });
-      liveStopsApplied.delete(id);
-    }
-    for (const id of stops) {
-      if (liveStopsApplied.has(id)) continue;
-      m.setFeatureState({ source: l.SOURCES.stops, id }, { alive: true });
-      liveStopsApplied.add(id);
-    }
+  /** A control handed in (addControl), on the map once it exists. */
+  function putControl(m: MapApi, entry: { control: MapControl; position: string; added: boolean }): void {
+    if (entry.added) return;
+    m.addControl(entry.control, entry.position);
+    entry.added = true;
   }
 
   /** The ghost source and layer (overlays.ts ghostLayer), added once, under the vehicle bodies and dots
@@ -1938,7 +1925,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function putGhosts(m: MapApi, l: MaplibreModule): void {
     if (!ghostsOnStyle) {
       m.addSource(l.SOURCES.ghosts, { type: 'geojson', data: l.ghostsToGeoJson(ghosts ?? []) });
-      m.addLayer(l.ghostLayer(l.overlayPalette(theme), scale) as unknown as Record<string, unknown>, l.LAYERS.vehicleBodies);
+      ghostApplied = l.ghostLayer(l.overlayPalette(theme), scale);
+      m.addLayer(ghostApplied as unknown as Record<string, unknown>, l.LAYERS.vehicleBodies);
       ghostsOnStyle = true;
       return;
     }
@@ -2284,9 +2272,38 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       ghosts = next;
       if (styled && map && lib) putGhosts(map, lib);
     },
-    setLiveNetwork(next) {
-      liveState = next;
-      if (styled && map) applyLiveState(map);
+    setGlyphMode(next) {
+      if (next === glyphMode) return;
+      glyphMode = next;
+      // The pills merge from the new zoom on the next push, and the layers draw from it.
+      lastPushedSignature = '';
+      applyOverlays();
+    },
+    addStageLayer(spec) {
+      if (stageLayers.some((s) => s.spec.source === spec.source)) return;
+      const entry = { spec, applied: null };
+      stageLayers.push(entry);
+      if (styled && map && lib) putStageLayer(map, lib, entry);
+    },
+    setFeatureState(source, id, state) {
+      if (!styled || !map?.setFeatureState || !stageLayers.some((s) => s.applied && s.spec.source === source)) return false;
+      map.setFeatureState({ source, id }, state);
+      return true;
+    },
+    addControl(control, position = 'top-right') {
+      const entry = { control, position, added: false };
+      controls.push(entry);
+      if (map) putControl(map, entry);
+      return () => {
+        const i = controls.indexOf(entry);
+        if (i >= 0) controls.splice(i, 1);
+        if (entry.added && map) { map.removeControl?.(control); entry.added = false; }
+      };
+    },
+    project(lonLat) {
+      if (!map?.project) return null;
+      const at = map.project([lonLat[0], lonLat[1]]);
+      return { x: at.x, y: at.y };
     },
     setHighlight(next) {
       if(JSON.stringify(next)===JSON.stringify(highlight))return;

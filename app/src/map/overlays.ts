@@ -86,12 +86,8 @@ export const LAYERS = Object.freeze({
   vehicleSelectedNose: 'vehicle-selected-nose',
   vehicleSelected: 'vehicle-selected',
   selectionRing: 'selection-ring',
-  /** One grey circle per ghost, under the vehicle marks (ghostLayer below); never in overlayLayers. */
+  /** One muted disc per ghost, under the vehicle marks (ghostLayer below); never in overlayLayers. */
   ghosts: 'ghosts',
-  /** /snimka/'s living network (liveNetworkLayers, liveStopsLayer below): added only under CityMapOptions.liveNetwork; never in overlayLayers. */
-  liveNetworkCasing: 'live-network-casing',
-  liveNetwork: 'live-network',
-  liveStops: 'live-stops',
 });
 
 /** Layers drawn under the basemap's own labels, so street names still read over the network. */
@@ -106,26 +102,32 @@ export const BELOW_LABELS: ReadonlySet<string> = new Set([
 export const OUTLINE_DASH: readonly number[] = Object.freeze([3, 3]);
 export const OUTLINE_WIDTH_PX = 2;
 
-/** A ghost's ring radius in CSS px before the surface's symbol scale (snimka v2, decision S-17: a hollow ring, not a disc). */
-export const GHOST_RADIUS_PX = 4.5;
-export const GHOST_STROKE_PX = 1.5;
-/** The disc's own fill is off: a ghost is a ring a real pill can stand inside without hiding it. */
-export const GHOST_OPACITY = 0;
+/** A ghost's opacity (snimka v3, decision V3-8): a filled disc in the muted ink at four tenths, so during the
+ *  strike the normal fleet reads as a grey swarm under two coloured marks and on a normal day the real fleet
+ *  covers it. Measured blends over the two canvases: #adb6c0 by day (3.5:1 under a tram pill, 4.7:1 under a
+ *  bus), #545e6a by night (3.2:1 and 3.9:1), so a real vehicle always stands off its ghost. */
+export const GHOST_OPACITY = 0.4;
+
+/** The vehicle dot's radius by zoom, before the surface's symbol scale (vehicleDots below and the ghosts). */
+export function vehicleDotRadius(scale = 1): Expr {
+  return zoomInterpolate(10, 2 * scale, PILL_ZOOM, 3.2 * scale, 16, 4.5 * scale);
+}
 
 /**
- * The ghost layer of /snimka/: the comparison day's vehicles as hollow grey
- * rings in the network's own neutral (`rail`, the same in both palettes),
- * under every vehicle mark. One layer, one source (SOURCES.ghosts), no label
- * and no heading: a ghost is a position, never a vehicle anyone can read a
- * line off. Not part of overlayLayers, so a surface that never calls
- * CityMapHandle.setGhosts gets exactly the style it always had.
+ * The ghost layer of /snimka/: the comparison day's vehicles as filled discs
+ * at the vehicle dot's own radius, no stroke, in the muted ink (`stopStroke`,
+ * the text-muted tier of each face), under every vehicle mark. One layer,
+ * one source (SOURCES.ghosts), no label and no heading: a ghost is a
+ * position, never a vehicle anyone can read a line off. Not part of
+ * overlayLayers, so a surface that never calls CityMapHandle.setGhosts gets
+ * exactly the style it always had.
  */
 export function ghostLayer(p: OverlayPalette, scale = 1): StyleLayerLike {
   return {
     id: LAYERS.ghosts,
     type: 'circle',
     source: SOURCES.ghosts,
-    paint: { 'circle-radius': GHOST_RADIUS_PX * scale, 'circle-color': p.rail, 'circle-opacity': GHOST_OPACITY, 'circle-stroke-color': p.rail, 'circle-stroke-width': GHOST_STROKE_PX },
+    paint: { 'circle-radius': vehicleDotRadius(scale), 'circle-color': p.stopStroke, 'circle-opacity': GHOST_OPACITY, 'circle-stroke-width': 0 },
   };
 }
 
@@ -157,6 +159,14 @@ export const STOP_ZOOM = 12.5;
  *  below it. city-map.ts merges the pills from the same zoom. */
 export function pillZoomOf(marks: { markZoom?: number | null } | null | undefined): number {
   return marks?.markZoom === undefined || marks.markZoom === null ? PILL_ZOOM : Math.min(PILL_ZOOM, marks.markZoom);
+}
+/** /snimka/'s glyph modes (OverlayOptions.glyphMode, decision V3-10). */
+export type GlyphMode = 'dots' | 'pills';
+/** A pill layer starting here never draws: MapLibre's zoom range ends at 24 and this map's at 18. */
+export const PILLS_NEVER_ZOOM = 24;
+/** The zoom the pills draw and merge from under a glyph mode: never under 'dots', always under 'pills', the surface's own otherwise. */
+export function pillZoomFor(mode: GlyphMode | null | undefined, marks: { markZoom?: number | null } | null | undefined): number {
+  return mode === 'dots' ? PILLS_NEVER_ZOOM : mode === 'pills' ? 0 : pillZoomOf(marks);
 }
 /** The lower end of the public screen's own stop ramp (ProzorOptions
  *  stopRadius): the floor of the whole-city window (kiosk/mapview.ts
@@ -642,6 +652,10 @@ export interface OverlayOptions {
    *  Karta in a narrow window, lane p-map); the public screen's own is
    *  ProzorOptions.markZoom. Never raises a threshold. */
   markZoom?: number | null;
+  /** /snimka/'s glyph mode (decision V3-10): 'dots' draws every vehicle as its mode-coloured dot at every zoom
+   *  (no pill, no number, no cluster: the pill layers start at PILLS_NEVER_ZOOM); 'pills' draws the pills from
+   *  zoom 0. null or absent keeps the surface's own thresholds (markZoom, PILL_ZOOM). */
+  glyphMode?: GlyphMode | null;
   /** The screen's own stop id: under prozor the hub-label tier never names it,
    *  because the 30 px anchor label already does and the two stacked at
    *  Jelačić (R-KP25). */
@@ -831,6 +845,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const prozor = options.prozor ?? null;
   /** The surface's own mark zoom, else the public screen's (pillZoomOf). */
   const marks = { markZoom: options.markZoom ?? prozor?.markZoom ?? null };
+  /** The zoom the pills and their arrows draw from: the glyph mode's answer, else the surface's own (pillZoomFor). */
+  const pillZoom = pillZoomFor(options.glyphMode ?? null, marks);
   const stopZoom = marks.markZoom === null ? STOP_ZOOM : Math.min(STOP_ZOOM, marks.markZoom);
   const screenStopId = options.screenStopId ?? null;
   const selectedVehicle = sel?.kind === 'vehicle' ? sel.id : null;
@@ -1083,7 +1099,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       LAYERS.vehicleDots,
       SOURCES.vehicles,
       {
-        'circle-radius': zoomInterpolate(10, 2 * s, PILL_ZOOM, 3.2 * s, 16, 4.5 * s),
+        'circle-radius': vehicleDotRadius(s),
         'circle-color': kindColor(p, 'fill'),
         'circle-opacity': alpha,
         'circle-stroke-color': p.halo,
@@ -1166,9 +1182,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     // closes at 16.5 because the rail under a tram says which way it faces,
     // but no rail can say which way a pair going both ways is heading, so the
     // arrows stay for as long as the two marks stay merged.
-    noseLayer(p, LAYERS.vehicleTwoWayFore, pillsYield ? NEVER : twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE, s, alpha, blocks),
-    noseLayer(p, LAYERS.vehicleTwoWayAft, pillsYield ? NEVER : twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
-    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), pillZoomOf(marks), s, p, inks, mark, blocks, pillsYield),
+    noseLayer(p, LAYERS.vehicleTwoWayFore, pillsYield ? NEVER : twoWayFilter, pillZoom, undefined, NOSE_ROTATE, s, alpha, blocks),
+    noseLayer(p, LAYERS.vehicleTwoWayAft, pillsYield ? NEVER : twoWayFilter, pillZoom, undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
+    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), pillZoom, s, p, inks, mark, blocks, pillsYield),
     // On a strip (pillsYield) the own name must not lie under a hub pill standing on the place: an unseen
     // copy of it, above the pills, is placed before them, and a pill that would cover it yields. Everywhere
     // else it places nothing, and decision 19's name under the pills is the only one.
@@ -1198,73 +1214,4 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       paint: { 'icon-color': p.selection, 'icon-halo-color': p.selectionHalo, 'icon-halo-width': 1 },
     },
   ];
-}
-
-// --- The living network of /snimka/ (plan of 2 October 2026, decision S-16 and section 3.3) ---
-//
-// Three layers a page asks for with CityMapOptions.liveNetwork, never part of
-// overlayLayers: the kiosk and the phone get exactly the style they always
-// had. They draw from the network and stops sources the map already carries
-// and read their state off MapLibre feature state (`alive`, `dead` on a main
-// shape keyed by `sid`; `alive` on a stop keyed by its id), which the page
-// sets through CityMapHandle.setLiveNetwork for the shapes whose state
-// changed. Never a filter or setData for this: both re-tile the source. The
-// three looks follow strings.ts layers.liveNote: a line with a vehicle in the
-// last fifteen minutes lights in ZET's own colour over a halo casing, a line
-// scheduled and without one is a grey line at the lit width, and a line
-// outside its timetable stays the thin base network underneath.
-
-/** A bus line's share of the tram width (the base network keeps the same ratio). */
-export const LIVE_BUS_WIDTH = 0.7;
-/** The grey of a scheduled line nobody runs, over the base network. */
-export const LIVE_DEAD_OPACITY = 0.55;
-/** The lit stops draw from here: under it the dots were clutter on the whole-city view. */
-export const LIVE_STOPS_MIN_ZOOM = 12;
-
-/** The lit line and its halo casing on SOURCES.network, main shapes only; inserted before LAYERS.networkSelectedCasing. */
-export function liveNetworkLayers(p: OverlayPalette, scale = 1): StyleLayerLike[] {
-  const alive: Expr = ['boolean', ['feature-state', 'alive'], false];
-  const dead: Expr = ['boolean', ['feature-state', 'dead'], false];
-  const main: Expr = ['==', ['get', 'main'], true];
-  const round = { 'line-cap': 'round', 'line-join': 'round' };
-  /** A bus at LIVE_BUS_WIDTH of the tram width; the zoom interpolation stays outermost, as MapLibre requires of `zoom`. */
-  const kindWidth: Expr = ['match', ['get', 'kind'], 'bus', LIVE_BUS_WIDTH, 1];
-  const width = (at10: number, at16: number): Expr => ['interpolate', ['linear'], ['zoom'], 10, ['*', at10 * scale, kindWidth], 16, ['*', at16 * scale, kindWidth]];
-  const tramColour: Expr = ['match', ['get', 'route'], ...Object.entries(LINE_COLOURS.colours as Record<string, string>).flat(), p.routeTram];
-  const litColour: Expr = ['match', ['get', 'kind'], 'tram', tramColour, 'bus', p.routeBus, p.other];
-  return [
-    {
-      id: LAYERS.liveNetworkCasing,
-      type: 'line',
-      source: SOURCES.network,
-      filter: main,
-      layout: round,
-      paint: { 'line-color': p.selectionHalo, 'line-width': width(3.5, 8), 'line-opacity': ['case', alive, 1, 0], 'line-opacity-transition': LIT_FADE },
-    },
-    {
-      id: LAYERS.liveNetwork,
-      type: 'line',
-      source: SOURCES.network,
-      filter: main,
-      layout: round,
-      paint: { 'line-color': ['case', alive, litColour, p.rail], 'line-width': width(1.8, 4.2), 'line-opacity': ['case', alive, 1, dead, LIVE_DEAD_OPACITY, 0], 'line-opacity-transition': LIT_FADE },
-    },
-  ];
-}
-
-/** A stop served by some alive line: a filled dot in its mode's ink on SOURCES.stops; inserted before LAYERS.stops. */
-export function liveStopsLayer(p: OverlayPalette, scale = 1): StyleLayerLike {
-  const alive: Expr = ['boolean', ['feature-state', 'alive'], false];
-  return {
-    id: LAYERS.liveStops,
-    type: 'circle',
-    source: SOURCES.stops,
-    minzoom: LIVE_STOPS_MIN_ZOOM,
-    paint: {
-      'circle-radius': zoomInterpolate(LIVE_STOPS_MIN_ZOOM, 2.2 * scale, 16, 5 * scale),
-      'circle-color': ['case', ['boolean', ['get', 'tram'], false], p.routeTram, p.routeBus],
-      'circle-opacity': ['case', alive, 1, 0],
-      'circle-opacity-transition': LIT_FADE,
-    },
-  };
 }

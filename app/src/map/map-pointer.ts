@@ -45,7 +45,13 @@ export interface PointerHost {
   ownStop?(): { id: string; name: string; lon: number; lat: number } | null;
   /** A drawn line is a target (CityMapOptions.pickRoutes, /snimka/): read after the platforms, before the closures. */
   pickRoutes?(): boolean;
+  /** A page's own layers whose features are places by their `id` property (CityMapHandle.addStageLayer with
+   *  `pick: 'place'`, /snimka/'s BAJS stations): read with the city places, only the ids the style carries. */
+  pickPlaceLayers?(): readonly string[];
 }
+
+/** A line is thin and moves nowhere: a tap within this many CSS px of one still picks it (snimka v3, R1). */
+export const LINE_HIT_PX = 12;
 
 /** What a tap landed on: one of the map's selectable things, or a cluster of
  *  vehicles, which is not a selection but a request to look closer. */
@@ -116,11 +122,12 @@ export function bindCityMapPointer(m: PointerMap, l: PointerIds, host: PointerHo
    *  of the pill still opens the cluster. */
   function pick(point: { x: number; y: number }): Picked | null {
     const tolerance = host.hitTolerance();
-    const box = [
-      [point.x - tolerance, point.y - tolerance],
-      [point.x + tolerance, point.y + tolerance],
+    const boxOf = (reach: number): number[][] => [
+      [point.x - reach, point.y - reach],
+      [point.x + reach, point.y + reach],
     ];
-    const first = (layers: string[]): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(box, { layers })[0];
+    const box = boxOf(tolerance);
+    const first = (layers: string[], within: number[][] = box): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(within, { layers })[0];
     const own = first([l.LAYERS.screenStop]);
     if (own) return { kind: 'stop', id: String(own.properties.id), ids: host.siblingPlatforms(String(own.properties.name)) };
     // Its ring may not be laid out yet (lane p-map3): the map is ready once the basemap is in, and a tap straight
@@ -135,12 +142,15 @@ export function bindCityMapPointer(m: PointerMap, l: PointerIds, host: PointerHo
       const members = clusterMembers(vehicle.properties);
       return members ? { kind: 'cluster', ids: members } : { kind: 'vehicle', id: String(vehicle.properties.id) };
     }
-    const place = l.CITY_LAYERS ? first(['city-place-dots','city-place-badges','city-place-labels']) : undefined;
+    const stagePlaces = host.pickPlaceLayers?.() ?? [];
+    const placeLayers = [...(l.CITY_LAYERS ? ['city-place-dots','city-place-badges','city-place-labels'] : []), ...stagePlaces];
+    const place = placeLayers.length ? first(placeLayers) : undefined;
     if (place) return {kind:'place',id:String(place.properties.id)};
     const platform = first([l.LAYERS.stopsSelected, l.LAYERS.stopsRoute, l.LAYERS.stops, l.LAYERS.stopLabels]);
     if (platform) return { kind: 'stop', id: String(platform.properties.id), ids: host.siblingPlatforms(String(platform.properties.name)) };
     if (host.pickRoutes?.()) {
-      const line = first([l.LAYERS.networkSelected, l.LAYERS.liveNetwork, l.LAYERS.networkTram, l.LAYERS.networkBus]);
+      // A line is a hairline: its reach is LINE_HIT_PX at least, whatever the surface's tolerance for marks.
+      const line = first([l.LAYERS.networkSelected, l.LAYERS.networkTram, l.LAYERS.networkBus], boxOf(Math.max(tolerance, LINE_HIT_PX)));
       if (line && line.properties.route !== undefined) return { kind: 'route', id: String(line.properties.route) };
     }
     const closure = host.closuresVisible() ? first([l.LAYERS.closures, l.LAYERS.closuresCasing]) : undefined;

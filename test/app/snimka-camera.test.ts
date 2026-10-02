@@ -124,3 +124,70 @@ describe('cameraFor', () => {
     expect(cam.zoom).toBe(12);
   });
 });
+
+// ---- v3: the passive frame and the edge marker (decision V3-13) ------------------------------------------------
+
+import { EDGE_INSET_PX, NETWORK_FRAME_MIN_ZOOM, NETWORK_FRAME_PADDING_PX, edgeMarkerFor, networkBounds, networkFrame } from '../../app/src/snimka/camera';
+import { toPlane } from '../../shared/motion/geo';
+
+/** A two-route artefact: tram 6 with a normal shape (0) and a depot run (1) far to the east, bus 228 way out of town. */
+const net = {
+  routes: new Map([
+    ['6', { short: '6', type: 0, rank: 1, shapes: [0, 1], main: [0] }],
+    ['228', { short: '228', type: 3, rank: 2, shapes: [2] }],
+  ]),
+  shapes: [
+    { id: 's0', route: '6', pts: [toPlane(15.92, 45.78), toPlane(16.02, 45.84)], cum: [0, 1], len: 1 },
+    { id: 's1', route: '6', pts: [toPlane(16.30, 45.90)], cum: [0], len: 0 },
+    { id: 's2', route: '228', pts: [toPlane(15.50, 45.50)], cum: [0], len: 0 },
+  ],
+} as never;
+
+describe('networkBounds and networkFrame', () => {
+  it('spans the tram routes’ normal shapes only: no depot run, no bus', () => {
+    const b = networkBounds(net)!;
+    expect(b.west).toBeCloseTo(15.92, 6);
+    expect(b.east).toBeCloseTo(16.02, 6);
+    expect(b.south).toBeCloseTo(45.78, 6);
+    expect(b.north).toBeCloseTo(45.84, 6);
+    expect(networkBounds({ routes: new Map(), shapes: [] } as never)).toBeNull();
+  });
+  it('frames the network with the margin clear, between the floor and the opening zoom, once per box size (pure)', () => {
+    const b = networkBounds(net)!;
+    const cam = networkFrame(b, W, H, 12.6);
+    expect(cam.zoom).toBeGreaterThanOrEqual(NETWORK_FRAME_MIN_ZOOM);
+    expect(cam.zoom).toBeLessThanOrEqual(12.6);
+    const inner = viewBounds(cam.center, cam.zoom, W - 2 * NETWORK_FRAME_PADDING_PX + 1, H - 2 * NETWORK_FRAME_PADDING_PX + 1);
+    expect(inBounds([b.west, b.south], inner)).toBe(true);
+    expect(inBounds([b.east, b.north], inner)).toBe(true);
+    expect(networkFrame(b, W, H, 12.6)).toEqual(cam);
+    // A narrower box frames further out; the floor holds for a sliver.
+    expect(networkFrame(b, 480, H, 12.6).zoom).toBeLessThan(cam.zoom);
+    expect(networkFrame(b, 60, 60, 12.6).zoom).toBe(NETWORK_FRAME_MIN_ZOOM);
+    // A box the size of the real network's envelope (about 13 by 9 km) at 645 px lands in R1's band, z 11.3 to 11.8.
+    expect(networkFrame({ west: 15.90, south: 45.76, east: 16.07, north: 45.84 }, 645, 522, 12.6).zoom).toBeGreaterThan(11.2);
+  });
+});
+
+describe('edgeMarkerFor', () => {
+  it('is nothing while every vehicle is inside the box or there is none', () => {
+    expect(edgeMarkerFor([], W, H)).toBeNull();
+    expect(edgeMarkerFor([{ x: 10, y: 10 }, { x: W, y: H }], W, H)).toBeNull();
+    expect(edgeMarkerFor([{ x: Number.NaN, y: 5 }], W, H)).toBeNull();
+  });
+  it('counts the vehicles outside and stands on the inset edge toward the nearest of them', () => {
+    const m = edgeMarkerFor([{ x: W / 2, y: -300 }, { x: W + 20, y: H / 2 }, { x: 10, y: 10 }], W, H)!;
+    expect(m.count).toBe(2);
+    // The one 20 px past the right edge (455 px from the centre) is nearer than the one 300 px above (561 px): the marker sits on the right edge, mid-height.
+    expect(m.x).toBeCloseTo(W - EDGE_INSET_PX, 6);
+    expect(m.y).toBeCloseTo(H / 2, 6);
+    expect(m.angle).toBeCloseTo(0, 6);
+    const up = edgeMarkerFor([{ x: W / 2, y: -300 }], W, H)!;
+    expect(up.y).toBeCloseTo(EDGE_INSET_PX, 6);
+    expect(up.x).toBeCloseTo(W / 2, 6);
+    expect(up.angle).toBeCloseTo(-90, 6);
+    const corner = edgeMarkerFor([{ x: -1000, y: -1000 }], 200, 200, 10)!;
+    expect(corner.x).toBeCloseTo(10, 6);
+    expect(corner.y).toBeCloseTo(10, 6);
+  });
+});

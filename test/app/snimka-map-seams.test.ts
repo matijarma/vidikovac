@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
 // The seams /snimka/ adds to the city map (app/src/map/city-map.ts,
 // overlays.ts, map-pointer.ts): CityMapDeps.createModel replaces the
-// integrator import, CityMapHandle.setGhosts adds one hollow-ring source and
-// layer under the vehicle marks, CityMapOptions.liveNetwork adds the three
-// live layers whose state setLiveNetwork sets per feature, and pickRoutes
-// lets a tap pick a drawn line. Without any of them the map imports the
-// integrator as it always did, adds nothing new to the style, sets no
-// feature state and picks exactly what it picked.
+// integrator import, CityMapHandle.setGhosts adds one muted-disc source and
+// layer under the vehicle marks (V3-8), setGlyphMode switches dots and pills
+// (V3-10), addStageLayer and setFeatureState carry the BAJS layer (V3-9),
+// addControl puts the follow toggle in the control stack and project reads
+// the camera, and pickRoutes lets a tap pick a drawn line from 12 px.
+// Without any of them the map imports the integrator as it always did, adds
+// nothing new to the style, sets no feature state and picks exactly what it
+// picked; the living network of v2 is gone from every seam (V3-1).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as basemap from '../../app/src/map/basemap';
 import * as overlays from '../../app/src/map/overlays';
@@ -16,9 +18,10 @@ import * as cityLayers from '../../app/src/map/city-layers';
 import * as externalFeatures from '../../app/src/map/external-features';
 import * as externalLabels from '../../app/src/map/external-labels';
 import * as vehicleFeatures from '../../app/src/map/vehicle-features';
-import { createCityMap, type CityMapDeps, type CityMapOptions } from '../../app/src/map/city-map';
-import { bindCityMapPointer, type PointerHost, type PointerMap } from '../../app/src/map/map-pointer';
+import { createCityMap, type CityMapDeps, type CityMapOptions, type MapControl, type StageLayerSpec } from '../../app/src/map/city-map';
+import { bindCityMapPointer, LINE_HIT_PX, type PointerHost, type PointerMap } from '../../app/src/map/map-pointer';
 import type { Model } from '../../app/src/motion/integrator';
+import { contrastRatio } from '../../app/src/ui/contrast';
 
 const fakeModel = (): Model => ({ update() {}, step: () => [], resync() {}, size: () => 0 });
 const createIntegrator = vi.fn(() => fakeModel());
@@ -30,6 +33,8 @@ class FakeMap {
   readonly sources = new Map<string, { data: unknown; setData: ReturnType<typeof vi.fn>; promoteId?: string }>();
   readonly layers: { layer: Record<string, unknown>; before?: string }[] = [];
   readonly paint: [string, string, unknown][] = [];
+  readonly zoomRanges: [string, number, number][] = [];
+  readonly controls: { control: unknown; position?: string }[] = [];
   private readonly once_ = new Map<string, Listener[]>();
   private readonly canvas = document.createElement('canvas');
   constructor(public readonly options: Record<string, unknown>) {
@@ -39,8 +44,8 @@ class FakeMap {
   on(): void {}
   once(type: string, fn: Listener): void { this.once_.set(type, [...(this.once_.get(type) ?? []), fn]); }
   fire(type: string): void { for (const fn of this.once_.get(type) ?? []) fn({ type }); this.once_.delete(type); }
-  addControl(): void {}
-  removeControl(): void {}
+  addControl(control: unknown, position?: string): void { this.controls.push({ control, position }); }
+  removeControl(control: unknown): void { const i = this.controls.findIndex((c) => c.control === control); if (i >= 0) this.controls.splice(i, 1); }
   getCanvas(): HTMLCanvasElement { return this.canvas; }
   addImage(): void {}
   hasImage(): boolean { return false; }
@@ -49,11 +54,13 @@ class FakeMap {
   addLayer(layer: Record<string, unknown>, before?: string): void { this.layers.push({ layer, before }); }
   getLayer(id: string): unknown { return this.layers.find((l) => l.layer.id === id)?.layer; }
   setPaintProperty(id: string, key: string, value: unknown): void { this.paint.push([id, key, value]); }
+  setLayerZoomRange(id: string, min: number, max: number): void { this.zoomRanges.push([id, min, max]); }
   readonly setFeatureState = vi.fn<(feature: { source: string; id: string }, state: Record<string, unknown>) => void>();
   setLayoutProperty(): void {}
   setFilter(): void {}
   setSprite(): void {}
   queryRenderedFeatures(): [] { return []; }
+  project(lonLat: [number, number]): { x: number; y: number } { return { x: lonLat[0] * 10, y: lonLat[1] * 10 }; }
   easeTo(): void {}
   jumpTo(): void {}
   fitBounds(): void {}
@@ -89,6 +96,9 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+/** The ids of the v2 living network, which no seam carries any more (V3-1). */
+const LIVE_IDS = ['live-network-casing', 'live-network', 'live-stops'];
+
 describe('the default path is untouched', () => {
   it('imports the integrator and builds the model from it when no createModel is given', async () => {
     await stage();
@@ -107,19 +117,25 @@ describe('the default path is untouched', () => {
     expect(map.paint.some(([id]) => id === overlays.LAYERS.ghosts)).toBe(false);
   });
 
-  it('adds no live layer, keys the network source by nothing, sets no feature state, and the overlay layers never include a live one', async () => {
+  it('carries no live layer, keys the network source by nothing, sets no feature state, adds no stage layer or control, and keeps the pills from 12.5', async () => {
     const { handle, map } = await stage();
     map.fire('style.load');
     await flush();
-    const live: string[] = [overlays.LAYERS.liveNetworkCasing, overlays.LAYERS.liveNetwork, overlays.LAYERS.liveStops];
-    expect(map.layers.filter((l) => live.includes(l.layer.id as string))).toHaveLength(0);
+    expect(map.layers.filter((l) => LIVE_IDS.includes(l.layer.id as string))).toHaveLength(0);
+    expect(Object.values(overlays.LAYERS)).not.toContain('live-network');
     expect(map.sources.get(overlays.SOURCES.network)!.promoteId).toBeUndefined();
     expect(map.sources.get(overlays.SOURCES.stops)!.promoteId).toBe('id');
-    for (const id of live) expect(overlays.overlayLayers(basemap.OVERLAY_LIGHT).map((l) => l.id)).not.toContain(id);
-    handle.setLiveNetwork!({ alive: new Set(['6']), dead: new Set(), stopsAlive: new Set(['106_1']) });
+    for (const id of LIVE_IDS) expect(overlays.overlayLayers(basemap.OVERLAY_LIGHT).map((l) => l.id)).not.toContain(id);
+    expect(map.layers.filter((l) => (l.layer.id as string).startsWith('snimka-'))).toHaveLength(0);
+    // The map's own three controls only (scale, zoom, locate), nothing a page did not ask for.
+    expect(map.controls.every((c) => c.control instanceof FakeControl)).toBe(true);
     handle.setTheme!('dark');
     expect(map.setFeatureState).not.toHaveBeenCalled();
-    expect(map.paint.some(([id]) => live.includes(id))).toBe(false);
+    expect(handle.setFeatureState!('snimka-bajs', 'x', { f: 1 })).toBe(false);
+    expect(map.setFeatureState).not.toHaveBeenCalled();
+    const pills = overlays.overlayLayers(basemap.OVERLAY_LIGHT).find((l) => l.id === overlays.LAYERS.vehicles) as unknown as { minzoom?: number };
+    expect(pills.minzoom).toBe(overlays.PILL_ZOOM);
+    expect(map.zoomRanges).toEqual([]);
   });
 });
 
@@ -154,9 +170,12 @@ describe('CityMapHandle.setGhosts', () => {
     expect(added.before).toBe(overlays.LAYERS.vehicleBodies);
     expect(added.layer).toEqual(overlays.ghostLayer(basemap.OVERLAY_LIGHT, 1));
     expect(map.layers.filter((l) => l.layer.id === overlays.LAYERS.ghosts)).toHaveLength(1);
+    // Under the vehicle dots: the bodies come before the dots in the overlay list.
+    const ids = overlays.overlayLayers(basemap.OVERLAY_LIGHT).map((l) => l.id);
+    expect(ids.indexOf(overlays.LAYERS.vehicleBodies)).toBeLessThan(ids.indexOf(overlays.LAYERS.vehicleDots));
   });
 
-  it('asked after the style is up, adds once and then only sets the data; setTheme repaints it in the dark palette’s rail grey', async () => {
+  it('asked after the style is up, adds once and then only sets the data; setTheme repaints it in the dark palette’s muted ink', async () => {
     const { handle, map } = await stage();
     map.fire('style.load');
     await flush();
@@ -170,19 +189,34 @@ describe('CityMapHandle.setGhosts', () => {
     expect((source.setData.mock.calls[1]![0] as { features: unknown[] }).features).toHaveLength(0);
     expect(map.layers.filter((l) => l.layer.id === overlays.LAYERS.ghosts)).toHaveLength(1);
     handle.setTheme!('dark');
-    expect(map.paint).toContainEqual([overlays.LAYERS.ghosts, 'circle-stroke-color', basemap.OVERLAY_DARK.rail]);
-    expect(map.paint).toContainEqual([overlays.LAYERS.ghosts, 'circle-radius', overlays.GHOST_RADIUS_PX]);
+    expect(map.paint).toContainEqual([overlays.LAYERS.ghosts, 'circle-color', basemap.OVERLAY_DARK.stopStroke]);
   });
 });
 
-describe('overlays.ts ghost spec', () => {
-  it('is one hollow ring on its own source, in the rail grey of both palettes: r 4.5 at scale 1, no fill, stroke 1.5 (S-17)', () => {
-    expect(overlays.GHOST_RADIUS_PX).toBe(4.5);
+describe('overlays.ts ghost spec (V3-8)', () => {
+  it('is one filled disc on its own source at the vehicle dot’s radius, the muted ink at 0.4, no stroke, in both palettes', () => {
+    expect(overlays.GHOST_OPACITY).toBe(0.4);
     for (const palette of [basemap.OVERLAY_LIGHT, basemap.OVERLAY_DARK]) {
       const layer = overlays.ghostLayer(palette, 2);
-      expect(layer).toEqual({ id: 'ghosts', type: 'circle', source: 'ghosts', paint: { 'circle-radius': 9, 'circle-color': palette.rail, 'circle-opacity': 0, 'circle-stroke-color': palette.rail, 'circle-stroke-width': 1.5 } });
+      expect(layer).toEqual({ id: 'ghosts', type: 'circle', source: 'ghosts', paint: { 'circle-radius': overlays.vehicleDotRadius(2), 'circle-color': palette.stopStroke, 'circle-opacity': 0.4, 'circle-stroke-width': 0 } });
+      const dots = overlays.overlayLayers(palette, { scale: 2 }).find((l) => l.id === overlays.LAYERS.vehicleDots)!;
+      expect(dots.paint!['circle-radius']).toEqual(overlays.vehicleDotRadius(2));
     }
-    expect(basemap.OVERLAY_LIGHT.rail).not.toBe(basemap.OVERLAY_DARK.rail);
+    expect(overlays.vehicleDotRadius(1)).toEqual(['interpolate', ['linear'], ['zoom'], 10, 2, overlays.PILL_ZOOM, 3.2, 16, 4.5]);
+    expect(basemap.OVERLAY_LIGHT.stopStroke).not.toBe(basemap.OVERLAY_DARK.stopStroke);
+  });
+  it('a real vehicle stands off its ghost: the 0.4 blend over each canvas keeps at least 3:1 under the tram and the bus inks', () => {
+    const srgb = (hex: string): number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const blend = (ink: string, canvas: string, alpha: number): string => {
+      const a = srgb(ink);
+      const b = srgb(canvas);
+      return `#${a.map((c, i) => Math.round(c * alpha + b[i]! * (1 - alpha)).toString(16).padStart(2, '0')).join('')}`;
+    };
+    for (const p of [basemap.OVERLAY_LIGHT, basemap.OVERLAY_DARK]) {
+      const ghost = blend(p.stopStroke, p.stopFill, overlays.GHOST_OPACITY);
+      expect(contrastRatio(ghost, p.routeTram)).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(ghost, p.routeBus)).toBeGreaterThanOrEqual(3);
+    }
   });
   it('ghostsToGeoJson keeps finite points only', () => {
     const fc = overlays.ghostsToGeoJson([[15.9, 45.8], [Infinity, 45.8], [15.9, Number.NaN]]);
@@ -190,113 +224,112 @@ describe('overlays.ts ghost spec', () => {
   });
 });
 
-// ---- the living network (plan section 3.3, decision S-16) -------------------------------------------------
-
-/** A three-route network: 6 (tram, main shapes 0 and 1), 228 (bus, main shape 2), 17 (tram, shape 3 main, 4 a depot run). */
-const liveNet = {
-  version: 3, feedVersion: '000396', graphHash: 'live',
-  routes: new Map([
-    ['6', { short: '6', type: 0, rank: 1, shapes: [0, 1], main: [0, 1] }],
-    ['228', { short: '228', type: 3, rank: 2, shapes: [2], main: [2] }],
-    ['17', { short: '17', type: 0, rank: 3, shapes: [3, 4], main: [3] }],
-  ]),
-  shapes: [0, 1, 2, 3, 4].map((i) => ({ id: `s${i}`, route: i < 2 ? '6' : i === 2 ? '228' : '17', pts: [{ x: 0, y: i }, { x: 100, y: i }], cum: [0, 100], len: 100, direction: 0 })),
-  stops: [], paths: [], edges: [], diagram: { lines: [], box: [0, 0] },
-} as never;
-
-describe('CityMapOptions.liveNetwork', () => {
-  it('keys the network source by sid and adds the three layers once: the lines before the selected casing, the stops before the rings', async () => {
-    const { map } = await stage({}, { liveNetwork: true });
-    map.fire('style.load');
-    await flush();
-    expect(map.sources.get(overlays.SOURCES.network)!.promoteId).toBe('sid');
-    const ids = map.layers.map((l) => l.layer.id);
-    expect(ids.filter((id) => id === overlays.LAYERS.liveNetwork)).toHaveLength(1);
-    for (const id of [overlays.LAYERS.liveNetworkCasing, overlays.LAYERS.liveNetwork]) expect(map.layers.find((l) => l.layer.id === id)!.before).toBe(overlays.LAYERS.networkSelectedCasing);
-    expect(map.layers.find((l) => l.layer.id === overlays.LAYERS.liveStops)!.before).toBe(overlays.LAYERS.stops);
-    expect(map.layers.find((l) => l.layer.id === overlays.LAYERS.liveNetwork)!.layer).toEqual(overlays.liveNetworkLayers(basemap.OVERLAY_LIGHT, 1)[1]);
+describe('the glyph mode (V3-10)', () => {
+  it('pillZoomFor: never under dots, always under pills, the surface’s own otherwise', () => {
+    expect(overlays.PILLS_NEVER_ZOOM).toBe(24);
+    expect(overlays.pillZoomFor('dots', { markZoom: 11 })).toBe(24);
+    expect(overlays.pillZoomFor('pills', { markZoom: 11 })).toBe(0);
+    expect(overlays.pillZoomFor(null, { markZoom: 11 })).toBe(11);
+    expect(overlays.pillZoomFor(undefined, null)).toBe(overlays.PILL_ZOOM);
   });
-
-  it('setLiveNetwork sets feature state per main shape and stop, only for what changed, and null clears it', async () => {
-    const { handle, map } = await stage({}, { liveNetwork: true, loadNetwork: async () => liveNet });
-    map.fire('style.load');
-    await flush();
-    handle.setLiveNetwork!({ alive: new Set(['6']), dead: new Set(['228']), stopsAlive: new Set(['106_1', '106_2']) });
-    const calls = (): [string, string, Record<string, unknown>][] => map.setFeatureState.mock.calls.map(([f, st]) => [f.source, f.id, st]);
-    expect(calls()).toEqual(expect.arrayContaining([
-      ['network', '0', { alive: true, dead: false }], ['network', '1', { alive: true, dead: false }], ['network', '2', { alive: false, dead: true }],
-      ['stops', '106_1', { alive: true }], ['stops', '106_2', { alive: true }],
-    ]));
-    // Route 17 is quiet and shape 4 is a depot run: neither gets a call.
-    expect(calls().some(([, id]) => id === '3' || id === '4')).toBe(false);
-    expect(calls()).toHaveLength(5);
-    map.setFeatureState.mockClear();
-    // The same state again: nothing to say.
-    handle.setLiveNetwork!({ alive: new Set(['6']), dead: new Set(['228']), stopsAlive: new Set(['106_1', '106_2']) });
-    expect(map.setFeatureState).not.toHaveBeenCalled();
-    // 228 lights, 6 goes quiet, one stop leaves: four calls, one per change.
-    handle.setLiveNetwork!({ alive: new Set(['228']), dead: new Set(), stopsAlive: new Set(['106_2']) });
-    expect(calls()).toEqual(expect.arrayContaining([['network', '0', { alive: false, dead: false }], ['network', '1', { alive: false, dead: false }], ['network', '2', { alive: true, dead: false }], ['stops', '106_1', { alive: false }]]));
-    expect(calls()).toHaveLength(4);
-    map.setFeatureState.mockClear();
-    handle.setLiveNetwork!(null);
-    expect(calls()).toEqual(expect.arrayContaining([['network', '2', { alive: false, dead: false }], ['stops', '106_2', { alive: false }]]));
-    expect(calls()).toHaveLength(2);
+  it('the layer list draws the pills and the two-way noses from the mode’s zoom; the dots stay at every zoom', () => {
+    const of = (mode: overlays.GlyphMode | null) => overlays.overlayLayers(basemap.OVERLAY_LIGHT, { glyphMode: mode });
+    const minzoom = (layers: ReturnType<typeof of>, id: string): number | undefined => (layers.find((l) => l.id === id) as unknown as { minzoom?: number }).minzoom;
+    expect(minzoom(of('dots'), overlays.LAYERS.vehicles)).toBe(24);
+    expect(minzoom(of('dots'), overlays.LAYERS.vehicleTwoWayFore)).toBe(24);
+    expect(minzoom(of('pills'), overlays.LAYERS.vehicles)).toBeUndefined();
+    expect(minzoom(of(null), overlays.LAYERS.vehicles)).toBe(overlays.PILL_ZOOM);
+    expect(minzoom(of('dots'), overlays.LAYERS.vehicleDots)).toBeUndefined();
   });
-
-  it('a state handed in before the style loads is applied once the style and the artefact are up; a theme flip repaints the live layers', async () => {
-    const { handle, map } = await stage({}, { liveNetwork: true, loadNetwork: async () => liveNet });
-    handle.setLiveNetwork!({ alive: new Set(['17']), dead: new Set(), stopsAlive: new Set() });
-    expect(map.setFeatureState).not.toHaveBeenCalled();
+  it('setGlyphMode moves the pill layers’ zoom range on the live map and back', async () => {
+    const { handle, map } = await stage();
     map.fire('style.load');
     await flush();
-    expect(map.setFeatureState).toHaveBeenCalledWith({ source: 'network', id: '3' }, { alive: true, dead: false });
+    handle.setGlyphMode!('dots');
+    expect(map.zoomRanges).toContainEqual([overlays.LAYERS.vehicles, 24, 24]);
+    map.zoomRanges.length = 0;
+    handle.setGlyphMode!('dots');
+    expect(map.zoomRanges).toEqual([]);
+    handle.setGlyphMode!('pills');
+    expect(map.zoomRanges).toContainEqual([overlays.LAYERS.vehicles, 0, 24]);
+    handle.setGlyphMode!(null);
+    expect(map.zoomRanges).toContainEqual([overlays.LAYERS.vehicles, overlays.PILL_ZOOM, 24]);
+  });
+});
+
+describe('CityMapHandle.addStageLayer and setFeatureState (V3-9)', () => {
+  const spec = (): StageLayerSpec => ({
+    source: 'snimka-bajs',
+    promoteId: 'id',
+    data: { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [15.9, 45.8] }, properties: { id: 'bajs:1' } }] },
+    layer: (p, scale) => ({ id: 'snimka-bajs', type: 'circle', source: 'snimka-bajs', paint: { 'circle-color': p.bikeDisc, 'circle-radius': 4 * scale } }),
+    pick: 'place',
+  });
+  it('asked before the style loads, adds the keyed source and the layer under the vehicle dots once; feature state waits for it', async () => {
+    const { handle, map } = await stage();
+    handle.addStageLayer!(spec());
+    expect(handle.setFeatureState!('snimka-bajs', 'bajs:1', { f: 0.5 })).toBe(false);
+    map.fire('style.load');
+    await flush();
+    expect(map.sources.get('snimka-bajs')!.promoteId).toBe('id');
+    const added = map.layers.filter((l) => l.layer.id === 'snimka-bajs');
+    expect(added).toHaveLength(1);
+    expect(added[0]!.before).toBe(overlays.LAYERS.vehicleDots);
+    expect(added[0]!.layer).toEqual(spec().layer(basemap.OVERLAY_LIGHT, 1));
+    handle.addStageLayer!(spec());
+    expect(map.layers.filter((l) => l.layer.id === 'snimka-bajs')).toHaveLength(1);
+    expect(handle.setFeatureState!('snimka-bajs', 'bajs:1', { f: 0.5 })).toBe(true);
+    expect(map.setFeatureState).toHaveBeenCalledWith({ source: 'snimka-bajs', id: 'bajs:1' }, { f: 0.5 });
+    expect(handle.setFeatureState!('other', 'x', { f: 0.5 })).toBe(false);
+    expect(map.setFeatureState).toHaveBeenCalledTimes(1);
+  });
+  it('a theme flip rebuilds the layer from its builder and applies the paint that changed', async () => {
+    const { handle, map } = await stage();
+    map.fire('style.load');
+    await flush();
+    handle.addStageLayer!({ ...spec(), layer: (p) => ({ id: 'snimka-bajs', type: 'circle', source: 'snimka-bajs', paint: { 'circle-color': p.stopStroke } }) });
     map.paint.length = 0;
     handle.setTheme!('dark');
-    const dark = overlays.liveStopsLayer(basemap.OVERLAY_DARK, 1).paint!['circle-color'];
-    expect(map.paint).toContainEqual([overlays.LAYERS.liveStops, 'circle-color', dark]);
-    expect(map.paint.some(([id]) => id === overlays.LAYERS.liveNetwork)).toBe(true);
+    expect(map.paint).toContainEqual(['snimka-bajs', 'circle-color', basemap.OVERLAY_DARK.stopStroke]);
   });
 });
 
-describe('overlays.ts live layer specs', () => {
-  it('draw main shapes only, read feature state for alive and dead, colour trams from the ZET table and buses at 0.7 width', () => {
-    const [casing, line] = overlays.liveNetworkLayers(basemap.OVERLAY_LIGHT, 1) as unknown as [Record<string, never>, Record<string, never>];
-    expect(casing.filter).toEqual(['==', ['get', 'main'], true]);
-    expect(line.filter).toEqual(['==', ['get', 'main'], true]);
-    expect(casing.paint['line-color']).toBe(basemap.OVERLAY_LIGHT.selectionHalo);
-    expect(casing.paint['line-opacity']).toEqual(['case', ['boolean', ['feature-state', 'alive'], false], 1, 0]);
-    expect(casing.paint['line-opacity-transition']).toEqual(overlays.LIT_FADE);
-    expect(JSON.stringify(line.paint['line-color'])).toContain('"17","#ef7c00"');
-    expect(JSON.stringify(line.paint['line-color'])).toContain(basemap.OVERLAY_LIGHT.routeBus);
-    expect(JSON.stringify(line.paint['line-width'])).toContain(`"bus",${overlays.LIVE_BUS_WIDTH}`);
-    expect(line.paint['line-opacity']).toEqual(['case', ['boolean', ['feature-state', 'alive'], false], 1, ['boolean', ['feature-state', 'dead'], false], overlays.LIVE_DEAD_OPACITY, 0]);
-    const stops = overlays.liveStopsLayer(basemap.OVERLAY_DARK, 2) as unknown as Record<string, never>;
-    expect(stops.source).toBe(overlays.SOURCES.stops);
-    expect(stops.minzoom).toBe(overlays.LIVE_STOPS_MIN_ZOOM);
-    expect(stops.paint['circle-radius']).toEqual(['interpolate', ['linear'], ['zoom'], 12, 4.4, 16, 10]);
-    expect(stops.paint['circle-opacity']).toEqual(['case', ['boolean', ['feature-state', 'alive'], false], 1, 0]);
+describe('CityMapHandle.addControl and project', () => {
+  it('a control asked for before the map exists goes on once it is built; the remover takes it off; project reads the camera', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const control: MapControl = { onAdd: () => document.createElement('div'), onRemove: () => {} };
+    const handle = createCityMap({ container, ariaLabel: 'Karta', points: [], lines: [], reducedMotion: true, loadNetwork: async () => null }, { loadMaplibre: async () => lib as never, raf: () => 0, cancel: () => {}, origin: 'https://zagreb.example' });
+    expect(handle.project!([15.98, 45.815])).toBeNull();
+    const remove = handle.addControl!(control, 'top-right');
+    await flush();
+    const map = FakeMap.instances.at(-1)!;
+    expect(map.controls).toContainEqual({ control, position: 'top-right' });
+    expect(handle.project!([15.98, 45.815])).toEqual({ x: 159.8, y: 458.15 });
+    remove();
+    expect(map.controls.some((c) => c.control === control)).toBe(false);
   });
 });
 
-// ---- the pointer's route step (map-pointer.ts pickRoutes) ----------------------------------------------------
+// ---- the pointer's route and place steps (map-pointer.ts) ----------------------------------------------------
 
-function pointer(pickRoutes: boolean, hits: Record<string, Record<string, unknown>>) {
-  const queried: string[][] = [];
+function pointer(hits: Record<string, Record<string, unknown>>, host: Partial<PointerHost> = {}) {
+  const queried: { layers: string[]; reach: number }[] = [];
   let click: ((event: { point?: { x: number; y: number } }) => void) | null = null;
   const m: PointerMap = {
     on: (type, listener) => { if (type === 'click') click = listener; },
     getCanvas: () => document.createElement('canvas'),
     getZoom: () => 13,
-    queryRenderedFeatures: (_box, options) => {
+    queryRenderedFeatures: (box, options) => {
       const layers = options?.layers ?? [];
-      queried.push(layers);
+      const b = box as number[][];
+      queried.push({ layers, reach: (b[1]![0]! - b[0]![0]!) / 2 });
       const hit = layers.find((id) => hits[id]);
       return hit ? [{ properties: hits[hit]! }] : [];
     },
   };
   const chosen: unknown[] = [];
-  const host: PointerHost = {
+  bindCityMapPointer(m, { LAYERS: overlays.LAYERS }, {
     container: document.createElement('div'),
     styled: () => true,
     hitTolerance: () => 8,
@@ -307,29 +340,36 @@ function pointer(pickRoutes: boolean, hits: Record<string, Record<string, unknow
     fitCoordinates: () => {},
     selection: () => null,
     choose: (next) => { chosen.push(next); },
-    ...(pickRoutes ? { pickRoutes: () => true } : {}),
-  };
-  bindCityMapPointer(m, { LAYERS: overlays.LAYERS }, host);
+    ...host,
+  });
   click!({ point: { x: 10, y: 10 } });
   return { queried, chosen };
 }
 
-describe('map-pointer.ts pickRoutes', () => {
-  const routeLayers: string[] = [overlays.LAYERS.networkSelected, overlays.LAYERS.liveNetwork, overlays.LAYERS.networkTram, overlays.LAYERS.networkBus];
-  it('without the option a tap never asks the line layers and the pick order is what it was', () => {
-    const { queried, chosen } = pointer(false, { [overlays.LAYERS.liveNetwork]: { route: '228' } });
-    expect(queried.some((layers) => layers.some((id) => routeLayers.includes(id)))).toBe(false);
-    expect(queried.map((l) => l[0])).toEqual([overlays.LAYERS.screenStop, overlays.LAYERS.vehicleSelected, overlays.LAYERS.stopsSelected, overlays.LAYERS.closures]);
+describe('map-pointer.ts pickRoutes and pickPlaceLayers', () => {
+  const routeLayers: string[] = [overlays.LAYERS.networkSelected, overlays.LAYERS.networkTram, overlays.LAYERS.networkBus];
+  it('without the option a tap never asks the line layers and the pick order is what it was, at the surface’s tolerance', () => {
+    const { queried, chosen } = pointer({ [overlays.LAYERS.networkTram]: { route: '6' } });
+    expect(queried.some((q) => q.layers.some((id) => routeLayers.includes(id)))).toBe(false);
+    expect(queried.map((q) => q.layers[0])).toEqual([overlays.LAYERS.screenStop, overlays.LAYERS.vehicleSelected, overlays.LAYERS.stopsSelected, overlays.LAYERS.closures]);
+    expect(queried.every((q) => q.reach === 8)).toBe(true);
     expect(chosen).toEqual([null]);
   });
-  it('with the option the lines are read after the platforms and before the closures, and the tap selects the route', () => {
-    const { queried, chosen } = pointer(true, { [overlays.LAYERS.liveNetwork]: { route: '228', main: true } });
-    expect(queried.map((l) => l[0])).toEqual([overlays.LAYERS.screenStop, overlays.LAYERS.vehicleSelected, overlays.LAYERS.stopsSelected, overlays.LAYERS.networkSelected]);
-    expect(queried[3]).toEqual(routeLayers);
+  it('with the option the lines are read after the platforms and before the closures, from 12 px, without any live layer, and the tap selects the route', () => {
+    const { queried, chosen } = pointer({ [overlays.LAYERS.networkBus]: { route: '228', main: true } }, { pickRoutes: () => true });
+    expect(queried.map((q) => q.layers[0])).toEqual([overlays.LAYERS.screenStop, overlays.LAYERS.vehicleSelected, overlays.LAYERS.stopsSelected, overlays.LAYERS.networkSelected]);
+    expect(queried[3]!.layers).toEqual(routeLayers);
+    expect(queried[3]!.reach).toBe(LINE_HIT_PX);
+    expect(LINE_HIT_PX).toBe(12);
     expect(chosen).toEqual([{ kind: 'route', id: '228' }]);
   });
   it('a platform under the tap still wins over the line beneath it', () => {
-    const { chosen } = pointer(true, { [overlays.LAYERS.stops]: { id: '106_1', name: 'Trg' }, [overlays.LAYERS.networkTram]: { route: '6' } });
+    const { chosen } = pointer({ [overlays.LAYERS.stops]: { id: '106_1', name: 'Trg' }, [overlays.LAYERS.networkTram]: { route: '6' } }, { pickRoutes: () => true });
     expect(chosen).toEqual([{ kind: 'stop', id: '106_1', ids: undefined }]);
+  });
+  it('a stage layer picked as places: its feature’s id is the place, read with the city places and before the platforms', () => {
+    const { queried, chosen } = pointer({ 'snimka-bajs': { id: 'bajs:bajs-7' }, [overlays.LAYERS.stops]: { id: '106_1', name: 'Trg' } }, { pickPlaceLayers: () => ['snimka-bajs'] });
+    expect(queried.some((q) => q.layers.includes('snimka-bajs'))).toBe(true);
+    expect(chosen).toEqual([{ kind: 'place', id: 'bajs:bajs-7' }]);
   });
 });

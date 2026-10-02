@@ -1,0 +1,30 @@
+/* Snimka v3, lane W1: the map's own chrome. The follow toggle in MapLibre's control stack (director.toggle,
+   aria-pressed), the edge marker for a vehicle outside the frame (camera.offFrame) and the BAJS tap tooltip
+   (paused, zoom 14 and up). Prefixes sn-cam- and sn-bajs-. Imported by the map chunk (snimka/map-layer.ts), so the
+   entry graph never carries it; the stage's sheet (snimka-stage.css, lane W3) owns the box the map sits in. */
+
+.sn-cam-toggle { display: grid; place-items: center; inline-size: 29px; block-size: 29px; padding: 0; color: var(--tone-text-primary); }
+.sn-cam-toggle svg { inline-size: 18px; block-size: 18px; }
+.sn-cam-toggle[aria-pressed='true'] { color: var(--tone-accent); }
+.sn-cam-toggle[aria-pressed='true'] svg circle:last-of-type { fill: currentColor; }
+@media (pointer: coarse) {
+  .sn-cam-toggle { inline-size: 44px; block-size: 44px; }
+}
+
+.sn-cam-edge {
+  position: absolute; z-index: 3; transform: translate(-50%, -50%);
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--tone-surface-1); color: var(--tone-text-primary);
+  font-size: var(--text-meta, 0.75rem); line-height: 1.5; font-variant-numeric: tabular-nums; white-space: nowrap;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18); pointer-events: none;
+}
+.sn-cam-edge[hidden] { display: none; }
+
+.sn-bajs-tip {
+  position: absolute; z-index: 3; transform: translate(-50%, calc(-100% - 12px));
+  max-inline-size: 18rem; padding: 4px 8px; border-radius: 6px;
+  background: var(--tone-surface-1); color: var(--tone-text-primary);
+  font-size: var(--text-meta, 0.75rem); line-height: 1.5; font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.22); pointer-events: none;
+}
+.sn-bajs-tip[hidden] { display: none; }

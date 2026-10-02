@@ -42,7 +42,15 @@ export interface StageMap {
   liveCounts(): { alive: number; dead: number; quiet: number } | null;
   resize(): void;
   destroy(): void;
+  /** v3 (W1, additive): what the chip row prints as legend (decision V3-11) and which foot line the map asks for;
+   *  read per frame by the stage. Absent on a stub map. */
+  legendCounts?(): LegendCounts;
 }
+/** v3: the map's legend numbers for the chip row. `vehicles` and `ghosts` are null when unknown ("bez podatka");
+ *  `bikes` is 'missing' while the BAJS bytes are 255 (the foot line layers.bikesMissing); `compare` says why no
+ *  ghost is drawn: 'sunday' (layers.compareSunday), 'gap' (layers.compareGap), 'speed' (at one hour per second,
+ *  layers.noVehiclesAtSpeed), 'off' (the chip), 'loading'; 'ok' draws them. */
+export interface LegendCounts { vehicles: number | null; ghosts: number | null; bikes: 'ok' | 'missing'; compare: 'ok' | 'sunday' | 'gap' | 'speed' | 'off' | 'loading' }
 export type MountMapLayer = (ctx: SnimkaContext, host: HTMLElement) => Promise<StageMap>;
 /** Two SVG minimaps (now and the comparison day) drawn by V2 into an element V3 provides. */
 export type MountMinimaps = (ctx: SnimkaContext, host: HTMLElement, opts: { large: boolean }) => () => void;
