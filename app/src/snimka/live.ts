@@ -13,7 +13,7 @@
 import { aboutExpected, resetServiceStateMemory, serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { escapeHtml } from '../ui/dom/escape';
-import { duration, num } from './format';
+import { count, duration, num, zagrebClock } from './format';
 import { SN, fill } from './strings';
 
 export const TEASER_URL = '/api/teaser';
@@ -59,12 +59,19 @@ export function readLive(json: unknown, nowMs: number): LiveReading {
   }
 }
 
-/** The sentences of a reading: the numbers and their age, or the one line that says the state is not available. */
-export function liveLines(r: LiveReading): string[] {
+/** The state sentence of a normal reading by the Zagreb daypart of `nowMs`. */
+function normalSentence(nowMs: number): string {
+  const h = Number(zagrebClock(nowMs).slice(0, 2));
+  return h >= 5 && h < 10 ? SN.live.state.morning : h >= 10 && h < 18 ? SN.live.state.day : h >= 18 && h < 23 ? SN.live.state.evening : SN.live.state.night;
+}
+
+/** The sentences of a reading at `nowMs` (epoch ms): the numbers and, over five minutes, their age; or the one line
+ *  that says the state is not available. */
+export function liveLines(r: LiveReading, nowMs: number = Date.now()): string[] {
   if (r.kind === 'unavailable') return [SN.live.unavailable];
-  const state = SN.badge[r.state].toLocaleLowerCase('hr');
-  const now = fill(SN.live.now, { seen: num(r.seen), expected: num(r.expected), state });
-  return r.ageS === null ? [now] : [now, fill(SN.live.age, { age: duration(r.ageS * 1000) })];
+  const state = r.state === 'normal' ? normalSentence(nowMs) : SN.live.state[r.state];
+  const now = fill(SN.live.now, { time: zagrebClock(nowMs), vehicles: count(r.seen, SN.live.vehicleForms), expected: num(r.expected), state });
+  return r.ageS === null || r.ageS <= 300 ? [now] : [now, fill(SN.live.age, { age: duration(r.ageS * 1000) })];
 }
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -138,7 +145,7 @@ export function mountLive(root: HTMLElement, deps: LiveDeps = {}): () => void {
   const stop = observe(root, () => {
     void fetchLive(fetchImpl, now, deps.timeoutMs).then((reading) => {
       if (disposed) return;
-      out.replaceChildren(...liveLines(reading).map((line, i) => {
+      out.replaceChildren(...liveLines(reading, now()).map((line, i) => {
         const p = doc.createElement('p');
         p.className = i === 0 ? 'sn-live-line' : 'sn-live-age';
         p.textContent = line;

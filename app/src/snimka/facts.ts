@@ -12,7 +12,7 @@
 import { BAJS_STEP_S, isBajsFile, isStationsFile, type FactKey, type SeriesFile, type StationsFile } from '../../../shared/snimka';
 import { BAJS_MISSING, BAJS_NOT_RENTING, SnimkaError, decodeBajs } from '../../../shared/snimka-codec';
 import type { SnimkaContext } from './context';
-import { num } from './format';
+import { count as countForms, num, type Forms } from './format';
 import { routeSample } from './route-series';
 import { SN, fill } from './strings';
 
@@ -122,8 +122,10 @@ export function factChips(keys: readonly FactKey[], ctx: FactsContext, atSec: nu
   const push = (key: FactKey, text: string, missing: boolean, retro = false, pending = false): void => {
     out.push(pending ? { key, text, retro, missing, pending } : { key, text, retro, missing });
   };
-  const count = (key: FactKey, template: string, v: number | null): void => {
-    if (v === null) push(key, missingText(template), true);
+  const count = (key: FactKey, template: string | Forms, v: number | null): void => {
+    // v3: a number before a noun goes through plural forms ("989 bicikala"); missing says the noun, never 0.
+    if (typeof template !== 'string') push(key, v === null ? `${template[2]}: ${SN.facts.none}` : countForms(v, template), v === null);
+    else if (v === null) push(key, missingText(template), true);
     else push(key, fill(template, { n: num(v) }), false);
   };
   for (const key of keys) {

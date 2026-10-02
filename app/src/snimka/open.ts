@@ -98,7 +98,7 @@ export const mountOpen: Mount = (ctx, root) => {
     `<div class="sn-open-cols"><div class="sn-open-downloads">${downloadsList(m)}</div>` +
     '<div class="sn-open-notes">' +
     `<p class="sn-open-catalog">${escapeHtml(O.catalog)} <a class="st-link" href="/open/catalog.json">${escapeHtml(O.catalogLink)}</a> · <a class="st-link" href="/open/#snimka-2026-09">${escapeHtml(O.catalogEntry)}</a></p>` +
-    `<h3 class="sn-open-h">${escapeHtml(O.repro)}</h3>` +
+    `<h3 class="sn-open-h">${escapeHtml(fill(O.repro, { commit }))}</h3>` +
     `<p class="sn-open-repro" data-sn="repro">${escapeHtml(fill(O.reproText, { commit }))}${commitLink} <a class="st-link" href="${REPO}/blob/main/docs/snimka-2026-10.md" rel="noopener noreferrer" target="_blank">${escapeHtml(O.brief)}<span class="visually-hidden"> ${escapeHtml(SN.news.newTab)}</span><span aria-hidden="true">↗</span></a></p>` +
     `<p class="sn-open-promise">${escapeHtml(O.promise)}</p>` +
     `<p class="sn-open-excluded">${escapeHtml(O.notIncluded)}</p>` +

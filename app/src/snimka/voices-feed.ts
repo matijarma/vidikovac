@@ -266,7 +266,7 @@ export const mountVoicesFeed: MountPanel = (ctx, root) => {
     empty.hidden = at.visible.length > 0;
     filter.hidden = subject === null;
     if (subject) {
-      filterText.textContent = fill(V.filtered, { subject: subjectLabel(ctx, subject) });
+      filterText.textContent = fill(V.filtered, { subject: subjectLabel(ctx, subject), n: at.hiddenCount });
       hiddenText.textContent = at.hiddenCount ? fill(plural(at.hiddenCount, SN.voices.hiddenForms), { count: at.hiddenCount }) : '';
     }
     root.dataset.snFeedCount = String(at.visible.length + at.olderCount);

@@ -429,7 +429,7 @@ export function heroTiles(s: SeriesFile, comparison: SeriesFile | null, peakComp
     {
       key: 'silent',
       value: silent.total > 0 ? num(Math.round(silent.total / 60)) : none,
-      label: SN.kpi.silent,
+      label: plural(Math.round(silent.total / 60), SN.kpi.silent),
       sub: silent.fromSec !== null && silent.toSec !== null ? fill(SN.kpi.silentSub, { from: dt(silent.fromSec), to: dt(silent.toSec) }) : null,
     },
     {
@@ -443,13 +443,13 @@ export function heroTiles(s: SeriesFile, comparison: SeriesFile | null, peakComp
     {
       key: 'bikes',
       value: bikes && bikes.maxEmpty !== null ? num(bikes.maxEmpty) : none,
-      label: fill(SN.kpi.bikes, { stations: bikes && bikes.stations !== null ? num(bikes.stations) : none }),
-      sub: bikes && bikes.maxEmptyAt !== null ? fill(SN.kpi.bikesSub, { day: zagrebDay(bikes.maxEmptyAt * 1000), time: zagrebClock(bikes.maxEmptyAt * 1000), from: num(bikes.maxTotal), to: num(bikes.minTotal) }) : null,
+      label: fill(plural(bikes?.maxEmpty ?? 0, SN.kpi.bikes), { stations: bikes && bikes.stations !== null ? num(bikes.stations) : none }),
+      sub: bikes && bikes.maxEmptyAt !== null ? fill(SN.kpi.bikesSub, { day: zagrebDay(bikes.maxEmptyAt * 1000), time: zagrebClock(bikes.maxEmptyAt * 1000), normal: none }) : null,
     },
     {
       key: 'return',
       value: back ? num(back.minutes) : none,
-      label: SN.kpi.return,
+      label: plural(back?.minutes ?? 0, SN.kpi.return),
       sub: back ? fill(SN.kpi.returnSub, { from: zagrebClock(back.fromSec * 1000), to: zagrebClock(back.toSec * 1000) }) : null,
     },
     ...(alerts ? [{

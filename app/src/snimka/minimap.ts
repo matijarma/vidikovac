@@ -12,6 +12,7 @@ import { ZAGREB_OFFSET_S } from '../../../shared/snimka';
 import { comparisonFor, type SnimkaContext } from './context';
 import type { MountMinimaps, Subject } from './contracts';
 import { aliveStates, routeSlotAt, scheduledCount, liveCounts, type AliveState, type RouteStates } from './live-network';
+import { zagrebDay } from './format';
 import { SN, fill } from './strings';
 import { comparisonDayLabel } from './subject';
 
@@ -118,7 +119,7 @@ export const mountMinimaps: MountMinimaps = (ctx, host, opts) => {
   }
   const nowSide = side('sn-mm-now');
   const normalSide = side('sn-mm-normal');
-  nowSide.name.textContent = SN.twins.now;
+  nowSide.name.textContent = fill(SN.twins.now, { day: zagrebDay(ctx.manifest.window.fromSec * 1000) });
   if (opts.large) {
     const legend = doc.createElement('ul');
     legend.className = 'sn-mm-legend';
@@ -174,6 +175,7 @@ export const mountMinimaps: MountMinimaps = (ctx, host, opts) => {
       const states = aliveStates(ctx.routes, atSec);
       apply(nowSide, states);
       const counts = liveCounts(states);
+      nowSide.name.textContent = fill(SN.twins.now, { day: zagrebDay(t) });
       nowSide.count.textContent = fill(SN.twins.count, { alive: counts.alive, scheduled: Math.max(scheduledCount(ctx.routes, atSec), counts.alive) });
       nowSide.svg.dataset.snMmAlive = String(counts.alive);
     }
@@ -193,7 +195,7 @@ export const mountMinimaps: MountMinimaps = (ctx, host, opts) => {
       normalSide.svg.setAttribute('aria-label', `${SN.twins.title}: ${normalSide.name.textContent}`);
     }
   }
-  nowSide.svg.setAttribute('aria-label', `${SN.twins.title}: ${SN.twins.now}`);
+  nowSide.svg.setAttribute('aria-label', `${SN.twins.title}: ${nowSide.name.textContent}`);
 
   void ctx.data.get(ctx.manifest.networks['396'], decodeNetwork).then((net) => {
     if (disposed) return;
