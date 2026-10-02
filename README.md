@@ -68,7 +68,7 @@ These are different kinds of knowledge. ZET countdowns are **derived estimates**
 
 One device is enough: keep the screen in one tab and redeem its code in another. Opening a screen does not grant a personal session. This is the real data and pairing system, not a separate demo.
 
-Or watch a replay: [`/snimka/`](https://zagreb.aningfilm.hr/snimka/), "Tri dana bez tramvaja" (three days without trams), plays back the strike of 28 to 30 September 2026 minute by minute on one clock: the vehicles on the map, the bikes at the stations, the closed streets and the sentences the public screen wrote. It is a recording replayed with the product's own engine, never a simulation, and it never calls a live API. Its dataset is derived from the recorded days, raw ZET frames are not published, and the sources and licences are in [`docs/izvori.md`](docs/izvori.md).
+Or watch a replay: [`/snimka/`](https://zagreb.aningfilm.hr/snimka/), "Tri dana bez tramvaja" (three days without trams), plays back the strike of 28 September to the following Friday noon (2 October 2026) minute by minute on one clock: the network line by line, the vehicles on the map, the bikes at the stations, the closed streets and the sentences the public screen wrote. It is a recording replayed with the product's own engine, never a simulation. Its closing card, "I danas", reads the public teaser once and says so ("uživo, nije snimka"); everything else comes from a dataset derived from the recorded days. Raw ZET frames are not published, and the sources and licences are in [`docs/izvori.md`](docs/izvori.md).
 
 ## Under the hood
 
@@ -229,7 +229,7 @@ Built by **Matija Radeljak / Aning Film d.o.o., Zagreb**.
 
 Code: **AGPL-3.0-or-later**; see [LICENSE](LICENSE). The same code is also offered to the City of Zagreb under EUPL-1.2.
 
-Selected derivatives are available through [`/open/`](https://zagreb.aningfilm.hr/open/). Eligible datasets use Croatia's Open Licence; EMSC retains its own terms. The city catalogue and session-tier feeds are not new `/open` exports. Upstream data is not blanket-relicensed. Basemap data credits OpenStreetMap contributors; see the [source register](docs/izvori.md) and [map attribution](app/public/maps/README.md).
+Selected derivatives are available through [`/open/`](https://zagreb.aningfilm.hr/open/), which also lists one archive dataset, `snimka-2026-09`: the derived series of the strike replay (per minute, per line, per bike station; CSV, JSON and GeoJSON) at stable addresses under `/api/snimka/v2/exports/latest/`. Eligible datasets use Croatia's Open Licence; EMSC retains its own terms. The city catalogue and session-tier feeds are not new `/open` exports. Upstream data is not blanket-relicensed. Basemap data credits OpenStreetMap contributors; see the [source register](docs/izvori.md) and [map attribution](app/public/maps/README.md).
 
 ZET attribution: “Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669”.
 
