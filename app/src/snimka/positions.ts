@@ -19,6 +19,7 @@ import { at as pointAt, tangent } from '../../../shared/motion/polyline';
 import { MOTION_STEP_S, MOTION_TICKS, SNIMKA_COMPARISONS, type MotionChunk, type Speed } from '../../../shared/snimka';
 import { expandVehicle, type MotionSample } from '../../../shared/snimka-codec';
 import type { Drawn, Model } from '../motion/integrator';
+import type { GlyphMode } from '../map/overlays';
 import { zagrebTimeOfDay } from './format';
 
 /** A hop over this between two samples ten seconds apart (144 km/h) is a re-plan, not motion: snap. */
@@ -196,6 +197,14 @@ export interface ReplayModelDeps {
 
 /** At one hour per second no vehicle is drawn (the brief's decision; the counts stay in the side column). */
 export const NO_VEHICLES_SPEED: Speed = 3600;
+
+/** Decision V3-10: from ten minutes a second, a fleet over GLYPH_DOTS_OVER vehicles draws as dots (no number, no
+ *  cluster, the mode's colour); pills when paused, at one minute a second and slower, or with a fleet this small. */
+export const GLYPH_DOTS_SPEED: Speed = 600;
+export const GLYPH_DOTS_OVER = 12;
+export function glyphModeFor(speed: Speed, playing: boolean, drawn: number): GlyphMode {
+  return playing && speed >= GLYPH_DOTS_SPEED && drawn > GLYPH_DOTS_OVER ? 'dots' : 'pills';
+}
 
 /**
  * The stateless replay model the city map steps: update() and resync() do nothing (there is no evidence to fold

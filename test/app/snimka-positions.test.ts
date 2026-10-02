@@ -227,3 +227,21 @@ describe('cost', () => {
     expect(times[Math.floor(times.length / 2)]!).toBeLessThan(40);
   });
 });
+
+// ---- v3: the glyph mode by speed and fleet (decision V3-10) ----------------------------------------------------
+
+import { GLYPH_DOTS_OVER, GLYPH_DOTS_SPEED, glyphModeFor } from '../../app/src/snimka/positions';
+
+describe('glyphModeFor', () => {
+  it('dots only while playing at ten minutes a second or faster with more than twelve vehicles; pills otherwise', () => {
+    expect(GLYPH_DOTS_SPEED).toBe(600);
+    expect(GLYPH_DOTS_OVER).toBe(12);
+    expect(glyphModeFor(600, true, 13)).toBe('dots');
+    expect(glyphModeFor(3600, true, 300)).toBe('dots');
+    expect(glyphModeFor(600, true, 12)).toBe('pills');
+    expect(glyphModeFor(600, false, 300)).toBe('pills');
+    expect(glyphModeFor(60, true, 300)).toBe('pills');
+    expect(glyphModeFor(1, true, 300)).toBe('pills');
+    expect(glyphModeFor(600, true, 0)).toBe('pills');
+  });
+});

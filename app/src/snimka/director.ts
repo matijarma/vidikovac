@@ -1,14 +1,19 @@
-// The director (plan section 3.5): while the clock plays and "Karta prati
-// snimku" is on, the newest chapter, marker or headline at or before the
-// instant is the cue, and on a cue change the map flies to its focus and
-// the named panel datum is pulsed once. Minimum dwell DWELL_MS of wall time
-// between camera moves; a move the reader makes (the map's own onUserMove)
-// or a subject they set holds the director, which resumes only at the next
-// cue change after RESUME_AFTER_MS without input and never flies back on its
-// own; the chip (ctx.layers follow false to true) or the resume event re-arm
-// it at once. It never seeks, never changes the speed or a layer, except a
-// `layer` cue, which switches the named layer on. Reduced motion: the map
-// jumps (its own rule) and nothing is pulsed.
+// The director (snimka v3, decision V3-13): while the clock plays and "Karta
+// prati događaje" is on, the newest chapter at or before the instant is the
+// cue (chapters only: `chapter: true` and never a recording-internal event;
+// a headline focuses only when the reader clicks it, which the shell does
+// with map.flyTo itself), and on a cue change the map flies to its focus and
+// the named panel datum is pulsed once. A route or stop cue is viewed for
+// RETURN_AFTER_MS of wall time and then the camera returns to the city frame
+// on its own. Minimum dwell DWELL_MS of wall time between camera moves; a
+// move the reader makes (the map's own onUserMove) or a subject they set
+// holds the director, which resumes only at the next cue change after
+// RESUME_AFTER_MS without input and never flies back on its own; the toggle
+// (ctx.layers follow false to true) or the resume event re-arm it at once. It
+// never seeks, never changes the speed or a layer, except a `layer: bikes`
+// cue, which switches the bikes on. Reduced motion: the map jumps (its own
+// rule) and nothing is pulsed. The plate's chapter line (chapterTitleAt,
+// decision V3-12) follows the same chapter list for three replay hours.
 //
 // directorStep is pure and takes the wall clock as input; bindDirector wires
 // it to the context, the StageMap and the shell's hooks. A second bind on
@@ -18,10 +23,14 @@ import type { Focus, SnimkaEvent } from '../../../shared/snimka';
 import type { SnimkaContext } from './context';
 import type { BindDirector, PanelId, StageMap } from './contracts';
 import { sameSubject } from './subject';
-import { currentArticle, currentMarker } from './voices';
+import { currentMarker } from './voices';
 
 export const DWELL_MS = 4000;
 export const RESUME_AFTER_MS = 20_000;
+/** A route or stop cue is looked at this long, then the city frame comes back (V3-13). */
+export const RETURN_AFTER_MS = 8000;
+/** The plate names a chapter for this long after it starts (V3-12). */
+export const PLATE_CHAPTER_WINDOW_S = 3 * 3600;
 /** Dispatched on ctx.doc by the shell's "Vrati vođeni prikaz" button: re-arms a held director. */
 export const DIRECTOR_RESUME_EVENT = 'sn-director-resume';
 /** Dispatched on ctx.doc whenever the director's hold changes: detail { held: boolean }. */
@@ -29,7 +38,13 @@ export const DIRECTOR_STATE_EVENT = 'sn-director-state';
 
 export type SpotId = PanelId | 'zaslon';
 export interface DirectorCue { id: string; atSec: number; focus: Focus; spot: SpotId }
-export interface DirectorState { lastCueId: string | null; lastMoveAt: number; held: boolean }
+export interface DirectorState {
+  lastCueId: string | null;
+  lastMoveAt: number;
+  held: boolean;
+  /** Wall ms at which a route or stop cue has been viewed long enough and the city frame returns; null for none owed. */
+  returnAt: number | null;
+}
 export interface DirectorInput {
   /** Wall milliseconds. */
   now: number;
@@ -42,13 +57,27 @@ export interface DirectorInput {
 }
 export type DirectorCommand =
   | { kind: 'fly'; focus: Focus }
-  | { kind: 'layer'; layer: 'bikes' | 'closures' | 'live' }
+  | { kind: 'layer'; layer: 'bikes' }
   | { kind: 'spot'; id: SpotId };
 
 /** v3: an event's spot naming a retired v2 panel points at the panel that absorbed it. */
 const LEGACY_SPOT: Record<string, SpotId> = { stanje: 'vozila', linije: 'mreza', vrijeme: 'vozila' };
 
-export const INITIAL_DIRECTOR_STATE: DirectorState = { lastCueId: null, lastMoveAt: -Infinity, held: false };
+export const INITIAL_DIRECTOR_STATE: DirectorState = { lastCueId: null, lastMoveAt: -Infinity, held: false, returnAt: null };
+
+/** A chapter the director and the plate read: `chapter: true` and never a recording-internal event (V3-12, V3-13). */
+export const isChapterCue = (event: Pick<SnimkaEvent, 'chapter' | 'internal'>): boolean => event.chapter === true && event.internal !== true;
+
+/** V3-13: the mornings' Jelačić cues frame the city (by rule here until events.json says `city` itself, W5). */
+export function cueFocus(focus: Focus): Focus {
+  return focus.kind === 'place' && focus.id === 'jelacic' ? { kind: 'city' } : focus;
+}
+
+/** The plate's chapter line (V3-12): the newest chapter at or before the instant, for PLATE_CHAPTER_WINDOW_S after
+ *  it starts; never a recording-internal event; null when none applies. */
+export function chapterTitleAt(events: readonly SnimkaEvent[], atSec: number): string | null {
+  return currentMarker(events.filter(isChapterCue), atSec, PLATE_CHAPTER_WINDOW_S)?.title ?? null;
+}
 
 /** The panel a focus points at when the cue names none: a line to Linije, a station to Bicikli, a layer to its panel, the rest to Stanje. */
 export function spotFor(focus: Focus): SpotId {
@@ -60,24 +89,30 @@ export function spotFor(focus: Focus): SpotId {
   }
 }
 
-/** The cue at an instant: the newest event (currentMarker) or headline (currentArticle) at or before it, the later of the two. */
-export function cueAt(ctx: Pick<SnimkaContext, 'events' | 'news'>, atSec: number): DirectorCue | null {
-  const marker: SnimkaEvent | null = currentMarker(ctx.events, atSec);
-  const article = currentArticle(ctx.news, atSec);
-  const fromMarker = marker ? { id: `event:${marker.id}`, atSec: marker.atSec, focus: marker.focus, spot: marker.spot ? (LEGACY_SPOT[marker.spot] ?? marker.spot) as SpotId : spotFor(marker.focus) } : null;
-  const fromArticle = article ? { id: `news:${article.item.id}`, atSec: article.item.pubSec, focus: article.item.focus, spot: spotFor(article.item.focus) } : null;
-  if (fromMarker && fromArticle) return fromArticle.atSec > fromMarker.atSec ? fromArticle : fromMarker;
-  return fromMarker ?? fromArticle;
+/** The cue at an instant: the newest chapter (isChapterCue, within currentMarker's hour) at or before it; headlines never cue (V3-13). */
+export function cueAt(ctx: Pick<SnimkaContext, 'events'>, atSec: number): DirectorCue | null {
+  const marker: SnimkaEvent | null = currentMarker(ctx.events.filter(isChapterCue), atSec);
+  if (!marker) return null;
+  const focus = cueFocus(marker.focus);
+  return { id: `event:${marker.id}`, atSec: marker.atSec, focus, spot: marker.spot ? (LEGACY_SPOT[marker.spot] ?? marker.spot) as SpotId : spotFor(focus) };
 }
 
 /** Whether a focus moves the camera (a layer cue switches a layer, `none` only pulses). */
 const moves = (focus: Focus): boolean => focus.kind !== 'none' && focus.kind !== 'layer';
+/** A route or stop is looked at and then left: the camera returns to the city after RETURN_AFTER_MS. */
+const returns = (focus: Focus): boolean => focus.kind === 'route' || focus.kind === 'stop';
 
 /** One tick: the commands to run now and the state after them. */
 export function directorStep(state: DirectorState, input: DirectorInput): { commands: DirectorCommand[]; state: DirectorState } {
   if (!input.playing || !input.follow) return { commands: [], state };
   const cue = input.cue;
-  if (!cue || cue.id === state.lastCueId) return { commands: [], state };
+  if (!cue || cue.id === state.lastCueId) {
+    // The route or stop has been viewed long enough: back to the city frame, once, unless the reader holds the map.
+    if (state.returnAt !== null && !state.held && input.now >= state.returnAt) {
+      return { commands: [{ kind: 'fly', focus: { kind: 'city' } }], state: { ...state, returnAt: null, lastMoveAt: input.now } };
+    }
+    return { commands: [], state };
+  }
   if (state.held) {
     // Held by the reader: a cue that passes within RESUME_AFTER_MS of their input is skipped, never caught up on.
     if (input.now - input.lastUserInputAt < RESUME_AFTER_MS) return { commands: [], state: { ...state, lastCueId: cue.id } };
@@ -86,15 +121,18 @@ export function directorStep(state: DirectorState, input: DirectorInput): { comm
   // Too soon after the last move: nothing is recorded, so the newest cue is tried again next tick.
   if (moving && input.now - state.lastMoveAt < DWELL_MS) return { commands: [], state };
   const commands: DirectorCommand[] = [];
-  if (cue.focus.kind === 'layer') commands.push({ kind: 'layer', layer: cue.focus.layer });
+  if (cue.focus.kind === 'layer') { if (cue.focus.layer === 'bikes') commands.push({ kind: 'layer', layer: 'bikes' }); }
   else if (moving) commands.push({ kind: 'fly', focus: cue.focus });
   if (!input.reducedMotion) commands.push({ kind: 'spot', id: cue.spot });
-  return { commands, state: { lastCueId: cue.id, lastMoveAt: moving ? input.now : state.lastMoveAt, held: false } };
+  return {
+    commands,
+    state: { lastCueId: cue.id, lastMoveAt: moving ? input.now : state.lastMoveAt, held: false, returnAt: moving && returns(cue.focus) ? input.now + RETURN_AFTER_MS : null },
+  };
 }
 
-/** The reader moved the map or set a subject: held. */
+/** The reader moved the map or set a subject: held, and no return is owed over their view. */
 export function holdDirector(state: DirectorState): DirectorState {
-  return state.held ? state : { ...state, held: true };
+  return state.held && state.returnAt === null ? state : { ...state, held: true, returnAt: null };
 }
 
 /** The chip or the resume button: not held, and the current cue is applied at the next tick (subject to the dwell). */
@@ -137,7 +175,7 @@ export function bindDirector(ctx: SnimkaContext, map: StageMap, hooks: { spot(id
   function run(commands: readonly DirectorCommand[]): void {
     for (const command of commands) {
       if (command.kind === 'fly') map.flyTo(command.focus, { reason: 'director' });
-      else if (command.kind === 'layer') layers.set({ [command.layer]: true });
+      else if (command.kind === 'layer') layers.set({ bikes: true });
       else hooks.spot(command.id);
     }
   }

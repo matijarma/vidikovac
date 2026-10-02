@@ -1,12 +1,17 @@
-// Where the stage's camera looks when the fleet is small. The replay opens
-// on the inner city (map-layer.ts STAGE_ZOOM), which is right for a normal
-// morning of two hundred vehicles and wrong for the strike's first morning,
-// when the one tram that ran is the story and stood outside that view. So,
-// on load and on a seek while paused, when at most SMALL_FLEET_MAX vehicles
-// are drawn and none of them is inside the view, the camera eases to fit
-// them, between FIT_MIN_ZOOM and FIT_MAX_ZOOM; a normal fleet keeps today's
-// view, and a reader who moved the map keeps their own. Pure arithmetic in
-// Web Mercator with MapLibre's 512 px tiles; the map does the easing.
+// Where the stage's camera looks (snimka v3, decision V3-13). The passive
+// frame is the whole tram network: networkBounds() over the decoded
+// artefact's tram shapes, networkFrame() the camera that shows it with a
+// margin, computed once per box size (map-layer.ts) and never moved by the
+// size of the fleet. A vehicle outside that frame is said, not chased: the
+// edge marker (edgeMarkerFor) stands on the map's edge toward the nearest
+// off-frame vehicle with "→ {n} vozila izvan kadra". The v2 small-fleet
+// fit (fitDecision, cameraFor's band) stays here as pure arithmetic: the
+// pill rule still uses SMALL_FLEET_MAX, and cameraFor frames the network.
+// Pure arithmetic in Web Mercator with MapLibre's 512 px tiles; the map
+// does the easing.
+import type { Network } from '../../../shared/motion/network';
+import { toLonLat } from '../../../shared/motion/geo';
+import { ROUTE_TYPE_TRAM } from '../motion/schematic';
 
 export type LonLat = readonly [lon: number, lat: number];
 export interface LonLatBounds { west: number; south: number; east: number; north: number }
@@ -93,4 +98,73 @@ export function cameraFor(bounds: LonLatBounds, width: number, height: number, o
   const zoom = Math.max(minZoom, Math.min(maxZoom, Math.min(zoomX, zoomY)));
   const center = fromWorld((sw.x + ne.x) / 2, (sw.y + ne.y) / 2);
   return { center, zoom };
+}
+
+// ---- the passive frame: the whole tram network (V3-13) ---------------------------------------------------
+
+/** CSS px kept clear around the network in the passive frame: a terminus pill is a pill, not a sliver. */
+export const NETWORK_FRAME_PADDING_PX = 24;
+/** The frame never goes further out than this (the artefact's outliers, a depot run, never pull the city small). */
+export const NETWORK_FRAME_MIN_ZOOM = 10.5;
+
+/** The lon/lat envelope of the tram network: every point of every normal shape of a tram route (shared/motion/
+ *  network.ts `main`, else all of the route's shapes); null when the artefact has no tram geometry. */
+export function networkBounds(net: Pick<Network, 'routes' | 'shapes'>): LonLatBounds | null {
+  let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
+  for (const route of net.routes.values()) {
+    if (route.type !== ROUTE_TYPE_TRAM) continue;
+    const shapes = route.main && route.main.length > 0 ? route.main : route.shapes;
+    for (const idx of shapes) {
+      for (const p of net.shapes[idx]?.pts ?? []) {
+        const [lon, lat] = toLonLat(p);
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+        if (lon < west) west = lon;
+        if (lon > east) east = lon;
+        if (lat < south) south = lat;
+        if (lat > north) north = lat;
+      }
+    }
+  }
+  return Number.isFinite(west) && Number.isFinite(north) ? { west, south, east, north } : null;
+}
+
+/** The passive frame for a box: the network with NETWORK_FRAME_PADDING_PX clear, never closer than `maxZoom`
+ *  (the stage's opening zoom) and never further out than NETWORK_FRAME_MIN_ZOOM. */
+export function networkFrame(bounds: LonLatBounds, width: number, height: number, maxZoom: number): { center: [number, number]; zoom: number } {
+  return cameraFor(bounds, width, height, { paddingPx: NETWORK_FRAME_PADDING_PX, minZoom: NETWORK_FRAME_MIN_ZOOM, maxZoom });
+}
+
+// ---- the edge marker: a vehicle outside the frame (V3-13) --------------------------------------------------
+
+/** The marker's centre sits this far inside the map's edge. */
+export const EDGE_INSET_PX = 14;
+export interface EdgeMarker { count: number; x: number; y: number; angle: number }
+
+/**
+ * The one marker for the vehicles outside a `width` by `height` box (CSS px from the box's top left): how many
+ * are outside, where on the inset edge the marker stands (on the ray from the centre to the nearest off-frame
+ * vehicle, the one a viewer would reach first), and the ray's angle in degrees (0 = right, 90 = down). Null when
+ * every vehicle is inside, or when there is none.
+ */
+export function edgeMarkerFor(points: readonly { x: number; y: number }[], width: number, height: number, inset = EDGE_INSET_PX): EdgeMarker | null {
+  const cx = width / 2;
+  const cy = height / 2;
+  let count = 0;
+  let best: { x: number; y: number } | null = null;
+  let bestD = Infinity;
+  for (const p of points) {
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+    if (p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height) continue;
+    count += 1;
+    const d = Math.hypot(p.x - cx, p.y - cy);
+    if (d < bestD) { bestD = d; best = p; }
+  }
+  if (!best) return null;
+  const dx = best.x - cx;
+  const dy = best.y - cy;
+  const halfW = Math.max(1, cx - inset);
+  const halfH = Math.max(1, cy - inset);
+  // The ray leaves the inset box on whichever side it meets first.
+  const t = Math.min(dx === 0 ? Infinity : halfW / Math.abs(dx), dy === 0 ? Infinity : halfH / Math.abs(dy));
+  return { count, x: cx + dx * t, y: cy + dy * t, angle: (Math.atan2(dy, dx) * 180) / Math.PI };
 }
