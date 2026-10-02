@@ -184,8 +184,9 @@ export const mountMapLayer: MountMapLayer = async (ctx, host) => {
       onNetwork: (net) => {
         stopRoutes = net ? stopRoutesOf(net) : null;
         liveDirty = true;
-        // A subject that arrived before the artefact (the address's &linija=) is fitted now that its geometry is here.
-        if (appliedSubject) handle.select?.(selectionOfSubject(appliedSubject), { fit: true });
+        // A selection that arrived before the artefact (the address's &linija=, a director's cue) is fitted now that its geometry is here.
+        const standing = handle.selection?.() ?? (appliedSubject ? selectionOfSubject(appliedSubject) : null);
+        if (standing) handle.select?.(standing, { fit: true });
         frames.kick();
       },
       onSelect: (sel) => {
