@@ -250,6 +250,15 @@ describe('the built v2 manifest (test/fixtures/snimka/manifest.sample.json, re-c
     expect(notes).toContain('spremište');
   });
 
+  it('v3: carries the court attribution and the corrected licence wording', () => {
+    const by = new Map(built.attribution.map((x) => [x.id, x] as const));
+    expect(by.get('court')).toMatchObject({ licence: 'javna objava', adaptation: null });
+    expect(by.get('kajima')!.licence).toBe('podaci: Otvorena dozvola · kod: AGPL-3.0');
+    expect(by.get('news')!.licence).toBe('osnova: navod naslova s poveznicom');
+    expect(built.attribution[0]!.text).toBe('Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669');
+    expect(built.notes.join(' ')).toContain('Lokalni snimači rade tek od');
+  });
+
   it('lists the routes, places, voice index and opis as hashed json refs, every export under exports/', () => {
     for (const ref of [built.files.routes, built.files.places, built.files.voiceIndex, built.files.opis]) expect(ref.path).toMatch(/\.[0-9a-f]{16}\.json$/);
     for (const e of built.files.exports) expect(e.path.startsWith(`exports/${e.name}.`)).toBe(true);
