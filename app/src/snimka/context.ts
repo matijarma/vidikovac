@@ -10,7 +10,8 @@ import type { RefCache } from './data';
 import type { FrameLoop } from './frames';
 
 /** The layer chips: the sources (vehicles, compare, bikes, closures) and the companion's own (the living network, the camera following the recording). */
-export interface Layers { vehicles: boolean; compare: boolean; bikes: boolean; closures: boolean; live: boolean; follow: boolean }
+/** v3: `live` (Živa mreža) and `closures` (Zatvorene ulice) left the stage. */
+export interface Layers { vehicles: boolean; compare: boolean; bikes: boolean; follow: boolean }
 
 export interface LayerStore {
   get(): Layers;
@@ -53,7 +54,7 @@ export interface SnimkaContext {
 export type Mount = (ctx: SnimkaContext, root: HTMLElement) => () => void;
 
 /** The comparison overlay is on at the opening (S-17); the living network and the following camera are on. */
-export const DEFAULT_LAYERS: Layers = { vehicles: true, compare: true, bikes: true, closures: true, live: true, follow: true };
+export const DEFAULT_LAYERS: Layers = { vehicles: true, compare: true, bikes: true, follow: true };
 
 export function createLayerStore(initial: Partial<Layers> = {}): LayerStore {
   let layers: Layers = { ...DEFAULT_LAYERS, ...initial };

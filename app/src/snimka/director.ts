@@ -45,15 +45,18 @@ export type DirectorCommand =
   | { kind: 'layer'; layer: 'bikes' | 'closures' | 'live' }
   | { kind: 'spot'; id: SpotId };
 
+/** v3: an event's spot naming a retired v2 panel points at the panel that absorbed it. */
+const LEGACY_SPOT: Record<string, SpotId> = { stanje: 'vozila', linije: 'mreza', vrijeme: 'vozila' };
+
 export const INITIAL_DIRECTOR_STATE: DirectorState = { lastCueId: null, lastMoveAt: -Infinity, held: false };
 
 /** The panel a focus points at when the cue names none: a line to Linije, a station to Bicikli, a layer to its panel, the rest to Stanje. */
 export function spotFor(focus: Focus): SpotId {
   switch (focus.kind) {
-    case 'route': return 'linije';
+    case 'route': return 'mreza';
     case 'station': return 'bicikli';
-    case 'layer': return focus.layer === 'bikes' ? 'bicikli' : focus.layer === 'live' ? 'mreza' : 'stanje';
-    default: return 'stanje';
+    case 'layer': return focus.layer === 'bikes' ? 'bicikli' : focus.layer === 'live' ? 'mreza' : 'vozila';
+    default: return 'vozila';
   }
 }
 
@@ -61,7 +64,7 @@ export function spotFor(focus: Focus): SpotId {
 export function cueAt(ctx: Pick<SnimkaContext, 'events' | 'news'>, atSec: number): DirectorCue | null {
   const marker: SnimkaEvent | null = currentMarker(ctx.events, atSec);
   const article = currentArticle(ctx.news, atSec);
-  const fromMarker = marker ? { id: `event:${marker.id}`, atSec: marker.atSec, focus: marker.focus, spot: marker.spot ?? spotFor(marker.focus) } : null;
+  const fromMarker = marker ? { id: `event:${marker.id}`, atSec: marker.atSec, focus: marker.focus, spot: marker.spot ? (LEGACY_SPOT[marker.spot] ?? marker.spot) as SpotId : spotFor(marker.focus) } : null;
   const fromArticle = article ? { id: `news:${article.item.id}`, atSec: article.item.pubSec, focus: article.item.focus, spot: spotFor(article.item.focus) } : null;
   if (fromMarker && fromArticle) return fromArticle.atSec > fromMarker.atSec ? fromArticle : fromMarker;
   return fromMarker ?? fromArticle;

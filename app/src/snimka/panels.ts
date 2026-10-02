@@ -12,21 +12,19 @@
 import { reconcile } from '../ui/dom/reconcile';
 import type { SnimkaContext } from './context';
 import type { PanelDeck, PanelId, PanelSpec, ViewReason } from './contracts';
-import { SN } from './strings';
+import { SN, fill } from './strings';
 
 /** How long the director's pulse marks a datum (data-spot). */
 export const SPOT_MS = 600;
 
-/** Where each depth's "Dalje u dosjeu" leads: the dossier section that carries the panel's full story. */
+/** Where each depth's "Više u odjeljku" leads: the dossier section that carries the panel's full story. */
 export const DEEPER: Record<PanelId, string> = {
-  stanje: '#vidjelo',
-  vozila: '#brojke',
-  linije: '#tijek',
-  mreza: '#vidjelo',
-  bicikli: '#zamjene',
-  vrijeme: '#tijek',
-  poglavlja: '#tijek',
+  vozila: '#tijek',
+  mreza: '#tijek',
+  bicikli: '#pokazuje',
 };
+/** The section a DEEPER link names in "Više u odjeljku „{section}”". */
+const DEEPER_NAME: Record<string, string> = { '#tijek': SN.nav.strip, '#pokazuje': SN.nav.pokazuje };
 
 type Attrs = Record<string, string | boolean | undefined>;
 
@@ -90,7 +88,7 @@ export function createPanelDeck(root: HTMLElement, deps: PanelDeckDeps): PanelDe
     const heading = el(doc, 'h3', { class: 'sn-panel-heading', id: `sn-depth-h-${id}`, tabindex: '-1', text: spec.title });
     const back = el(doc, 'button', { type: 'button', class: 'btn-ghost sn-panel-back', 'data-sn-back': id, text: SN.panel.back });
     const body = el(doc, 'div', { class: 'sn-panel-body' });
-    const deeper = el(doc, 'a', { class: 'sn-panel-deeper', href: DEEPER[id], text: SN.panel.deeper });
+    const deeper = el(doc, 'a', { class: 'sn-panel-deeper', href: DEEPER[id], text: fill(SN.panel.deeper, { section: DEEPER_NAME[DEEPER[id]] ?? SN.nav.strip }) });
     const depth = el(doc, 'section', { class: 'sn-panel-depth', id: `sn-depth-${id}`, role: 'region', 'aria-labelledby': heading.id, hidden: true },
       el(doc, 'div', { class: 'sn-panel-bar' }, heading, back), body, el(doc, 'p', { class: 'sn-panel-foot' }, deeper));
     const item = el(doc, 'li', { class: 'sn-deck-item', 'data-key': id, 'data-panel': id }, face, depth);

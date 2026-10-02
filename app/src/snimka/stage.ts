@@ -50,8 +50,8 @@ type ChipKey = keyof Layers;
 /** V2's director announces its hold on the document (director.ts DIRECTOR_STATE_EVENT, detail { held }) and listens for a resume. */
 export const DIRECTOR_STATE_EVENT = 'sn-director-state';
 export const DIRECTOR_RESUME_EVENT = 'sn-director-resume';
-const SOURCE_CHIPS: [ChipKey, string][] = [['vehicles', SN.layers.vehicles], ['bikes', SN.layers.bikes], ['closures', SN.layers.closures], ['compare', SN.layers.compare]];
-const DERIVED_CHIPS: [ChipKey, string][] = [['live', SN.layers.live], ['follow', SN.layers.follow]];
+const SOURCE_CHIPS: [ChipKey, string][] = [['vehicles', SN.layers.vehicles], ['bikes', SN.layers.bikes], ['compare', SN.layers.compare]];
+const DERIVED_CHIPS: [ChipKey, string][] = [['follow', SN.layers.follow]];
 
 export const mountStage: Mount = (ctx, root) => {
   const { clock, frames, doc, layers, view } = ctx;
@@ -117,7 +117,6 @@ export const mountStage: Mount = (ctx, root) => {
   const followNote = el(doc, 'span', { class: 'visually-hidden', id: 'sn-follow-note', text: SN.director.note });
   const sources = chipGroup(SN.layers.sources, SOURCE_CHIPS, 'sn-chips-sources');
   const derived = chipGroup(SN.layers.derived, DERIVED_CHIPS, 'sn-chips-derived');
-  chips.get('live')?.setAttribute('aria-describedby', liveNote.id);
   chips.get('follow')?.setAttribute('aria-describedby', followNote.id);
   const legendItem = (cls: string, text: string, series?: string): HTMLLIElement =>
     el(doc, 'li', { 'data-series': series }, el(doc, 'span', { class: `sn-legend-mark ${cls}`, 'aria-hidden': 'true' }), text);
@@ -153,7 +152,8 @@ export const mountStage: Mount = (ctx, root) => {
   const faceTeardowns: (() => void)[] = [];
   const deck = createPanelDeck(slots.deck, {
     ctx,
-    specs: [...readoutSpecs(ctx, (id, host) => mountPanelDepth(ctx, id, host), faceTeardowns), agendaPanel(ctx, openChapter)],
+    // v3: the agenda left the deck (W3 builds the Poglavlja popover from agendaPanel).
+    specs: readoutSpecs(ctx, (id, host) => mountPanelDepth(ctx, id, host), faceTeardowns),
     onExpand: (id) => {
       stage.dataset.snExpanded = id ?? 'none';
       // The deck column widens around an open panel: the map's canvas follows its box.
@@ -181,7 +181,7 @@ export const mountStage: Mount = (ctx, root) => {
   teardowns.push(() => root.removeEventListener('keydown', onEscape));
 
   // ---- the subject: the map selects it, the panel that tells its story opens ----------------------------------
-  const panelFor = (s: Subject): PanelId | null => (s.kind === 'route' ? 'linije' : s.kind === 'station' ? 'bicikli' : null);
+  const panelFor = (s: Subject): PanelId | null => (s.kind === 'route' ? 'mreza' : s.kind === 'station' ? 'bicikli' : null);
   const offView = view.onChange((state, prev, reason) => {
     renderChips();
     const s = state.subject;
@@ -228,7 +228,7 @@ export const mountStage: Mount = (ctx, root) => {
     }
     compareNote.hidden = !l.compare || !ctx.comparisons.length;
     ghostItem.hidden = !l.compare;
-    for (const item of legend.querySelectorAll<HTMLElement>('[data-series="live"]')) item.hidden = !l.live;
+    for (const item of legend.querySelectorAll<HTMLElement>('[data-series="live"]')) item.hidden = true;
     speedNote.hidden = ctx.lagano || clock.speed() !== 3600;
   }
   const offLayers = layers.onChange(() => renderChips());

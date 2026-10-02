@@ -21,7 +21,8 @@ import type { Focus, RoutesFile, SeriesFile } from '../../../shared/snimka';
 import type { SnimkaContext } from './context';
 
 export type Subject = { kind: 'route'; id: string } | { kind: 'station'; id: string } | { kind: 'stop'; id: string };
-export type PanelId = 'stanje' | 'vozila' | 'linije' | 'mreza' | 'bicikli' | 'vrijeme' | 'poglavlja';
+/** v3: three panels (Stanje merged into Vozila, Linije into Mreža; Vrijeme and Poglavlja left the deck). */
+export type PanelId = 'vozila' | 'mreza' | 'bicikli';
 export interface ViewState { panel: PanelId | null; subject: Subject | null; following: boolean }
 export type ViewReason = 'user' | 'director' | 'address' | 'chapter' | 'feed' | 'map';
 export interface ViewStore { get(): ViewState; set(patch: Partial<ViewState>, reason?: ViewReason): void; onChange(fn: (state: ViewState, prev: ViewState, reason: ViewReason | undefined) => void): () => void }
@@ -59,7 +60,8 @@ export interface PanelDeck { expand(id: PanelId | null, reason?: ViewReason): vo
 export type MountPanel = (ctx: SnimkaContext, root: HTMLElement) => () => void;   // V4: mountVoicesFeed
 export interface SubtitleHandle { update(t: number): void; destroy(): void }
 export type MountSubtitle = (ctx: SnimkaContext, root: HTMLElement) => SubtitleHandle;   // V4: mountSubtitle
-export type AgendaPanel = (ctx: SnimkaContext, open: (chapterId: string) => void) => PanelSpec;   // V4
+/** v3: the agenda left the deck (W3 turns it into the Poglavlja popover), so its spec carries its own id. */
+export type AgendaPanel = (ctx: SnimkaContext, open: (chapterId: string) => void) => Omit<PanelSpec, 'id'> & { id: 'poglavlja' };   // V4
 /** Marker lanes the shell draws on the timeline (V4 computes them). */
 export interface TimelineMarker { atSec: number; lane: 'chapter' | 'notice' | 'press'; id: string; title: string }
 export type SeriesLike = Pick<SeriesFile, 'service' | 'seen' | 'expected' | 't0' | 'step' | 'n'>;

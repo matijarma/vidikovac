@@ -136,7 +136,7 @@ export type DepthMounter = (id: PanelId, el: HTMLElement) => (() => void) | Prom
 
 interface FaceParts { fig: HTMLElement; sub: HTMLElement }
 
-function faceParts(face: HTMLElement, title: string, id: PanelId): FaceParts {
+function faceParts(face: HTMLElement, title: string, id: V2Panel): FaceParts {
   const doc = face.ownerDocument;
   const fig = el(doc, 'span', { class: 'sn-panel-fig', 'data-sn-ro': id });
   const sub = el(doc, 'span', { class: 'sn-panel-sub' });
@@ -147,12 +147,17 @@ function faceParts(face: HTMLElement, title: string, id: PanelId): FaceParts {
 const set = (node: HTMLElement, text: string): void => { if (node.textContent !== text) node.textContent = text; };
 
 /** The six panel specs of the shell, in the deck's order (V4's Poglavlja comes last). */
+/** v2's panel ids, kept while the retired faces' code stays in this module (W2 removes it). */
+type V2Panel = PanelId | 'stanje' | 'linije' | 'vrijeme';
+
 export function readoutSpecs(ctx: SnimkaContext, depth: DepthMounter = () => () => {}, teardowns: (() => void)[] = []): PanelSpec[] {
   const s = ctx.series;
   const liveFrom = ctx.manifest.serviceLiveFromSec;
   const specs: PanelSpec[] = [];
-  const fig: Partial<Record<PanelId, HTMLElement>> = {};
-  const spec = (id: PanelId, title: string, mountFace: (face: HTMLElement) => (t: number) => void): void => {
+  const fig: Partial<Record<V2Panel, HTMLElement>> = {};
+  const spec = (id: V2Panel, title: string, mountFace: (face: HTMLElement) => (t: number) => void): void => {
+    // v3: the retired v2 faces (Stanje, Linije, Vrijeme) leave the deck's registration; W2 rebuilds the three faces.
+    if (id === 'stanje' || id === 'linije' || id === 'vrijeme') return;
     specs.push({ id, title, mountFace, mountDepth: (host) => depth(id, host), spotTarget: () => fig[id] ?? null });
   };
   const minuteKey = (t: number): string => String(Math.floor(t / 60_000));

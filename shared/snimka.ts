@@ -59,7 +59,10 @@ export type FactKey = 'seen' | 'expected' | 'state' | 'bikes' | 'bikesEmpty' | '
 
 export interface SnimkaEvent { id: string; atSec: number; kind: 'zet' | 'court' | 'return' | 'service' | 'recording'; title: string; text: string | null;
   sources: { label: string; url: string }[]; derived: boolean; chapter: boolean;   // derived = computed from the replayed series; chapter = a scrubber mark
-  focus: Focus; facts: FactKey[]; mentions: Mentions; dwellS?: number; spot?: 'stanje' | 'vozila' | 'linije' | 'mreza' | 'bicikli' | 'vrijeme' | 'zaslon' }
+  focus: Focus; facts: FactKey[]; mentions: Mentions; dwellS?: number; spot?: 'stanje' | 'vozila' | 'linije' | 'mreza' | 'bicikli' | 'vrijeme' | 'zaslon';
+  // v3 (additive, optional): the ZET notice an event repeats (Objave dedupe by it), and a recording-internal event
+  // (an upgrade, a recorder gap) that never reaches the plate or Objave.
+  noticeId?: number; internal?: boolean }
 export interface EventsFile { v: 1; events: SnimkaEvent[] }
 export interface NewsFile { v: 2; outlets: Record<'jutarnji' | 'vecernji' | 'n1', { name: string; home: string }>;
   items: { id: string; outlet: 'jutarnji' | 'vecernji' | 'n1'; title: string; link: string; pubSec: number; beat: string | null; focus: Focus; facts: FactKey[]; mentions: Mentions }[] }  // titles verbatim, no description
@@ -240,7 +243,8 @@ export function isSnimkaEvent(x: unknown): x is SnimkaEvent {
     && typeof x.title === 'string' && (x.text === null || typeof x.text === 'string') && Array.isArray(x.sources)
     && x.sources.every((s) => isRec(s) && typeof s.label === 'string' && typeof s.url === 'string')
     && typeof x.derived === 'boolean' && typeof x.chapter === 'boolean'
-    && hasPointers(x) && (x.dwellS === undefined || isNum(x.dwellS)) && (x.spot === undefined || (typeof x.spot === 'string' && SPOTS.has(x.spot)));
+    && hasPointers(x) && (x.dwellS === undefined || isNum(x.dwellS)) && (x.spot === undefined || (typeof x.spot === 'string' && SPOTS.has(x.spot)))
+    && (x.noticeId === undefined || isInt(x.noticeId)) && (x.internal === undefined || typeof x.internal === 'boolean');
 }
 export function isEventsFile(x: unknown): x is EventsFile {
   return isRec(x) && x.v === 1 && Array.isArray(x.events) && x.events.every(isSnimkaEvent);

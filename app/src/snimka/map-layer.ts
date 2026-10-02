@@ -169,7 +169,7 @@ export const mountMapLayer: MountMapLayer = async (ctx, host) => {
       theme: ctx.theme.resolved(),
       cooperative: true,
       attributionCompact: true,
-      closures: layers.get().closures,
+      closures: false, // v3: Zatvorene ulice left the stage (W1 removes the layer)
       cityLabels: 'venues',
       center: ZAGREB_CENTER,
       zoom: STAGE_ZOOM,
@@ -290,7 +290,7 @@ export const mountMapLayer: MountMapLayer = async (ctx, host) => {
   /** The living network for the instant, once per five-minute sample (or when the layer or the artefact changed). */
   function liveAt(atSec: number): void {
     const slot = routeSlotAt(ctx.routes, atSec);
-    const on = layers.get().live;
+    const on = false; // v3: Živa mreža left the stage (W1 removes the layer)
     if (slot === lastLiveSlot && on === lastLiveOn && !liveDirty) return;
     lastLiveSlot = slot;
     lastLiveOn = on;
@@ -354,8 +354,6 @@ export const mountMapLayer: MountMapLayer = async (ctx, host) => {
     else if (reason === 'play') fitPending = false;
   });
   const offLayers = layers.onChange((next, previous) => {
-    if (next.closures !== previous.closures) handle.setClosuresVisible?.(next.closures);
-    if (next.live !== previous.live) liveDirty = true;
     nudgeDue = true;
     frames.kick();
   });

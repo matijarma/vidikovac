@@ -24,7 +24,7 @@ import { parseZagrebLocal } from '../snimka/format';
 import { createFrameLoop } from '../snimka/frames';
 import { mountReport } from '../snimka/report';
 import { mountStage } from '../snimka/stage';
-import { SN } from '../snimka/strings';
+import { SN, fill } from '../snimka/strings';
 import '../ui/page.css';
 import '../ui/print.css';
 
@@ -58,6 +58,8 @@ if (!lightweight) void import('../ui/fonts.css');
 const reducedMotion = ((): boolean => {
   try { return globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
 })();
+// The hero's instruction line: under reduced motion the replay does not start by itself (V3-19).
+if (reducedMotion) { const howTo = document.querySelector('[data-sn="how-to"]'); if (howTo) howTo.textContent = SN.narration.howToReduced; }
 const address = readAddress(location.search);
 /** Without a time in the address the replay opens on the first morning (decisions S-4 and S-20). */
 const OPENING_MS = parseZagrebLocal('2026-09-28T07:45')!;
@@ -125,7 +127,7 @@ function renderAttribution(root: HTMLElement, manifest: SnimkaManifest): void {
   if (notes.length) {
     const h3 = document.createElement('h3');
     h3.className = 'sn-notes-title';
-    h3.textContent = SN.attribution.notes;
+    h3.textContent = fill(SN.attribution.notes, { n: notes.length });
     const ul = document.createElement('ul');
     ul.className = 'sn-notes';
     for (const note of notes) {
@@ -188,7 +190,7 @@ async function boot(): Promise<void> {
     chapters,
   });
   const frames = createFrameLoop(clock, { reducedMotion });
-  const layers = createLayerStore({ compare: address.compare, live: address.live, follow: address.following });
+  const layers = createLayerStore({ compare: address.compare, follow: address.following });
   const view = createViewStore({ panel: address.panel, subject: address.subject, following: address.following });
   const ctx: SnimkaContext = {
     manifest,
@@ -221,13 +223,13 @@ async function boot(): Promise<void> {
   const write = (): void => {
     const v = view.get();
     const l = layers.get();
-    writeAddress({ t: clock.now(), speed: clock.speed(), compare: l.compare, panel: v.panel, subject: v.subject, live: l.live, following: v.following });
+    writeAddress({ t: clock.now(), speed: clock.speed(), compare: l.compare, panel: v.panel, subject: v.subject, following: v.following });
   };
   let lastWrite = 0;
   const offTick = clock.onTick((_, reason) => {
     if (USER_REASONS.has(reason)) { lastWrite = Date.now(); write(); }
   });
-  const offLayers = layers.onChange((next, previous) => { if (next.compare !== previous.compare || next.live !== previous.live) write(); });
+  const offLayers = layers.onChange((next, previous) => { if (next.compare !== previous.compare) write(); });
   const offView = view.onChange(() => { write(); });
   const offFrames = frames.subscribe(() => {
     if (!clock.playing()) return;

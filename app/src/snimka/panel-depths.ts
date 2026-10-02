@@ -373,7 +373,9 @@ function vrijeme(ctx: SnimkaContext, host: HTMLElement): () => void {
   return cursors(ctx, [{ cursor: p.cursor, t0: hr.t0, seconds: hr.n * 3600 }]);
 }
 
-const DEPTHS: Partial<Record<PanelId, (ctx: SnimkaContext, host: HTMLElement) => () => void>> = { stanje, vozila, linije, mreza, bicikli, vrijeme };
+// v3: the retired v2 depths (stanje, linije, vrijeme) leave the registration; W2 rebuilds the three depths.
+void stanje; void linije; void vrijeme;
+const DEPTHS: Partial<Record<PanelId, (ctx: SnimkaContext, host: HTMLElement) => () => void>> = { vozila, mreza, bicikli };
 
 /** Builds a panel's depth into `el` and returns its teardown; a panel without a depth here (Poglavlja is V4's) gets nothing. */
 export function mountPanelDepth(ctx: SnimkaContext, id: PanelId, host: HTMLElement): () => void {
