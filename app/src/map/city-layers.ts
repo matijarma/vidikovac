@@ -77,15 +77,21 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
   const color=['case',isRail,p.stopFill,spent,p.bikeSpent,small,p.bike,['match',['get','category'],'bikes',p.bikeDisc,'culture',p.event,'heritage',p.other,'air',p.other,p.place]];
   // The rail bead is the stops' own (overlays.ts LAYERS.stops off the wall): it grows with the zoom as a stop does
   // and is the one mark here that follows the camera.
-  const railRadius=['interpolate',['linear'],['zoom'],STOP_ZOOM,1.5*scale,14,2.6*scale,16,4.5*scale];
-  const railAlpha=['step',['zoom'],0,STOP_ZOOM,['interpolate',['linear'],['zoom'],STOP_ZOOM,0.5,14,1]];
-  const radius=['case',isRail,railRadius,['*',scale,['case',small,BIKE_FAR_RADIUS_PX,isBike,BIKE_DISC_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]]];
+  // MapLibre admits one zoom curve per property and only at the top (style-spec: "zoom" may only be the input of a
+  // top-level step or interpolate), so the curve is the outer expression and the rail/place choice sits at each
+  // of its stops; an invalid paint drops the whole layer, BAJS discs and venues with it (test/app/map.test.ts runs
+  // the spec's validator over these layers).
+  const placeRadius=['*',scale,['case',small,BIKE_FAR_RADIUS_PX,isBike,BIKE_DISC_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]];
+  const radius=['interpolate',['linear'],['zoom'],STOP_ZOOM,['case',isRail,1.5*scale,placeRadius],14,['case',isRail,2.6*scale,placeRadius],16,['case',isRail,4.5*scale,placeRadius]];
+  // The rail bead fades in from STOP_ZOOM (0 below it, 0.5 there, 1 by zoom 14); every other place is drawn at full strength.
+  const alpha=['interpolate',['linear'],['zoom'],STOP_ZOOM-0.01,['case',isRail,0,1],STOP_ZOOM,['case',isRail,0.5,1],14,1];
+  const placeStroke=['case',small,1,2];
+  const stroke=['interpolate',['linear'],['zoom'],STOP_ZOOM,['case',isRail,0.8,placeStroke],16,['case',isRail,1.6,placeStroke]];
   return [
     {id:'city-path-lines',type:'line',source:CITY_PATHS,paint:{'line-color':p.bike,'line-width':2*scale,'line-dasharray':[2,2]}},
     {id:'city-place-dots',type:'circle',source:CITY_POINTS,paint:{
       'circle-radius':radius,'circle-color':color,'circle-stroke-color':['case',isRail,p.stopStroke,p.halo],
-      'circle-stroke-width':['case',isRail,['interpolate',['linear'],['zoom'],STOP_ZOOM,0.8,16,1.6],small,1,2],
-      'circle-opacity':['case',isRail,railAlpha,1],'circle-stroke-opacity':['case',isRail,railAlpha,1]}},
+      'circle-stroke-width':stroke,'circle-opacity':alpha,'circle-stroke-opacity':alpha}},
     // A count is never dropped by a collision (text-allow-overlap takes no
     // per-feature value, so it holds for every badge): each disc keeps its number.
     {id:'city-place-badges',type:'symbol',source:CITY_POINTS,layout:{

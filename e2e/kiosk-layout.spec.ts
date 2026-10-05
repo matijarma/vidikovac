@@ -57,6 +57,10 @@ for (const size of sizes) for (const theme of ['light', 'dark'] as const) {
       await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
       for (const layer of layers) {
         await test.step(`present ${layer}`, async () => {
+          // The share sheet is modal (5 Oct 2026): the previous layer's sheet is closed before the tabs are touched,
+          // and the sheet is opened again from the header for the view to present.
+          const sheet = phone.getByTestId('share-dialog');
+          if (await sheet.isVisible()) { await phone.keyboard.press('Escape'); await expect(sheet).toBeHidden(); }
           await openLayer(phone, layer);
           const panel = phone.getByTestId('presentation-panel');
           if (!(await panel.isVisible())) await phone.getByTestId('share-city').click();
