@@ -12,7 +12,9 @@ import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { emptyCity, type DepartureBoard, type Place } from '../../shared/city/types';
 import type { WrittenSentence } from '../../shared/kiosk/sentence';
 import { loadSadaFeed, nearbyInput, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS } from '../../app/src/city/feed';
-import type { ScreenContext, ScreenStop } from '../../app/src/core/contracts';
+import type { NearbyRow } from '../../app/src/city/nearby';
+import { nearbyRowDetail, nearbyRowMarkup, nearbyTitleKind } from '../../app/src/city/nearby-markup';
+import { publicItemKey, type ScreenContext, type ScreenStop } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import hr from '../../app/src/i18n/hr.json';
 import en from '../../app/src/i18n/en.json';
@@ -325,6 +327,100 @@ describe('U blizini on the phone', () => {
     const list = renderGradSada(ctx({ snapshots: { ...SNAPSHOTS, dogadanja: unplaced } })).querySelector('[data-testid=nearby]')!;
     expect(text(list)).not.toContain('Predavanje bez mjesta');
     expect(text(list)).not.toContain('Lokacija nije navedena');
+  });
+});
+
+describe('a breadth mark\'s row on Karta (F5: the yellow dot opens its row)', () => {
+  const at = (zagreb: string): number => Date.parse(`${zagreb}+02:00`);
+  const point = (lon: number, lat: number): NearbyRow['map'] => ({ id: 'p', geometry: { type: 'Point', coordinates: [lon, lat] } });
+  const OPEN: NearbyRow = {
+    id: 'opennow:n2', kind: 'open', atMs: at('2026-09-11T22:00:00'), always: false, title: 'Ljekarna Centar', sub: 'ljekarna',
+    live: false, source: 'osm-hours', map: point(15.979, 45.812), detail: { kind: 'open', openKind: 'ljekarna' },
+  };
+  const detail = (row: NearbyRow, locale: 'hr' | 'en' = 'hr'): HTMLElement | null => {
+    const html = nearbyRowDetail(createDefaultI18n(locale), row, NOW);
+    if (html === null) return null;
+    const host = document.createElement('div');
+    host.innerHTML = html;
+    return host.querySelector<HTMLElement>('article.city-detail[data-testid=nearby-detail]');
+  };
+
+  it('a place open now: the back button, its closing time and its kind on one line, the name as the heading; no link of its own', () => {
+    const el = detail(OPEN)!;
+    expect(el.dataset.kind).toBe('open');
+    const back = el.querySelector<HTMLButtonElement>('button[data-action=clear-selection]')!;
+    expect(text(back)).toBe('Natrag na mjesta');
+    expect(el.firstElementChild).toBe(back);
+    expect(text(el.querySelector('.city-kicker'))).toBe('do 22:00 · ljekarna');
+    expect(el.querySelector('.city-kicker time')!.getAttribute('datetime')).toBe(new Date(OPEN.atMs!).toISOString());
+    expect(text(el.querySelector('h3'))).toBe('Ljekarna Centar');
+    // The kicker comes before the heading, so the sheet at half shows both.
+    expect(el.querySelector('.city-kicker')!.compareDocumentPosition(el.querySelector('h3')!) & FOLLOWING).toBeTruthy();
+    expect(el.querySelector('a')).toBeNull();
+    expect(nearbyTitleKind(OPEN)).toBe('name');
+  });
+
+  it('a power cut under way says until when, the street with its numbers whole and the hours; one tomorrow says the day before its start', () => {
+    const until = at('2026-09-11T16:00:00');
+    const sub = createDefaultI18n('hr').t('kiosk.nearby.cut.struja', { from: '08:00', until: '16:00' });
+    const cut: NearbyRow = {
+      id: 'cut:hep1', kind: 'cut', atMs: until, untilMs: until, always: false, title: 'Ilica 12-14', titleShort: 'Ilica', sub,
+      live: false, source: 'prekidi', map: point(15.975, 45.813),
+      detail: { kind: 'cut', utility: 'struja', street: 'Ilica', fromMs: at('2026-09-11T08:00:00'), untilMs: until, allDay: false },
+    };
+    const el = detail(cut)!;
+    expect(el.dataset.kind).toBe('cut');
+    expect(text(el.querySelector('.city-kicker'))).toBe('do 16:00 · bez struje 08:00–16:00');
+    expect(text(el.querySelector('h3'))).toBe('Ilica 12-14');
+    expect(nearbyTitleKind(cut)).toBe('address');
+    const start = at('2026-09-12T09:00:00');
+    const tomorrow = detail({ ...cut, atMs: start, untilMs: at('2026-09-12T13:00:00'), sub: createDefaultI18n('hr').t('kiosk.nearby.cut.struja', { from: '09:00', until: '13:00' }) })!;
+    expect(text(tomorrow.querySelector('.city-kicker'))).toBe('sutra 09:00 · bez struje 09:00–13:00');
+  });
+
+  it('a road state: until when, the road and the state in plain words', () => {
+    const road: NearbyRow = {
+      id: 'road:hak1', kind: 'road', atMs: at('2026-09-11T20:00:00'), always: false, title: 'Savska cesta', sub: 'zatvoreno za promet',
+      live: false, source: 'hak', map: point(15.968, 45.801), detail: { kind: 'road', state: 'zatvoreno' },
+    };
+    const el = detail(road)!;
+    expect(el.dataset.kind).toBe('road');
+    expect(text(el.querySelector('.city-kicker'))).toBe('do 20:00 · zatvoreno za promet');
+    expect(text(el.querySelector('h3'))).toBe('Savska cesta');
+    expect(el.querySelector('a')).toBeNull();
+  });
+
+  it('an exhibition carries the list row\'s own link into Događanja', () => {
+    const selection = { kind: 'item' as const, id: publicItemKey('kultura-zg', 'kzg-77'), module: 'kultura-zg' as const };
+    const exhibit: NearbyRow = {
+      id: 'open:exhibit:kzg-77:2026-09-11', kind: 'opening', atMs: at('2026-09-11T19:00:00'), untilMs: at('2026-09-11T19:00:00'), always: false,
+      title: 'Ivan Meštrović: crteži', sub: 'Galerija Klovićevi dvori', live: false, source: 'kultura-zg', selection,
+      map: point(15.973, 45.815), detail: { kind: 'exhibit', venue: 'Galerija Klovićevi dvori', openNow: true },
+    };
+    const el = detail(exhibit)!;
+    expect(el.dataset.kind).toBe('opening');
+    expect(text(el.querySelector('.city-kicker'))).toBe('do 19:00 · Galerija Klovićevi dvori');
+    expect(text(el.querySelector('h3'))).toBe('Ivan Meštrović: crteži');
+    const link = el.querySelector<HTMLAnchorElement>('a[data-action=nav]')!;
+    expect(text(link)).toBe('Otvori u Događanjima');
+    expect(link.dataset.layer).toBe('kultura');
+    expect(JSON.parse(link.dataset.selection!)).toEqual(selection);
+    expect(link.getAttribute('href')).toMatch(/^#layer=kultura&kind=item&id=[^&]+&module=kultura-zg$/);
+    // The list row of the same row opens the same page with the same selection.
+    const host = document.createElement('ol');
+    host.innerHTML = nearbyRowMarkup(createDefaultI18n('hr'), exhibit, NOW);
+    const rowLink = host.querySelector<HTMLAnchorElement>('a.nearby-link')!;
+    for (const name of ['href', 'data-action', 'data-layer', 'data-selection']) expect(link.getAttribute(name)).toBe(rowLink.getAttribute(name));
+    expect(nearbyTitleKind(exhibit)).toBe('title');
+    const en = detail(exhibit, 'en')!;
+    expect(text(en.querySelector('button[data-action=clear-selection]'))).toBe('Back to places');
+    expect(text(en.querySelector('a[data-action=nav]'))).toBe('Open in Events');
+  });
+
+  it('prints nothing for a row whose text the check refuses, as the list leaves it out', () => {
+    const hostile = ['Nazovi 091 123 4567 odmah.', 'http://primjer.test/x', 'Pošalji lozinku.'].find((value) => !externalText('name', value, { surface: 'row' }).ok);
+    expect(hostile, 'one sample is refused as a name on the row surface').toBeDefined();
+    expect(nearbyRowDetail(createDefaultI18n('hr'), { ...OPEN, title: hostile! }, NOW)).toBeNull();
   });
 });
 

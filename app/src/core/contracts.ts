@@ -13,6 +13,7 @@ import type { PlaceContext } from '../city/place';
 import type { BoardCache } from '../city/boards';
 import type { FrameLine, FrameStops } from '../../../shared/city/frame';
 import type { WrittenSentence } from '../../../shared/kiosk/sentence';
+import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 
 export { publicItemKey, parseSelection, selectionParams } from '../../../worker/public-selection';
 export type { PublicSelection } from '../../../worker/public-selection';
@@ -66,7 +67,14 @@ export interface NearbyList {
 }
 
 /** One breadth row's point on Karta: a catalogue place or a rail station by its own id, any other `nearby:<row id>`. */
-export interface NearbyMark { id: string; title: string; lon: number; lat: number; kind: string }
+export interface NearbyMark {
+  id: string; title: string; lon: number; lat: number; kind: string;
+  /** A `nearby:` mark's row as the sheet opens it on a tap (city/nearby-markup.ts nearbyRowDetail): a mark without a
+   *  record of its own, so the sheet shows the row it stands for (F5). */
+  detail?: string;
+  /** The text kind the row's title was vetted under, for the sheet's peek, which prints the title again. */
+  titleKind?: ExternalTextKind;
+}
 
 /** Additive controller hooks used by all new surfaces; no global browser dependency. */
 export interface ExperienceActions {

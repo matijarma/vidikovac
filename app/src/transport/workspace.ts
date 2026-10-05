@@ -175,6 +175,11 @@ function toMapSelection(pub: { kind: string; id: string } | null | undefined, gr
   return null;
 }
 
+/** A breadth mark of the "U blizini" list without a place of its own (R0): `nearby:<row id>`, never public. */
+function isNearbyMark(sel: MapSelection | null): boolean {
+  return sel?.kind === 'place' && sel.id.startsWith('nearby:');
+}
+
 /** The bounded public form of a selection (worker/public-selection.ts): route and stop by id, a vehicle or a closure by its public item key. */
 export function toPublic(sel: MapSelection | null): PublicSelection | null {
   if (!sel) return null;
@@ -537,8 +542,10 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
 
   const groupFor = (stopId: string): StopGroup | undefined => (groups ? stopGroupById(groups, stopId) : undefined);
 
-  /** Route and stop reach the paired screen and the history (core/view-store.ts); a vehicle or a closure clears them there. */
+  /** Route and stop reach the paired screen and the history (core/view-store.ts); a vehicle or a closure clears them there.
+   *  A breadth mark's row (F5) reaches neither: it is this page's alone, and the history keeps what it had. */
   function relay(sel: MapSelection | null): void {
+    if (isNearbyMark(sel)) return;
     const pub = toPublic(sel);
     const key = JSON.stringify(pub);
     if (key === relayedKey) return;
@@ -934,6 +941,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const k = kiosk();
     switch (sel.kind) {
       case 'place': {
+        // A breadth mark's row (F5): its detail as the page drew it with the list; gone with the row, the selection ends.
+        if (isNearbyMark(sel)) {
+          const mark = nearbyList()?.marks?.find((m) => m.id === sel.id);
+          return mark?.detail ? [mark.detail, mark.title, mark.titleKind ?? 'title'] : null;
+        }
         const p=[...cityState().places,...dynamicPlaces(cityState(),c.now)].find(p=>p.id===sel.id);
         if(!p){c.ensureCity?.(['culture','heritage','water','toilets','sport','dogs','recycling','markets','wifi','cycle-parking','garages','charging','hz-schedule']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'selected'),'title'];}
         return [placeDetail(i18n,p,cityState(),locatedEvents(c.snapshots.dogadanja?.items??[],cityState().places,c.now,PROGRAMME_WINDOW),c.saved?.has('place',p.id),false,referenceLocation()),p.name,'name'];
@@ -1222,8 +1234,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         center: renderer === 'map' ? camera?.center : undefined,
         zoom: renderer === 'map' ? camera?.zoom : undefined,
         markZoom: renderer === 'map' ? frameMarks : null,
-        // A breadth mark (R0) has no record of its own to open: its tap opens no sheet.
-        onSelect: (sel) => { if (epoch === mapEpoch && !(sel?.kind === 'place' && sel.id.startsWith('nearby:'))) setSelection(sel); },
+        // A breadth mark without a place of its own (R0; `nearby:<row id>`) opens its row in the sheet (F5), but stays on
+        // this page: no history entry, no relay to a paired screen (worker/public-selection.ts refuses the id anyway).
+        onSelect: (sel) => { if (epoch === mapEpoch) setSelection(sel, isNearbyMark(sel) ? { relay: false } : {}); },
         resolveStreet:(name,point)=>matchStreet(name,point,cityState().streets,cityState().settlements)?.id??null,
         onStatus: (next) => {
           if (epoch !== mapEpoch) return;
