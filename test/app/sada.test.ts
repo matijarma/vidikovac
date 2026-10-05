@@ -269,6 +269,29 @@ describe('U blizini on the phone', () => {
     expect(event.querySelector('time.nearby-when')).not.toBeNull();
   });
 
+  it('opens Vrijeme from the sunset and rain rows, which have no subject of their own (irritation pass)', () => {
+    const list = renderGradSada(ctx()).querySelector('[data-testid=nearby]')!;
+    const solar = list.querySelector('li.nearby-row[data-kind=solar] > a.nearby-link')!;
+    expect(solar, 'the sunset row is a link').not.toBeNull();
+    expect(text(solar.querySelector('.nearby-title'))).toBe('Zalazak sunca');
+    expect(solar.getAttribute('href')).toBe('#layer=zrak-i-nebo');
+    expect(solar.getAttribute('data-action')).toBe('nav');
+    expect(solar.getAttribute('data-layer')).toBe('zrak-i-nebo');
+    // No subject to select: the layer opens at its top; the dashboard's nav handler reads a missing data-selection as none.
+    expect(solar.hasAttribute('data-selection')).toBe(false);
+    expect(solar.querySelector('time.nearby-when')).not.toBeNull();
+    // A wet step within two hours puts a rain row on the list, and it opens the same page.
+    const wet = snap('dhmz-hourly', [{
+      id: 'dhmz-hourly:gric:wet', module: 'dhmz-hourly', kind: 'forecast', tier: 'open', title: 'Zagreb-Grič',
+      at: iso(NOW + 30 * 60_000), until: iso(NOW + 90 * 60_000), geo: { type: 'Point', coordinates: [15.97, 45.81] },
+      data: { station: 'gric', temp: 18, precip: 1.4, prob: 80, weather: 'kiša' },
+    }]);
+    const rain = renderGradSada(ctx({ snapshots: { ...SNAPSHOTS, 'dhmz-hourly': wet } })).querySelector('[data-testid=nearby] li.nearby-row[data-kind=rain] > a.nearby-link')!;
+    expect(rain, 'the rain row is a link').not.toBeNull();
+    expect(rain.getAttribute('data-layer')).toBe('zrak-i-nebo');
+    expect(rain.getAttribute('href')).toBe('#layer=zrak-i-nebo');
+  });
+
   it('a closure row says what it is even when the feed has no brief: the feed\'s summary, else "zatvoreno za promet" (round 1 F8, kiosk round 2 F11)', () => {
     const sub = (ctx0: LayerContext) => text(renderGradSada(ctx0).querySelector('[data-testid=nearby] li.nearby-row[data-kind=closure] .nearby-sub'));
     // The fixture's closure carries neither brief nor summary.

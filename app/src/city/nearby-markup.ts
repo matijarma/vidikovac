@@ -55,8 +55,9 @@ function withClosureSub(i18n: I18n, row: NearbyRow): NearbyRow {
 }
 
 /**
- * One row as the wall draws it; a row with a subject holds, inside its li, the link that opens it, and a ZET notice
- * (no subject, an `href`) the link to ZET's own page, which opens in a new tab and takes no in-app action.
+ * One row as the wall draws it; a row with a subject holds, inside its li, the link that opens it, a row whose page is a
+ * layer (a sunrise, a sunset, rain: `layer`) the link to that layer, and a ZET notice (no subject, an `href`) the link
+ * to ZET's own page, which opens in a new tab and takes no in-app action.
  */
 export function nearbyRowMarkup(i18n: I18n, row: NearbyRow, now: number): string {
   const html = rowMarkup(withClosureSub(i18n, row), now, i18n);
@@ -64,6 +65,10 @@ export function nearbyRowMarkup(i18n: I18n, row: NearbyRow, now: number): string
   // The li's own tag ends at its first '>': every attribute value is escaped, so none carries one.
   const open = html.indexOf('>') + 1;
   if (!row.selection) {
+    if (row.layer !== undefined) {
+      const link = `<a class="nearby-link" href="${a(selectionHref(row.layer))}" data-action="nav" data-layer="${a(row.layer)}">`;
+      return `${html.slice(0, open)}${link}${html.slice(open, html.length - '</li>'.length)}</a></li>`;
+    }
     if (row.href === undefined) return html;
     const external = `<a class="nearby-link" href="${a(row.href)}" rel="noopener noreferrer" target="_blank">`;
     return `${html.slice(0, open)}${external}${html.slice(open, html.length - '</li>'.length)}</a></li>`;
