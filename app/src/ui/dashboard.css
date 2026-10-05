@@ -85,10 +85,10 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    together. */
 .ki-session { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); padding: 0 var(--sp-1); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; cursor: pointer; touch-action: manipulation; }
 .ki-session .g-ring { display: none; }
-/* On a phone, until the last five minutes the pill is its ring alone (the word "Sesija" stays for readers and in
-   the title): a 44 px glyph beside the shield, so the row keeps its width for the chip and the share word. The desk
-   has the room and keeps the word. */
-@media (max-width: 59.99rem) {
+/* Until the last five minutes the pill says "Sesija" with its chevron; on a header narrower than 25rem (a 390 px
+   phone with the share word beside it) the word yields to the ring alone, a 44 px glyph beside the shield, and the
+   word stays for readers and in the title. A 430 px phone and the desk keep the word. */
+@container header (max-width: 24.99rem) {
   .ki-session[data-compact='1'] .g-ring { display: block; inline-size: 1.25rem; block-size: 1.25rem; }
   .ki-session[data-compact='1'] .ki-session-time { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
@@ -127,13 +127,6 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-wordmark-text { font-size: 0; }
   .ki-wordmark-mark { font-size: var(--type-title); }
   .ki-session .g-ring { display: none; }
-/* On a phone, until the last five minutes the pill is its ring alone (the word "Sesija" stays for readers and in
-   the title): a 44 px glyph beside the shield, so the row keeps its width for the chip and the share word. The desk
-   has the room and keeps the word. */
-@media (max-width: 59.99rem) {
-  .ki-session[data-compact='1'] .g-ring { display: block; inline-size: 1.25rem; block-size: 1.25rem; }
-  .ki-session[data-compact='1'] .ki-session-time { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-}
 }
 /* Placed by key into the named areas (both surfaces), so a session without the chip or the share button keeps the
    rest flush right and nothing ever lands on a second row. */
