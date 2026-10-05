@@ -1310,7 +1310,9 @@
     "noTrains": "Danas više nema vlakova.",
     "mapBand": "Karta oko mjesta {place}. Otvori Kartu.",
     "viewSchema": "Shema",
-    "viewMap": "Karta"
+    "viewMap": "Karta",
+    "openInEvents": "Otvori u Događanjima",
+    "openOnMap": "Prikaži na karti"
   },
   "dev": {
     "chip": "dev",

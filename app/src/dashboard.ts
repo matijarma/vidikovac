@@ -543,11 +543,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       askBoards(ctx);
       const input = nearbyInput(ctx);
       const rows = feed.selectNearby(input);
-      // Karta marks the points of the breadth rows it lists (R0): the vetted row's own title, a place by its id.
+      // Karta marks the points of the breadth rows it lists (R0): the vetted row's own title, a place by its id. A mark
+      // without a place of its own carries its row as the sheet opens it on a tap (F5), and its title's text kind.
       const marks = feed.nearbyShownRows(rows, cap, input.now).flatMap((row) => {
         if (!MARKED_KINDS.has(row.kind) || row.map?.geometry.type !== 'Point') return [];
         const [lon, lat] = row.map.geometry.coordinates as [number, number];
-        return [{ id: row.selection?.kind === 'place' ? row.selection.id : `nearby:${row.id}`, title: row.title, lon, lat, kind: row.kind }];
+        if (row.selection?.kind === 'place') return [{ id: row.selection.id, title: row.title, lon, lat, kind: row.kind }];
+        const detail = feed.nearbyRowDetail(i18n, row, input.now);
+        return [{ id: `nearby:${row.id}`, title: row.title, lon, lat, kind: row.kind, titleKind: feed.nearbyTitleKind(row), ...(detail === null ? {} : { detail }) }];
       });
       return {
         html: feed.nearbySectionMarkup(i18n, rows, input.radiusM, input.now, { cap, id: 'karta' }),

@@ -1370,13 +1370,14 @@ describe('the map under the sheet (round 3, phone A)', () => {
 });
 
 describe('Karta marks the breadth rows of the "U blizini" list (R0)', () => {
-  it('puts the marks among the points handed to the map (its options or its update), never twice, draws every rail station as a stop-like bead instead of a rail mark, and a tap on a mark without a record opens no sheet', () => {
+  it('puts the marks among the points handed to the map (its options or its update), never twice, draws every rail station as a stop-like bead instead of a rail mark, and a tap on a mark without a record opens its row in the sheet (F5)', () => {
     const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const detail = '<article class="city-detail" data-testid="nearby-detail" data-kind="open"><button type="button" class="btn-quiet" data-action="clear-selection">Natrag na mjesta</button><p class="city-kicker"><time>do 22:00</time> · <span class="nearby-detail-sub">ljekarna</span></p><h3 tabindex="-1">Ljekarna Centar</h3></article>';
     const marks = [
-      { id: 'nearby:opennow:n2', title: 'Ljekarna Centar', lon: 15.979, lat: 45.812, kind: 'open' },
+      { id: 'nearby:opennow:n2', title: 'Ljekarna Centar', lon: 15.979, lat: 45.812, kind: 'open', titleKind: 'name' as const, detail },
       { id: 'rail-hz-gk', title: 'Zagreb Glavni kolodvor', lon: 15.9784, lat: 45.8046, kind: 'rail' },
     ];
-    const { context } = ctx({ maps, nearby: () => ({ html: NEARBY_HTML, pill: '2 km · ~15 min', radiusM: 2000, marks }) });
+    const { context, navigate } = ctx({ maps, nearby: () => ({ html: NEARBY_HTML, pill: '2 km · ~15 min', radiusM: 2000, marks }) });
     const stations: Place[] = [
       { id: 'rail-hz-gk', category: 'rail', name: 'Zagreb Glavni kolodvor', lon: 15.9784, lat: 45.8046, sourceId: 'hz-schedule', sourceRecord: 'GK' },
       { id: 'rail-hz-zk', category: 'rail', name: 'Zagreb Zapadni kolodvor', lon: 15.9574, lat: 45.8078, sourceId: 'hz-schedule', sourceRecord: 'ZK' },
@@ -1395,8 +1396,30 @@ describe('Karta marks the breadth rows of the "U blizini" list (R0)', () => {
     expect(ids.filter((id) => id === 'rail-hz-gk')).toHaveLength(1);
     expect(points.find((p) => p.id === 'rail-hz-gk')!.props).toMatchObject({ category: 'rail', badge: '', eventCount: 0 });
     expect(points.find((p) => p.id === 'rail-hz-zk')!.props).toMatchObject({ category: 'rail' });
+    const relays = navigate.mock.calls.length;
     handle.options.onSelect!({ kind: 'place', id: 'nearby:opennow:n2' });
+    // The row the mark stands for, in the sheet at half, the title in the peek; the page's own, never relayed or put
+    // in the history (worker/public-selection.ts refuses a `nearby:` id).
+    expect(q('[data-testid=nearby-detail]')).not.toBeNull();
     expect(q('[data-testid=city-detail]')).toBeNull();
-    expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset.sheet).toBe('peek');
+    expect(text(q('[data-testid=nearby-detail] h3'))).toBe('Ljekarna Centar');
+    expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset.sheet).toBe('half');
+    expect(text(q('[data-testid=transport-peek]'))).toContain('Ljekarna Centar');
+    expect(navigate.mock.calls.length).toBe(relays);
+    // A poll keeps it while the row is listed; back returns to the list, and that relays nothing new either.
+    render(context);
+    expect(q('[data-testid=nearby-detail]')).not.toBeNull();
+    q<HTMLElement>('[data-testid=nearby-detail] [data-action=clear-selection]').click();
+    expect(q('[data-testid=nearby-detail]')).toBeNull();
+    expect(q('[data-testid=nearby]')).not.toBeNull();
+    expect(navigate.mock.calls.length).toBe(relays);
+    // The row leaves the list: the selection ends with it, as a vehicle's does.
+    handle.options.onSelect!({ kind: 'place', id: 'nearby:opennow:n2' });
+    expect(q('[data-testid=nearby-detail]')).not.toBeNull();
+    context.nearby = () => ({ html: NEARBY_HTML, pill: '2 km · ~15 min', radiusM: 2000, marks: marks.slice(1) });
+    render(context);
+    expect(q('[data-testid=nearby-detail]')).toBeNull();
+    expect(q('[data-testid=nearby]')).not.toBeNull();
+    expect(navigate.mock.calls.every(([, sel]) => !JSON.stringify(sel ?? null).includes('nearby:')), 'no nearby: id ever reaches the page').toBe(true);
   });
 });

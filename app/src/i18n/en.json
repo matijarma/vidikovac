@@ -1282,7 +1282,9 @@
     "noTrains": "No more trains today.",
     "mapBand": "Map around {place}. Open the map.",
     "viewSchema": "Diagram",
-    "viewMap": "Map"
+    "viewMap": "Map",
+    "openInEvents": "Open in Events",
+    "openOnMap": "Show on the map"
   },
   "dev": {
     "chip": "dev",

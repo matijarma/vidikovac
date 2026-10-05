@@ -13,14 +13,16 @@
 // policy, the kiosk helpers, the sentence templates): city/feed.ts loads it
 // once, after the first paint, so the first screen stays inside its budget.
 import { positionsUnavailable } from '../../../shared/city/service-state';
+import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 import type { LayerId } from '../../../worker/protocol';
 import type { PublicSelection } from '../core/contracts';
 import { selectionHref } from '../experience/blocks';
 import type { I18n } from '../i18n/i18n';
-import { fitRows, rowMarkup, vettedTimelineRow } from '../kiosk/timeline';
+import { dayLabel, fitRows, isTimeless, rowMarkup, rowTextKinds, timeLabel, vettedTimelineRow } from '../kiosk/timeline';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
 import { nearbyHead, nearbyPill, selectNearby, type NearbyInput, type NearbyRow } from './nearby';
 import { sentenceFacts, templateSentences, type SentenceFact, type WrittenSentence } from './sentence';
+import { ct } from './strings';
 
 // The page reads the selection, the head's circle and the sentence tools through this chunk alone (city/feed.ts):
 // the rotation (createSentenceSequence, the wall's own, which applies the header's strict acceptance to every
@@ -76,6 +78,39 @@ export function nearbyRowMarkup(i18n: I18n, row: NearbyRow, now: number): string
   const layer = rowLayer(row.selection);
   const link = `<a class="nearby-link" href="${a(selectionHref(layer, row.selection))}" data-action="nav" data-layer="${layer}" data-selection="${a(JSON.stringify(row.selection))}">`;
   return `${html.slice(0, open)}${link}${html.slice(open, html.length - '</li>'.length)}</a></li>`;
+}
+
+/**
+ * A breadth row as Karta's sheet opens it when its mark is tapped (F5): the row's own day word, time and sub on one
+ * line, its whole title as the heading, under the back button the place detail has. A row whose subject lives on another
+ * page (an exhibition in Događanja) carries the same link its list row does. The texts are the list row's, under the
+ * same check (vettedTimelineRow), so the sheet says nothing the list would refuse; null for a row the check refuses.
+ */
+export function nearbyRowDetail(i18n: I18n, row: NearbyRow, now: number): string | null {
+  const shown = withClosureSub(i18n, row);
+  if (!vettedTimelineRow(shown)) return null;
+  const when = e(timeLabel(shown, now, i18n));
+  const day = dayLabel(shown, now, i18n);
+  const moment = isTimeless(shown) ? `<span>${when}</span>` : `<time datetime="${a(new Date(shown.atMs!).toISOString())}">${when}</time>`;
+  let link = '';
+  if (shown.selection && shown.selection.kind === 'item') {
+    const layer = rowLayer(shown.selection);
+    const label = i18n.t(layer === 'kultura' ? 'sada.openInEvents' : 'sada.openOnMap');
+    link = `<div class="city-actions"><a class="btn-ghost" href="${a(selectionHref(layer, shown.selection))}" data-action="nav" data-layer="${layer}" data-selection="${a(JSON.stringify(shown.selection))}">${e(label)}</a></div>`;
+  }
+  return `<article class="city-detail" data-testid="nearby-detail" data-kind="${a(shown.kind)}" data-id="${a(shown.id)}">`
+    + `<button type="button" class="btn-quiet" data-action="clear-selection">${e(ct(i18n, 'back'))}</button>`
+    // The time and the sub share the kicker's line, so the sheet at half says when and what above the name (the
+    // half detent ends under the heading on a 844 px phone; a sub under it was out of sight).
+    + `<p class="city-kicker">${day ? `${e(day)} ` : ''}${moment}${shown.sub ? ` · <span class="nearby-detail-sub">${e(shown.sub)}</span>` : ''}</p>`
+    + `<h3 tabindex="-1">${e(shown.title)}</h3>`
+    + link
+    + '</article>';
+}
+
+/** The text kind a row's title was vetted under (kiosk/timeline.ts rowTextKinds), for a surface that prints it again. */
+export function nearbyTitleKind(row: NearbyRow): ExternalTextKind {
+  return rowTextKinds(row).title;
 }
 
 /** The rows the list shows: selectNearby's order, at most `cap`, the reserved rows kept and then the most valuable
