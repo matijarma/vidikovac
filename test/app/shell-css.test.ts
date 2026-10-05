@@ -96,6 +96,8 @@ describe('dashboard.css phone shell', () => {
     expect(head).toContain('background: var(--tone-surface-1)');
     // Up to five keyed controls on the phone: the wordmark and the weather chip, then a flexible gap pushing Podijeli grad, the session pill and safety right.
     expect(head).toContain('grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;');
+    // Named areas, one row, a slot for the DEV mark (5 Oct 2026: a chip placed by column number met the mark's column and the row wrapped).
+    expect(head).toContain("grid-template-areas: 'wordmark dev weather share session safety';");
     expect(rule('.ki-head::after')).toContain('block-size: 2px');
     // Lit by the slow-fetch mark alone (dashboard.ts SLOW_FETCH_MS), never by data-loading: a poll that answers in time shows no line.
     expect(rule(".ki[data-slow='true'] .ki-head::after")).toContain('opacity: 1');
@@ -161,13 +163,14 @@ describe('dashboard.css header controls', () => {
     expect(share).toContain('white-space: nowrap');
     expect(share).toContain('touch-action: manipulation');
     expect(rule('.ki-share > span')).toContain('position: static');
-    const phone = /@media \(max-width: 59\.99rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
-    expect(phone).toContain(".ki-head > [data-key='weather'] { grid-column: 2; }");
-    expect(phone).toContain(".ki-head > [data-key='share'] { grid-column: 4; }");
-    expect(phone).toContain(".ki-head > [data-key='session'] { grid-column: 5; }");
-    expect(phone).toContain(".ki-head > [data-key='safety'] { grid-column: 6; }");
-    // Too narrow for the word (a 320 px phone, text zoom): the glyph and the aria-label stay.
-    const narrow = /@container header \(max-width: 21rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+    expect(CSS).toContain(".ki-head > [data-key='wordmark'] { grid-area: wordmark; }");
+    expect(CSS).toContain(".ki-head > [data-key='weather'] { grid-area: weather; justify-self: start; }");
+    expect(CSS).toContain(".ki-head > [data-key='share'] { grid-area: share; }");
+    expect(CSS).toContain(".ki-head > [data-key='session'] { grid-area: session; }");
+    expect(CSS).toContain(".ki-head > [data-key='safety'] { grid-area: safety; }");
+    expect(CSS).not.toMatch(/\[data-key='(?:weather|share|session|safety|space|more)'\] \{ grid-column:/);
+    // Too narrow for the word (under 23rem inside the padding: a 375 px phone; text zoom): the glyph and the aria-label stay.
+    const narrow = /@container header \(max-width: 23rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
     expect(rule('.ki-share > span', narrow)).toContain('clip: rect(0 0 0 0)');
   });
   it('the wordmark keeps its size and paints only the question mark in the brand tone', () => {
@@ -205,11 +208,10 @@ describe('dashboard.css desktop (60rem and up)', () => {
   it('keeps the status line a real box with seven columns on one row, each control placed by its key; the tab bar leaves; nothing places by a retired area name', () => {
     expect(rule('.ki-head', DESKTOP)).not.toContain('display: contents');
     // Seven: the desk pair stands Karta beside Sada on the page, so the header carries no way into it (WP4 chunk E).
-    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto;');
+    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto auto;');
+    expect(rule('.ki-head', DESKTOP)).toContain("grid-template-areas: 'wordmark dev weather space share session more safety';");
     expect(rule('.ki-head', DESKTOP)).not.toContain('grid-template-rows');
-    for (const [key, column] of [['weather', 2], ['space', 3], ['share', 4], ['session', 5], ['more', 6], ['safety', 7]] as const) {
-      expect(DESKTOP).toContain(`.ki-head > [data-key='${key}'] { grid-column: ${column}; }`);
-    }
+    for (const key of ['space', 'more'] as const) expect(DESKTOP).toContain(`.ki-head > [data-key='${key}'] { grid-area: ${key}; }`);
     expect(DESKTOP).not.toContain("[data-key='karta']");
     expect(CSS).not.toContain('.ki-desk-karta');
     expect(rule('.ki-tabbar', DESKTOP)).toContain('display: none');

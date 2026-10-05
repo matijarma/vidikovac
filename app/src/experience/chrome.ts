@@ -134,8 +134,8 @@ export function statusLineMarkup(i18n: I18n, s: ShellState): string {
 }
 
 /**
- * The weather chip (owner, 5 Oct 2026): the sky's glyph and the temperature beside the wordmark, the one way into
- * Vrijeme from the header. Built from the shared weather group (weather-status.ts), so the words are the kiosk's;
+ * The weather chip (owner, 5 Oct 2026): the sky's glyph and the whole-degree temperature beside the wordmark (the
+ * decimal is for the aria and the page: a 390 px row has no room for it), the one way into Vrijeme from the header. Built from the shared weather group (weather-status.ts), so the words are the kiosk's;
  * '' without an observation: never a dash. Frozen it leaves the Tab order like the tabs and keeps its handler, so
  * the fragment (and `room=` in it) is never replaced by a bare hash navigation.
  */
@@ -144,7 +144,7 @@ export function weatherChipMarkup(i18n: I18n, s: ShellState): string {
   if (!w) return '';
   const current = s.layer === 'zrak-i-nebo' && !s.directory;
   const glyph = w.icon ? iconMarkup(w.icon, undefined, 'icon icon-sm') : '';
-  return `<a class="ki-weather" data-key="weather" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo" data-testid="status-weather" aria-label="${escapeAttribute(i18n.t('shell.weatherLabel', { weather: w.aria }))}" aria-current="${current ? 'page' : 'false'}"${w.stale ? ' data-stale="true"' : ''}${frozenAttrs(s)}>${glyph}<span class="tb-temp">${escapeHtml(w.temp)}</span></a>`;
+  return `<a class="ki-weather" data-key="weather" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo" data-testid="status-weather" aria-label="${escapeAttribute(i18n.t('shell.weatherLabel', { weather: w.aria }))}" aria-current="${current ? 'page' : 'false'}"${w.stale ? ' data-stale="true"' : ''}${frozenAttrs(s)}>${glyph}<span class="tb-temp">${escapeHtml(w.tempShort)}</span></a>`;
 }
 
 /**
@@ -208,8 +208,8 @@ export function tabbarMarkup(i18n: I18n, s: ShellState): string {
 
 /**
  * The one session element, keyed into the status line on both surfaces: a
- * compact pill that says "Sesija" and, from five minutes before the end (or
- * always, by the Još switch), the remaining time. It carries the same expiry
+ * compact pill, its ring alone until five minutes before the end (the word
+ * "Sesija" for readers), then the remaining time (or always, by the Još switch). It carries the same expiry
  * the screen shows (data-expires-at) and opens the session sheet.
  */
 export function sessionMarkup(i18n: I18n, s: ShellState): string {
@@ -227,6 +227,8 @@ export function sessionMarkup(i18n: I18n, s: ShellState): string {
         ? i18n.t('session.disconnected')
         : i18n.t('session.connecting');
   const timeText = s.frozen ? i18n.t('session.frozenBadge') : s.phase !== 'live' ? '' : s.countdownShown ? time : i18n.t('shell.session');
+  // Until the time shows, the pill is its ring alone (data-compact): the word stays in the DOM for readers and tests.
+  const compact = !s.frozen && s.phase === 'live' && !s.countdownShown;
   const state = s.frozen ? 'frozen' : s.reconnecting ? 'reconnecting' : s.phase;
   const expires = s.expiresAt !== null ? ` data-expires-at="${s.expiresAt}"` : '';
   // Amber at the last minute, rose at the last twenty seconds: the CSS recolours the pill and its ring.
@@ -236,7 +238,7 @@ export function sessionMarkup(i18n: I18n, s: ShellState): string {
     : s.expiresAt !== null && s.phase === 'live'
       ? i18n.t('session.pillLabel', { time: zagrebTime(s.expiresAt) })
       : i18n.t('session.connecting');
-  return `<button type="button" class="ki-session" data-key="session" data-action="session" data-testid="session-label" data-state="${state}" data-urgency="${urgency}"${expires} title="${escapeAttribute(label)}" aria-label="${escapeAttribute(label)}">${sessionRing(s)}<span class="ki-session-text"><span class="ki-session-sentence">${escapeHtml(sentence)}</span><span class="ki-session-time tabular" data-testid="countdown" data-motion="none"${timeText ? '' : ' hidden'}>${escapeHtml(timeText)}</span></span>${iconMarkup('chevron-right', undefined, 'icon ki-session-more')}</button>`;
+  return `<button type="button" class="ki-session" data-key="session" data-action="session" data-testid="session-label" data-state="${state}" data-urgency="${urgency}"${compact ? ' data-compact="1"' : ''}${expires} title="${escapeAttribute(label)}" aria-label="${escapeAttribute(label)}">${sessionRing(s)}<span class="ki-session-text"><span class="ki-session-sentence">${escapeHtml(sentence)}</span><span class="ki-session-time tabular" data-testid="countdown" data-motion="none"${timeText ? '' : ' hidden'}>${escapeHtml(timeText)}</span></span>${iconMarkup('chevron-right', undefined, 'icon ki-session-more')}</button>`;
 }
 
 /**

@@ -18,12 +18,15 @@
   min-height: 100svh;
   background: var(--tone-surface-canvas);
 }
-/* The status line never scrolls away: up to five keyed controls on one 44 px line, 3.25rem tall plus the notch:
-   the wordmark and the weather chip at the start, a flexible gap, then "Podijeli grad", the pill and the shield. */
+/* The status line never scrolls away: up to five keyed controls on ONE 44 px line, 3.25rem tall plus the notch:
+   the wordmark (with the DEV mark's own slot after it), the weather chip at the start of the flexible column, then
+   "Podijeli grad", the pill and the shield. Every child is placed by a named area, never by auto-placement: on
+   5 Oct 2026 a chip placed by column number met the DEV mark's hard-coded column and the whole row wrapped under
+   the wordmark (the owner's "double header"). The dev area is empty, and so 0 wide, outside DEV. */
 .ki-head {
   grid-area: status;
   position: sticky; inset-block-start: 0; z-index: var(--z-sticky);
-  display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto auto; align-items: center; column-gap: var(--sp-1);
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto auto; grid-template-areas: 'wordmark dev weather share session safety'; align-items: center; column-gap: var(--sp-1);
   min-block-size: var(--ki-top);
   padding-block-start: env(safe-area-inset-top, 0px);
   padding-inline: max(var(--sp-3), env(safe-area-inset-left, 0px)) max(var(--sp-2), env(safe-area-inset-right, 0px));
@@ -34,7 +37,7 @@
 .ki-head > * { min-inline-size: 0; }
 /* The weather chip (experience/chrome.ts weatherChipMarkup): the sky's glyph in the weather tone and the temperature,
    a 44 px link into Vrijeme beside the wordmark; tinted while Vrijeme is the page. */
-.ki-weather { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-text-primary); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; touch-action: manipulation; }
+.ki-weather { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-block-size: var(--target); min-inline-size: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-text-primary); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; touch-action: manipulation; }
 .ki-weather .icon { width: 1rem; height: 1rem; color: var(--tone-weather); }
 .ki-weather[aria-current='page'] { background: var(--tone-tint-action); }
 .ki-weather[data-stale='true'] .tb-temp { color: var(--tone-text-muted); }
@@ -82,6 +85,13 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    together. */
 .ki-session { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); padding: 0 var(--sp-1); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; cursor: pointer; touch-action: manipulation; }
 .ki-session .g-ring { display: none; }
+/* On a phone, until the last five minutes the pill is its ring alone (the word "Sesija" stays for readers and in
+   the title): a 44 px glyph beside the shield, so the row keeps its width for the chip and the share word. The desk
+   has the room and keeps the word. */
+@media (max-width: 59.99rem) {
+  .ki-session[data-compact='1'] .g-ring { display: block; inline-size: 1.25rem; block-size: 1.25rem; }
+  .ki-session[data-compact='1'] .ki-session-time { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 .ki-session-text { display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
 .ki-session-sentence { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .ki-session-time { font-size: var(--text-sm); font-weight: var(--weight-bold); line-height: 1; }
@@ -96,9 +106,10 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    the spec's 40 px reading is the icon). The aria-label carries the word at every width. */
 .ki-safety { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); border-radius: var(--r-md); color: var(--tone-text-muted); background: transparent; text-decoration: none; touch-action: manipulation; }
 .ki-safety[aria-current='page'] { background: var(--tone-tint-urgency); }
-/* A header narrower than the five controls with the share word (about 20.5rem; a 320 px phone,
-   or text zoom): the share button keeps its glyph, its title and its aria-label; the word waits. */
-@container header (max-width: 21rem) {
+/* A header narrower than the five controls with the share word (measured 5 Oct 2026 in Croatian: wordmark 58, chip
+   69, "Podijeli grad" 128, pill 44, shield 44 and the gaps = 363 px; a 390 px phone has 370 inside its padding, a
+   375 px one 355): under 23rem the share button keeps its glyph, its title and its aria-label; the word waits. */
+@container header (max-width: 23rem) {
   .ki-share > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 /* Zoom-compact (390 px at 200 % is 12.2rem): the wordmark drops to icon-only, the weather chip to its glyph (the
@@ -116,13 +127,21 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-wordmark-text { font-size: 0; }
   .ki-wordmark-mark { font-size: var(--type-title); }
   .ki-session .g-ring { display: none; }
-}
+/* On a phone, until the last five minutes the pill is its ring alone (the word "Sesija" stays for readers and in
+   the title): a 44 px glyph beside the shield, so the row keeps its width for the chip and the share word. The desk
+   has the room and keeps the word. */
 @media (max-width: 59.99rem) {
-  .ki-head > [data-key='weather'] { grid-column: 2; }
-  .ki-head > [data-key='share'] { grid-column: 4; }
-  .ki-head > [data-key='session'] { grid-column: 5; }
-  .ki-head > [data-key='safety'] { grid-column: 6; }
+  .ki-session[data-compact='1'] .g-ring { display: block; inline-size: 1.25rem; block-size: 1.25rem; }
+  .ki-session[data-compact='1'] .ki-session-time { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
+}
+/* Placed by key into the named areas (both surfaces), so a session without the chip or the share button keeps the
+   rest flush right and nothing ever lands on a second row. */
+.ki-head > [data-key='wordmark'] { grid-area: wordmark; }
+.ki-head > [data-key='weather'] { grid-area: weather; justify-self: start; }
+.ki-head > [data-key='share'] { grid-area: share; }
+.ki-head > [data-key='session'] { grid-area: session; }
+.ki-head > [data-key='safety'] { grid-area: safety; }
 
 /* Phone tab bar: Sada · Karta · Još, three labelled targets, 44 px and up, safe-area aware. */
 .ki-tabbar { position: fixed; inset-inline: 0; inset-block-end: 0; z-index: var(--z-sticky); background: var(--tone-surface-1); box-shadow: inset 0 1px 0 var(--tone-stroke); padding-block-end: env(safe-area-inset-bottom, 0px); container-type: inline-size; container-name: tabs; }
@@ -174,16 +193,12 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 @media (min-width: 60rem) {
   .ki { --ki-top: 3.5rem; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; grid-template-areas: 'status' 'banners' 'main'; }
   html:has(.ki) { scroll-padding-block: 3.5rem 0; }
-  .ki-head { grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
+  .ki-head { grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: 'wordmark dev weather space share session more safety'; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
   .ki-wordmark-text { font-size: var(--type-title); }
   .ki-share { padding-inline: var(--sp-3); border-color: var(--tone-stroke); }
-  /* Placed by key, so a session without the weather chip or the share button keeps the rest flush right. */
-  .ki-head > [data-key='weather'] { grid-column: 2; }
-  .ki-head > [data-key='space'] { grid-column: 3; }
-  .ki-head > [data-key='share'] { grid-column: 4; }
-  .ki-head > [data-key='session'] { grid-column: 5; }
-  .ki-head > [data-key='more'] { grid-column: 6; }
-  .ki-head > [data-key='safety'] { grid-column: 7; }
+  /* The desk's two extra areas; the five shared keys keep the placement above. */
+  .ki-head > [data-key='space'] { grid-area: space; }
+  .ki-head > [data-key='more'] { grid-area: more; }
   .ki-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
   .ki-more[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
   .ki-more[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
