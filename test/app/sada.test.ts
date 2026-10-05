@@ -232,9 +232,9 @@ describe('U blizini on the phone', () => {
   it('is the wall’s list: its head, then time-ordered rows with a time or "uvijek", never a departure the block above already shows', () => {
     const section = renderGradSada(ctx());
     const list = section.querySelector('section[data-testid=nearby]')!;
-    // No network line order in a unit context: the frame's fallback circle for 6 stops, 2 km.
-    expect(text(list.querySelector('[data-testid=nearby-head]'))).toBe('U blizini · 2 km · ~15 min');
-    expect(text(list.querySelector('.nearby-pill'))).toBe('2 km · ~15 min');
+    // No network line order in a unit context: the frame's fallback circle for 4 stops, 950 m, printed as 1 km.
+    expect(text(list.querySelector('[data-testid=nearby-head]'))).toBe('U blizini · 1 km · ~8 min');
+    expect(text(list.querySelector('.nearby-pill'))).toBe('1 km · ~8 min');
     const rows = [...list.querySelectorAll<HTMLElement>('ol[data-testid=nearby-rows] > li.nearby-row')];
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.length).toBeLessThanOrEqual(NEARBY_PHONE_ROWS);
@@ -290,7 +290,7 @@ describe('U blizini on the phone', () => {
   it('keeps more rows on a desk and reads the same input the Karta sheet reads', () => {
     const input = nearbyInput(ctx({ screen: DESK }));
     expect(input.place).toMatchObject({ kind: 'tram', name: 'Trg bana J. Jelačića', stopId: '106_1' });
-    expect(input.radiusM).toBe(2000);
+    expect(input.radiusM).toBe(950);
     expect(input.boards.map((b) => b.stopId)).toEqual(['106_1', '106_2']);
     expect(NEARBY_DESK_ROWS).toBeGreaterThan(NEARBY_PHONE_ROWS);
     const rows = renderGradSada(ctx({ screen: DESK })).querySelectorAll('[data-testid=nearby] li.nearby-row');
