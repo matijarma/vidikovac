@@ -545,9 +545,10 @@ describe('the field camera and the paired camera', () => {
     expect([FIELD_MIN_ZOOM, FIELD_MAX_ZOOM]).toEqual([12.7, 15.5]);
   });
 
-  it('the field view is the stop at its derived zoom with the kiosk emphasis and the outline, and no selection, no follow, no padding', () => {
+  it('the field view frames the stop at the default Kadar with the kiosk emphasis and the outline, and no selection, no follow, no padding; a phone’s band keeps its derived zoom', () => {
     const view = fieldView({ stop: STOP, district: null, widthPx: 1400, heightPx: 888, spanM: FIELD_SPAN_M });
-    expect(view).toEqual({ zoom: fieldZoom(1400, STOP.lat, FIELD_SPAN_M), emphasis: KIOSK_EMPHASIS, outline: true, center: [STOP.lon, STOP.lat] });
+    expect(view).toEqual({ ...frameView(STOP, 950, 1400, 888), emphasis: KIOSK_EMPHASIS, outline: true });
+    expect(fieldView({ stop: STOP, district: null, widthPx: 356, heightPx: 420, spanM: HANDHELD_SPAN_M, handheld: true })).toEqual({ zoom: fieldZoom(356, STOP.lat, HANDHELD_SPAN_M), emphasis: KIOSK_EMPHASIS, outline: true, center: [STOP.lon, STOP.lat] });
     expect(KIOSK_EMPHASIS).toEqual(['event', 'quake', 'assembly', 'pharmacy']);
   });
 
@@ -564,22 +565,29 @@ describe('the field camera and the paired camera', () => {
     expect(fieldView({ ...wall, widthPx: 356, heightPx: 420, spanM: HANDHELD_SPAN_M, handheld: true })).toEqual({ zoom: fieldZoom(356, STOP.lat, HANDHELD_SPAN_M), emphasis: KIOSK_EMPHASIS, outline: true, center: [STOP.lon, STOP.lat] });
   });
 
-  it('frames the chosen place itself, and keeps the whole-city window for the read-path default place', () => {
+  it('frames the chosen place itself and the read-path default place alike, and keeps the whole-city window for Kadar “city” and the quarter for a quarter screen', () => {
     const place = { lon: 15.9951, lat: 45.8147 };
     // An address place: the frame is centred on it, not on the stop the list reads.
     expect(fieldView({ stop: STOP, place, placeSet: true, district: null, widthPx: 1250, heightPx: 870, spanM: FIELD_SPAN_M }).center).toEqual([place.lon, place.lat]);
-    // placeSet false (an empty field reads back as Trg): the list has its place, the map the whole city, or the configured quarter.
+    // placeSet false (an empty field reads back as Trg): since 5 Oct 2026 the map frames it at its Kadar too (owner: on
+    // such a wall Kadar never moved the map). Kadar "city" is the whole-city window; a configured quarter keeps its seat.
     const fallback = fieldView({ stop: STOP, place: STOP, placeSet: false, district: null, widthPx: 1250, heightPx: 870, spanM: FIELD_SPAN_M });
-    expect(fallback).toEqual({ ...cityWindowView(1250, 870), emphasis: KIOSK_EMPHASIS, outline: true });
+    expect(fallback).toEqual({ ...frameView(STOP, 950, 1250, 870), emphasis: KIOSK_EMPHASIS, outline: true });
+    const city = fieldView({ stop: STOP, place: STOP, placeSet: false, frame: 'city', district: null, widthPx: 1250, heightPx: 870, spanM: FIELD_SPAN_M });
+    expect(city).toEqual({ ...cityWindowView(1250, 870), emphasis: KIOSK_EMPHASIS, outline: true });
+    expect(fieldView({ stop: STOP, place, placeSet: true, frame: 'city', district: null, widthPx: 1250, heightPx: 870, spanM: FIELD_SPAN_M })).toEqual({ ...cityWindowView(1250, 870), emphasis: KIOSK_EMPHASIS, outline: true });
     const seat = districtBySlug('maksimir')!.seat;
     expect(fieldView({ stop: STOP, placeSet: false, district: 'maksimir', widthPx: 1250, heightPx: 870, spanM: FIELD_SPAN_M }).center).toEqual([seat.lon, seat.lat]);
-    // Framed is placeSet, never the presence of a place.
-    expect(framedPlace({ stop: STOP, place: STOP, placeSet: false })).toBeNull();
-    expect(framedPlace({ stop: STOP })).toBeNull();
+    // Framed is the Kadar, never placeSet: anything with a point frames unless the Kadar is the city.
+    expect(framedPlace({ stop: STOP, place: STOP, placeSet: false })).toBe(STOP);
+    expect(framedPlace({ stop: STOP })).toBe(STOP);
     expect(framedPlace({ stop: STOP, placeSet: true })).toBe(STOP);
     expect(framedPlace({ stop: STOP, place, placeSet: true })).toBe(place);
     expect(framedPlace({ stop: null, placeSet: true })).toBeNull();
-    expect([frameRadiusOf({}), frameRadiusOf({ frame: 2 }), frameRadiusOf({ frame: 6, radiusM: 1234 })]).toEqual([950, 650, 1234]);
+    expect(framedPlace({ stop: STOP, frame: 'city' })).toBeNull();
+    expect(framedPlace({ stop: STOP, placeSet: false, district: 'maksimir' })).toBeNull();
+    expect(framedPlace({ stop: STOP, placeSet: true, district: 'maksimir' })).toBe(STOP);
+    expect([frameRadiusOf({}), frameRadiusOf({ frame: 2 }), frameRadiusOf({ frame: 'city' }), frameRadiusOf({ frame: 6, radiusM: 1234 })]).toEqual([950, 650, 950, 1234]);
   });
 
   // The screen a person sets up with one button has no stop and no district:

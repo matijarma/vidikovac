@@ -116,7 +116,7 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     expect(onlyHandedOn).toEqual(['panels.cityWorkEmpty', 'panels.eventsEmpty']);
   });
 
-  it('the catalogue holds 1151 Croatian leaves and 1123 English ones', () => {
+  it('the catalogue holds 1153 Croatian leaves and 1125 English ones', () => {
     // 1,056 flat hr leaves once lane P, A3, A6, A2 and A5 were merged (lane/c-A1 4a57a61; en 1,020).
     // A1: +56 city words moved out of app/src/city/strings.ts, +21 city.fact-* labels moved out
     // of app/src/city/markup.ts, +2 time.at / time.dateAt (the sentence's time label): 1,135; then
@@ -170,6 +170,8 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // rebuilt Vrijeme page, layers/zrak-i-nebo.ts): 1,151 hr, 1,123 en.
     // The fix pass after 627667ce (F5) +2 sada.openInEvents, openOnMap (a breadth mark's row on Karta and its link,
     // city/nearby-markup.ts nearbyRowDetail): 1,153 hr, 1,125 en.
+    // The kiosk fix lane (5 Oct 2026) +1 kiosk.settings.frameCity ("Kadar: cijeli grad", the fourth Kadar) and -1
+    // kiosk.setup.previewCity (the empty-field preview now names the default place and its Kadar): 1,153 hr, 1,125 en.
     // A new leaf changes this number on purpose, with its reader.
     expect(leaves.length).toBe(1153);
     expect(leafKeys(en).length).toBe(1125);

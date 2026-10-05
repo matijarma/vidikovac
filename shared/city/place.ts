@@ -55,6 +55,8 @@ export const ZAGREB_BOUNDS = Object.freeze({ west: 15.7, south: 45.5, east: 16.3
  * [O-65], so the list and the departures always exist; the map keeps the whole-city window.
  */
 export const DEFAULT_PLACE_STOP_ID = '106_1';
+/** Its name, as the header, the setup preview and the stop table print it. */
+export const DEFAULT_PLACE_NAME = 'Trg bana J. Jelačića';
 
 export function inZagreb(lon: number, lat: number): boolean {
   return Number.isFinite(lon) && Number.isFinite(lat)

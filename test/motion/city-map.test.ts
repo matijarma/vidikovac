@@ -919,7 +919,6 @@ describe('the basemap and the overlays on it', () => {
     expect(ids.indexOf('network-tram')).toBeLessThan(ids.indexOf('address_label'));
     expect(ids.indexOf('closures')).toBeLessThan(ids.indexOf('address_label'));
     expect(ids.indexOf('vehicles')).toBeGreaterThan(ids.indexOf('places_locality'));
-    expect(ids[ids.length - 1]).toBe('ambient-highlight-point');
     expect(ids.indexOf('selection-ring')).toBeGreaterThan(ids.indexOf('vehicles'));
     // On a phone the own stop's disc stays under the pills (on the wall it is laid over them, overlays.test.ts).
     expect(ids.indexOf('screen-stop')).toBeLessThan(ids.indexOf('vehicles'));
@@ -930,7 +929,8 @@ describe('the basemap and the overlays on it', () => {
     expect(map.images.get('vehicle-plate')!.options).toEqual({ sdf: true, pixelRatio: 2, ...plate!.options });
     expect(map.images.get('vehicle-pill')!.options).toHaveProperty('stretchX');
     expect(map.images.get('vehicle-nose')!.options).toEqual({ sdf: true, pixelRatio: 2 });
-    expect([...map.sources.keys()].sort()).toEqual(['ambient-highlight', 'bodies', 'closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
+    // No ambient highlight source any more (owner, 5 Oct 2026: the ring that followed the wall's sentence is gone).
+    expect([...map.sources.keys()].sort()).toEqual(['bodies', 'closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
     expect(map.getSource('bodies')!.data).toEqual({ type: 'FeatureCollection', features: [] });
   });
 

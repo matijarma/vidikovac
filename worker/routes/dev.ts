@@ -24,7 +24,7 @@
 //                hitno_view reaches MetricsDO, so /statistika/ and grad.csv describe real use only.
 //   Unchanged    The Worker's own rate limits (RL_OPEN answers these two routes too), the CSP, the
 //                pairing of every screen that is not a DEV screen.
-import { DEFAULT_FRAME_STOPS } from '../../shared/city/frame';
+import { DEFAULT_FRAME } from '../../shared/city/frame';
 import { beaconStub } from '../do/beacon-do';
 import type { Env } from '../env';
 import { json } from '../http';
@@ -73,7 +73,7 @@ export async function devScreen(env: Env, principal: string, now: number, origin
   const stub = beaconStub(env, beaconId);
   await stub.create({
     beaconId, secret, venueType: 'ostalo', area: CITY_AREA.slug, operatorLabel: defaultLabel(areaName(CITY_AREA.slug)),
-    stopId: null, kind: 'temporary', screenExpiresAt: now + TEMPORARY_SCREEN_MS, place: null, frame: DEFAULT_FRAME_STOPS, dev: true,
+    stopId: null, kind: 'temporary', screenExpiresAt: now + TEMPORARY_SCREEN_MS, place: null, frame: DEFAULT_FRAME, dev: true,
   });
   const screen = await stub.screenMetadata();
   if (screen.dev !== true) throw new Error('dev-screen-collision');

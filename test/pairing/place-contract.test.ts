@@ -11,7 +11,7 @@ import {
   type BeaconCapability,
   type BeaconClientMessage,
   type CreateBeaconRequest,
-  type FrameStops,
+  type Frame,
   type ScreenMetadata,
   type ScreenPlace,
   type ScreenPlaceInput,
@@ -45,8 +45,9 @@ describe('S1: worker/protocol.ts place-v2', () => {
     const v2address: BeaconClientMessage = {
       t: 'screen-set', version: 2, place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 2,
     };
-    for (const message of [v1, v2stop, v2city, v2address]) expect(JSON.parse(JSON.stringify(message))).toEqual(message);
-    expectTypeOf<Extract<BeaconClientMessage, { t: 'screen-set'; version: 2 }>['frame']>().toEqualTypeOf<FrameStops>();
+    const v2whole: BeaconClientMessage = { t: 'screen-set', version: 2, place: { kind: 'stop', stopId: '106_1' }, frame: 'city' };
+    for (const message of [v1, v2stop, v2city, v2address, v2whole]) expect(JSON.parse(JSON.stringify(message))).toEqual(message);
+    expectTypeOf<Extract<BeaconClientMessage, { t: 'screen-set'; version: 2 }>['frame']>().toEqualTypeOf<Frame>();
     expectTypeOf<Extract<BeaconClientMessage, { t: 'screen-set'; version: 2 }>['place']>().toEqualTypeOf<ScreenPlaceInput | null>();
   });
 
@@ -58,7 +59,7 @@ describe('S1: worker/protocol.ts place-v2', () => {
     expect(chosen.placeSet).toBe(true);
     expect(wholeCity.place?.stopId).toBe('106_1');
     expectTypeOf<ScreenMetadata['place']>().toEqualTypeOf<ScreenPlace | null | undefined>();
-    expectTypeOf<ScreenMetadata['frame']>().toEqualTypeOf<FrameStops | undefined>();
+    expectTypeOf<ScreenMetadata['frame']>().toEqualTypeOf<Frame | undefined>();
   });
 
   it('lets the admin create request name a place and a frame', () => {

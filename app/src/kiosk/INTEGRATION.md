@@ -13,15 +13,16 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
 `CityMapOptions`, the fields of `KioskMapView`:
 
 - `center` / `zoom` -- the camera the screen's own configuration asks for, in
-  this order: a place somebody chose (`placeSet` true) frames N stops around
-  it on a wall, the square of side 2R on the field's shorter side
-  (`map/frame.ts` `frameView`, R measured per place along the tram lines by
-  `shared/city/frame.ts` `frameRadiusM`, Kadar 2 / 4 / 6, the 25th percentile
-  of the ways out held to each Kadar's `FRAME_RADIUS_CAP_M`, about
-  0.7 / 1 / 1.3 km at Trg bana J. Jelačića); a phone's band, and
-  a stop from a caller before place-v2, keep the centred street-level camera;
-  the read-path default place (`placeSet` false) keeps `CITY_WINDOW`, the whole city fitted
-  to the field with 24 px of clearance. The frame and the window are fitted
+  this order: a wall at Kadar 2 / 4 / 6 frames N stops around its place, the
+  chosen one or the read-path default (Trg bana J. Jelačića), the square of side
+  2R on the field's shorter side (`map/frame.ts` `frameView`, R measured per
+  place along the tram lines by `shared/city/frame.ts` `frameRadiusM`, the 25th
+  percentile of the ways out held to each Kadar's `FRAME_RADIUS_CAP_M`, about
+  0.7 / 1 / 1.3 km at Trg); a phone's band keeps the centred street-level
+  camera; Kadar `city` (`FRAME_CITY`), and a quarter screen that chose no place,
+  keep `CITY_WINDOW` or the quarter's outline, the whole city fitted to the field
+  with 24 px of clearance. Until 5 Oct 2026 only a chosen place (`placeSet`) was
+  framed; `placeSet` now decides only the header's words and the quarter rule. The frame and the window are fitted
   whole down to `WALL_FIT_MIN_ZOOM` (10, the map's own floor), below the marks' own
   `FIELD_MIN_ZOOM` (12.7); `prozor.markZoom` then draws the plates and the
   stop marks from the fit. A resize, a fullscreen change or a turn of the

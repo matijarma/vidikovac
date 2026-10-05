@@ -14,7 +14,7 @@
 // their place with one busy row each; a chunk that will not load leaves both
 // out rather than promising them.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
-import { DEFAULT_FRAME_STOPS, frameRadiusM, frameStopsFrom, type FrameLine, type FrameStop } from '../../../shared/city/frame';
+import { frameRadiusM, frameStopsFrom, frameStopsOf, type FrameLine, type FrameStop } from '../../../shared/city/frame';
 import { distanceM, located } from '../../../shared/city/geo';
 import { openPlacesNear } from '../../../shared/city/osm-hours';
 import { isPublicHoliday } from '../../../shared/city/holidays';
@@ -119,7 +119,7 @@ function frameTable(stops: readonly ScreenStop[], lines: readonly FrameLine[] | 
 /** The circle around the place, metres: the screen's Kadar measured per place (shared/city/frame.ts frameRadiusM). */
 export function feedRadiusM(ctx: LayerContext, place: ScreenPlace): number {
   const table = ctx.stops?.length ? frameTable(ctx.stops, ctx.frameLines) : [];
-  return frameRadiusM(place, table, ctx.frame ?? DEFAULT_FRAME_STOPS);
+  return frameRadiusM(place, table, frameStopsOf(ctx.frame));
 }
 
 /** The boards the page already holds for the departures stop's platforms. */

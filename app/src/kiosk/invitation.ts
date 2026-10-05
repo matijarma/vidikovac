@@ -1,6 +1,6 @@
 // The passive public overview: one map, the nearby timeline and the QR.
 // Each has its own region and lifetime; a feed refresh never remounts them.
-import type { FrameStops } from '../../../shared/city/frame';
+import type { Frame } from '../../../shared/city/frame';
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { ROW_MIN_PX, type NearbyRow } from '../city/nearby';
 import type { ScreenStop } from '../core/contracts';
@@ -69,7 +69,7 @@ export function compactArrangement(b: CompactBox): { placement: CompactPlacement
   return map;
 }
 export interface InvitationModel {
-  items: readonly NearbyRow[]; radiusM: number; frame: FrameStops;
+  items: readonly NearbyRow[]; radiusM: number; frame: Frame;
   /** The one quiet note on the map (kiosk.ts invitationModel): ZET sends no positions, or its fleet is silent; null hides it. */
   note: string | null;
   modules: readonly ModuleSnapshot[]; stop: ScreenStop | null;
@@ -88,7 +88,7 @@ export interface InvitationHandle {
   shown(): number;
   page1?(): readonly string[];
   drawnReveal?(): TaktReveal | null;
-  setFrame(frame: FrameStops): void;
+  setFrame(frame: Frame): void;
   measureWidth(): number; measureHeight(): number; setMajorLabels(count: number): void;
   /** The legend's entries follow what the map draws (kiosk/mapview.ts legendKinds): the others are hidden. */
   setLegend(kinds: readonly string[]): void;
@@ -168,7 +168,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     // The wall's three compositions draw the departures as one line (R1); the handheld keeps one row per departure.
     departuresLine:()=>(model?.composition??'wide')!=='handheld',
   });
-  const setFrame=(frame:FrameStops):void=>field.setFrame(frame);
+  const setFrame=(frame:Frame):void=>field.setFrame(frame);
   const card=element.querySelector<HTMLElement>('.k-panel--card')!;
   /** A window box and promise set for which the card was tried under the list and the promises did not fit. */
   let refused:string|null=null;

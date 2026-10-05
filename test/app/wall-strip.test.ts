@@ -9,6 +9,7 @@
 // stop rings and the pills alone, and the pills yield to one another instead
 // of overlapping, so what is drawn is never on top of something else.
 import { describe, expect, it, vi } from 'vitest';
+import { FRAME_CITY } from '../../shared/city/frame';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { compactArrangement, mountInvitation } from '../../app/src/kiosk/invitation';
@@ -151,13 +152,13 @@ describe('the wall’s map below its legible minimum', () => {
     expect(first(tall).prozor.pillsYield).toBeUndefined();
     expect(first(tall).points.some((p) => p.place === 'city')).toBe(true);
     expect(first(tall).cityLabels).toBe('venues');
-    // The whole-city window follows the height rule, not the zoom one (its small dots are drawn for z12.5);
-    // a phone's band never does.
+    // The whole-city window (Kadar "cijeli grad") follows the height rule, not the zoom one (its small dots are
+    // drawn for z12.5); a phone's band never does.
     const city2 = stub();
-    requestKioskMap(city2.maps, { ...base, placeSet: false, widthPx: 669, heightPx: 162 }, city2.adapter);
+    requestKioskMap(city2.maps, { ...base, frame: FRAME_CITY, widthPx: 669, heightPx: 162 }, city2.adapter);
     expect(first(city2).prozor.pillsYield).toBe(true);
     const city3 = stub();
-    requestKioskMap(city3.maps, { ...base, placeSet: false, widthPx: 669, heightPx: MAP_MIN_HEIGHT_PX }, city3.adapter);
+    requestKioskMap(city3.maps, { ...base, frame: FRAME_CITY, widthPx: 669, heightPx: MAP_MIN_HEIGHT_PX }, city3.adapter);
     expect(first(city3).prozor.pillsYield).toBeUndefined();
     const phone = stub();
     requestKioskMap(phone.maps, { ...base, handheld: true, widthPx: 356, heightPx: 160 }, phone.adapter);

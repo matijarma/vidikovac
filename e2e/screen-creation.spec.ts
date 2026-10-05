@@ -12,7 +12,7 @@ test.describe('real self-service screen', () => {
     // One optional field; left empty, the line under it says the whole city.
     const field = setup.getByTestId('setup-place');
     const preview = setup.getByTestId('setup-preview');
-    await expect(preview).toHaveText('Na zaslonu: cijeli grad.');
+    await expect(preview).toHaveText('Na zaslonu: Trg bana J. Jelačića i 4 stajališta uokolo');
     await expect(setup.getByTestId('setup-create')).toHaveText('Pokreni');
     // The stop is picked among the suggestions (stops come first; a street named after the square may follow).
     await field.fill('Kvaternikov');
@@ -39,12 +39,16 @@ test.describe('real self-service screen', () => {
     await expect(panel).toBeVisible();
     const kadar = panel.getByTestId('toggle-frame');
     await expect(kadar).toHaveAttribute('data-value', '4');
+    const map = page.getByTestId('kiosk-map');
+    const zoomAt4 = Number(await map.getAttribute('data-zoom'));
     await kadar.click();
     // The toggle says the new state at once; the shell follows only the DO's answer to the one
     // screen-set version 2 frame the panel sends 0.8 s after the click. The panel stays open.
     await expect(kadar).toHaveAttribute('data-value', '6');
     await expect(kadar).toHaveText('Kadar: 6 stajališta odavde');
     await expect(shell).toHaveAttribute('data-frame', '6', { timeout: 30_000 });
+    // The camera follows the Kadar (owner, 5 Oct 2026): six stops around the place is a wider frame than four.
+    await expect.poll(() => map.getAttribute('data-zoom').then(Number), { timeout: 30_000, message: 'data-zoom wider at Kadar 6' }).toBeLessThan(zoomAt4);
     await expect(panel).toBeVisible();
     await kadar.press('Escape');
     await expect(panel).toBeHidden();

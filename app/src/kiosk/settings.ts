@@ -21,7 +21,7 @@
 // controller) and apply at once.
 import type { ScreenMetadata } from '../../../worker/protocol';
 import { SCREEN_SET_ERRORS, SCREEN_SET_MIN_MS } from '../../../worker/protocol';
-import { DEFAULT_FRAME_STOPS, FRAME_STOPS, frameRadiusM, frameSpanM, frameStopsFrom, isFrameStops, type FrameStop, type FrameStops } from '../../../shared/city/frame';
+import { DEFAULT_FRAME, FRAME_CITY, FRAME_CYCLE, frameRadiusM, frameSpanM, frameStopsFrom, frameStopsOf, isFrame, type Frame, type FrameStop } from '../../../shared/city/frame';
 import { placeFromStop, type ScreenPlace } from '../../../shared/city/place';
 import type { ScreenSetInput } from '../beacon';
 import type { ScreenStop } from '../core/contracts';
@@ -57,9 +57,10 @@ const THEME_ICON: Record<ThemePreference, IconName> = { auto: 'sun-moon', light:
 export interface WallPlace {
   /** The DO's place (Trg bana Jelačića for an empty field, read-path enriched), or null before the DO's first answer on a record that has none. */
   place: ScreenPlace | null;
-  /** True when the operator chose the place: the map then frames it; false keeps the whole-city window [O-65]. */
+  /** True when the operator chose the place (the header names it as theirs); false is the read-path default place. The
+   *  camera follows the Kadar either way (kiosk/mapview.ts framedPlace): 2 / 4 / 6 frame the place, `city` the whole city. */
   placeSet: boolean;
-  frame: FrameStops;
+  frame: Frame;
 }
 
 /**
@@ -70,7 +71,7 @@ export interface WallPlace {
  */
 export function wallPlaceOf(screen: ScreenMetadata | null | undefined, isTram: (routeId: string) => boolean): WallPlace {
   const stored = screen?.frame;
-  const frame = isFrameStops(stored) ? stored : DEFAULT_FRAME_STOPS;
+  const frame = isFrame(stored) ? stored : DEFAULT_FRAME;
   if (screen?.place) return { place: screen.place, placeSet: screen.placeSet !== false, frame };
   if (screen && screen.place === undefined && screen.stop) return { place: placeFromStop(screen.stop, isTram), placeSet: true, frame };
   return { place: null, placeSet: false, frame };
@@ -83,13 +84,14 @@ const FRAME_STOPS_OF = new WeakMap<readonly ScreenStop[], FrameStop[]>();
  * a chosen place (shared/city/frame.ts, [O-68]; the table's radius until the stop list has
  * loaded); the whole-city field otherwise.
  */
-export function wallSpanM(input: { handheld: boolean; wall: WallPlace; stops: readonly ScreenStop[] | null; isTram: (routeId: string) => boolean }): number {
+export function wallSpanM(input: { handheld: boolean; wall: WallPlace; place?: ScreenPlace | null; stops: readonly ScreenStop[] | null; isTram: (routeId: string) => boolean }): number {
   if (input.handheld) return HANDHELD_SPAN_M;
-  if (!input.wall.placeSet || !input.wall.place) return FIELD_SPAN_M;
+  const place = input.place ?? input.wall.place;
+  if (input.wall.frame === FRAME_CITY || !place) return FIELD_SPAN_M;
   const table = input.stops ?? [];
   let frameStops = FRAME_STOPS_OF.get(table);
   if (!frameStops) { frameStops = frameStopsFrom(table, input.isTram); FRAME_STOPS_OF.set(table, frameStops); }
-  return frameSpanM(frameRadiusM(input.wall.place, frameStops, input.wall.frame));
+  return frameSpanM(frameRadiusM(place, frameStops, frameStopsOf(input.wall.frame)));
 }
 
 // --- The long press on the brand ----------------------------------------------
@@ -326,7 +328,7 @@ function downPointers(doc: Document): Set<number> {
 /** What the panel changes on the screen's record: the chosen place (null for the whole city) and the frame. */
 export interface SettingsState {
   place: ScreenPlace | null;
-  frame: FrameStops;
+  frame: Frame;
 }
 
 /** Why a change did not land: no socket or no answer in time, a refusal, a frame inside the DO's window. */
@@ -603,7 +605,7 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     // "Cijeli grad" is offered only while the screen names a place: pressing it on the whole city says nothing new.
     placeCity.hidden = shown.place === null;
     frameBtn.dataset.value = String(shown.frame);
-    frameBtn.textContent = fill(s.settings.frameValue, { count: shown.frame });
+    frameBtn.textContent = shown.frame === FRAME_CITY ? s.settings.frameCity : fill(s.settings.frameValue, { count: shown.frame });
     const view = deps.view();
     viewBtn.dataset.value = view;
     viewBtn.textContent = view === 'schema' ? s.settings.viewSchema : s.settings.viewMap;
@@ -703,7 +705,7 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
   placeCity.addEventListener('click', () => { closePlaceEdit(); placeToggle.focus(); choose({ place: null, frame: queue.shown().frame }); });
   frameBtn.addEventListener('click', () => {
     const shown = queue.shown();
-    choose({ place: shown.place, frame: nextInCycle(FRAME_STOPS, shown.frame) });
+    choose({ place: shown.place, frame: nextInCycle(FRAME_CYCLE, shown.frame) });
   });
   viewBtn.addEventListener('click', () => { deps.setView(nextInCycle(WALL_VIEWS, deps.view())); paintRows(); armIdle(); });
   themeBtn.addEventListener('click', () => { deps.cycleTheme(); paintTheme(); armIdle(); });

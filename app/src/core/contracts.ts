@@ -11,7 +11,7 @@ import type { CityState } from '../../../shared/city/types';
 import type { LocationContext } from '../city/location';
 import type { PlaceContext } from '../city/place';
 import type { BoardCache } from '../city/boards';
-import type { FrameLine, FrameStops } from '../../../shared/city/frame';
+import type { Frame, FrameLine } from '../../../shared/city/frame';
 import type { WrittenSentence } from '../../../shared/kiosk/sentence';
 import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 
@@ -127,8 +127,9 @@ export interface ExperienceActions {
    *  to show; 'busy' holds the card while the city's fleet is on its way (its state decides the first sentence);
    *  absent, Sada writes the first template sentence of its own facts (city/feed.ts). */
   sentence?: WrittenSentence | 'busy' | null;
-  /** How many stops around the place the circle counts (the screen's Kadar, ScreenMetadata.frame); absent: DEFAULT_FRAME_STOPS. */
-  frame?: FrameStops;
+  /** The screen's Kadar (ScreenMetadata.frame): how many stops around the place the circle counts; the whole city or
+   *  an absent Kadar count the default's stops (shared/city/frame.ts frameStopsOf). */
+  frame?: Frame;
   /** The tram lines in call order (shared/city/frame.ts frameLinesOf, from the network the map loads), so the phone's
    *  circle is measured along the lines as the wall's is; absent, frameRadiusM answers its fallback among trams. */
   frameLines?: readonly FrameLine[];

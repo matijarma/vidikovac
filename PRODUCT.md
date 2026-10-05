@@ -53,10 +53,11 @@ Događanja and Još; and "tracked estimates are labelled on every row".
 
 The wall now names its place in the header (a stop or a street;
 Trg bana J. Jelačića for a screen whose setup field was left empty) and frames
-four stops around it by default (Kadar: 2, 4 or 6 "stajališta odavde"), the
-radius measured per place within each step's metre caps (about 0.7 / 1 / 1.3 km
-at Trg bana Jelačića); a screen set to the whole city keeps the whole-city
-window. One written sentence with a coloured kicker (Promet, Kultura, Vrijeme,
+four stops around it by default (Kadar: 2, 4 or 6 "stajališta odavde", or the
+whole city as the fourth step), the radius measured per place within each
+step's metre caps (about 0.7 / 1 / 1.3 km at Trg bana Jelačića); the frame
+follows the Kadar whether or not anybody chose the place (5 October 2026), and
+only Kadar "cijeli grad" keeps the whole-city window. One written sentence with a coloured kicker (Promet, Kultura, Vrijeme,
 Bicikli, Noćas, Radovi) changes with the screen's rhythm, every 20 seconds by
 default: at most 80 characters, never cut with an ellipsis, shown only while
 the fact it states holds and, unless that fact expires, for at least one
@@ -139,18 +140,19 @@ and expiry behind a gear in the header. Since 22 September 2026 opening
 saying what the screen will show, and **Pokreni**. A picked stop is the
 screen's place; a picked street becomes the nearest tram stop within 400 m,
 else the nearest bus stop within 300 m, else the address itself; an empty
-field keeps the whole-city window, with Trg bana Jelačića as the place for the
-list and the departures. Place, frame (Kadar: 2, 4 or 6 stops), view, theme,
+field takes Trg bana Jelačića as the place for the header, the list, the
+departures and, since 5 October 2026, the frame. Place, frame (Kadar: 2, 4 or 6
+stops, or the whole city), view, theme,
 rhythm and expiry sit in an on-screen settings panel opened by a long press on
 the brand; the header names the place and carries no operator control. The map
-takes the whole left column. A screen set to the whole city opens on the city
+takes the whole left column. A screen at Kadar "cijeli grad" opens on the city
 a passer-by means by Zagreb, Črnomerec to Maksimir and the Sava to Mirogoj,
 with trams, the tram network in neutral grey, the place's own ring and name
 and no other stop mark, the BAJS stations that have a bike as small teal dots
 without a number, closures, the on-duty pharmacy and tonight's venues,
 unnamed; neighbourhood names leave the basemap and buses join the picture only
-once the camera is in a neighbourhood. A screen with a place opens on N stops
-around it (Kadar: 2, 4 or 6 "stajališta odavde", default 4), its radius
+once the camera is in a neighbourhood. Every other screen opens on N stops
+around its place (Kadar: 2, 4 or 6 "stajališta odavde", default 4), its radius
 measured per place along the tram lines that serve it and held to each
 step's metre caps, the same number the "U blizini" pill prints
 ("1 km · ~8 min" at 1 km). On the frame buses stay at

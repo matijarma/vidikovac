@@ -34,12 +34,12 @@ import type { MapMode } from './core/map-mode-store';
 import { createTemporaryScreen, loadStops as loadStopsImpl } from './core/screens';
 import { loadStreets as loadStreetsImpl } from './core/streets';
 import type { I18n } from './i18n/i18n';
-import { withNetwork, withTimers, type MapFactory, type MapHighlight } from './map/city-map';
+import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay, RESYNC_GAP_MS } from './motion/loop';
 import { watchPageReturn } from './core/page-return';
 import { loadNetwork, type Network } from '../../shared/motion/network-client';
-import { FRAME_RADIUS_M, frameLinesOf, frameRadiusM, frameStopsFrom, type FrameStop } from '../../shared/city/frame';
+import { FRAME_RADIUS_M, frameLinesOf, frameRadiusM, frameStopsFrom, frameStopsOf, type FrameStop } from '../../shared/city/frame';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
@@ -57,7 +57,7 @@ import { frameStrip, PHARMACY_HOURS, stripMarkup } from './kiosk/frame';
 import { cardMarkup, mountInvitation, wallMapNote, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, radarInsetShown, radarNow, staleCopy } from './kiosk/local';
-import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints, highlightAwayFromPlace } from './kiosk/mapview';
+import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints } from './kiosk/mapview';
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from './kiosk/pharmacies';
 import { groupDepartures, mountTouchPanel, taktCandidates, TOUCH_MS, type TouchPanelHandle } from './kiosk/timeline';
 import { beatIndex, EMPTY_HISTORY, recordTaktShown, takt, type TaktHistory, type TaktReveal } from '../../shared/kiosk/takt';
@@ -381,11 +381,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       ?? (stop?.id === place.stopId ? stop : { id: place.stopId, name: place.name, lon: place.lon, lat: place.lat, routes: [] });
   }
   function wallRadiusM(): number {
-    if (!stops?.length) return FRAME_RADIUS_M[wall.frame];
+    if (!stops?.length) return FRAME_RADIUS_M[frameStopsOf(wall.frame)];
     if (frameTable?.stops !== stops || frameTable.network !== frameNetwork) {
       frameTable = { stops, network: frameNetwork, table: frameStopsFrom(stops, isTram, frameNetwork ? frameLinesOf(frameNetwork) : []) };
     }
-    return frameRadiusM(placeForNearby(), frameTable.table, wall.frame);
+    return frameRadiusM(placeForNearby(), frameTable.table, frameStopsOf(wall.frame));
   }
 
   // --- Alerts: the beacon socket and the teaser fetch fail independently -------
@@ -486,38 +486,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function drawnRevealIds(): string[] {
     const drawn = invitation?.drawnReveal?.();
     return taktReveal?.kind === 'page' && drawn?.kind === 'page' && drawn.beat === taktReveal.beat ? [...drawn.ids] : [];
-  }
-  /** R2: a page turn's revealed row takes the map's emphasis for its beat (an advance keeps the sentence's: the next
-   *  departures belong to the wall's own stop). Data only, as setHighlight is: the camera never moves. */
-  function revealHighlight(): MapHighlight | null {
-    if (sentenceSuspended() || taktReveal?.kind !== 'page') return null;
-    for (const id of drawnRevealIds()) {
-      const row = wallItems.find(item => item.id === id);
-      if (row?.map) return row.map;
-    }
-    return null;
-  }
-  /** Geometry follows the accepted sentence's refs; it never chooses a camera. */
-  function sentenceHighlight(): MapHighlight | null {
-    if (sentenceSuspended() || !currentSentence) return null;
-    for (const raw of currentSentence.refs) {
-      // A reveal fact (R2, city/sentence.ts) names the row under its own prefix: the same row as the list's.
-      const ref = raw.startsWith('reveal:') ? raw.slice('reveal:'.length) : raw;
-      const row = wallItems.find(item => item.id === ref || ref.startsWith(`${item.id}:`));
-      if (row?.map) return row.map;
-      const city = cityStore.snapshot();
-      const place = [...city.places, ...dynamicPlaces(city, now())].find(item => item.id === ref);
-      if (place?.lon !== undefined && place.lat !== undefined) {
-        return { id: place.id, geometry: { type: 'Point', coordinates: [place.lon, place.lat] } };
-      }
-    }
-    return null;
-  }
-  /** The map's emphasis: a reveal's row first, else the sentence's reference, and never a point on the wall's own
-   *  place (kiosk/mapview.ts highlightAwayFromPlace): the own-place marker already says "here". */
-  function wallHighlight(): MapHighlight | null {
-    const place = placeForNearby();
-    return highlightAwayFromPlace(revealHighlight() ?? sentenceHighlight(), { lon: place.lon, lat: place.lat });
   }
   /** data-skipped-text on the root: the rows the last selection left out for their third-party text, and why. */
   function paintSkippedText(reasons: readonly ExternalTextRejection[]): void {
@@ -655,7 +623,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     currentSentence = next;
     if (next && !sentenceSuspended()) shownSentences.set(next.text, at);
     paintSentence();
-    mapAdapter.handle()?.setHighlight?.(wallHighlight());
     // Templates above paint synchronously, including the cold and failed-network paths.
     ensureSentences();
     // A touch's board follows the same beat, and its deadline is read on it too.
@@ -879,11 +846,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       widthPx: host.clientWidth || invitation?.measureWidth() || FIELD_DESIGN_WIDTH[composition],
       // With the width, the ground the field shows: the street names' padding follows it (mapview.ts labelPadding).
       heightPx: host.clientHeight || invitation?.measureHeight() || FIELD_DESIGN_HEIGHT[composition],
-      spanM: wallSpanM({ handheld: composition === 'handheld', wall, stops, isTram }),
-      // WP2: the frame. A chosen place frames its measured Kadar on a wall; the
-      // read-path default (placeSet false) keeps the whole-city window. Prikaz
+      spanM: wallSpanM({ handheld: composition === 'handheld', wall, place: placeForNearby(), stops, isTram }),
+      // WP2: the frame. The wall's place, the chosen one or the read-path default (Trg bana
+      // J. Jelačića), framed at its measured Kadar; Kadar "cijeli grad" keeps the whole-city
+      // window (owner, 5 Oct 2026: before, a wall with no chosen place never framed). Prikaz
       // shema, or ?prikaz=shema at boot, is the whole network without zoom.
-      place: wall.place, placeSet: wall.placeSet, frame: wall.frame, radiusM: wallRadiusM(),
+      place: placeForNearby(), placeSet: wall.placeSet, frame: wall.frame, radiusM: wallRadiusM(),
       view: mapMode === 'schema' ? 'schema' : view,
       vehiclesVisible: feedStateOf(snapshots['zet-rt']) !== 'down',
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${vetExternal('name', stop.name, 'row') ?? ''}` : s.paired.overviewTransport,
@@ -898,7 +866,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     container.inert=true;
     // The legend explains what the map draws, and nothing it does not (mapview.ts legendKinds).
     invitation?.setLegend((container.dataset.legend ?? 'tram bikes culture').split(' '));
-    mapAdapter.handle()?.setHighlight?.(wallHighlight());
     mapContainer = container;
     if (container.parentElement !== host) {
       // The box changed while the container sat outside the layout; resumeMap re-measures it.

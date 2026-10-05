@@ -12,7 +12,7 @@ import { parseFrame, parsePlaceInput, resolvePlace } from '../pairing/place';
 import { screenStop } from '../pairing/stops';
 import { areaName, CITY_AREA } from '../pairing/areas';
 import { districtOf } from '../feed/geo/districts';
-import { DEFAULT_FRAME_STOPS } from '../../shared/city/frame';
+import { DEFAULT_FRAME } from '../../shared/city/frame';
 import { areaSlugOf } from './admin';
 import { isSameOrigin, readCappedBody } from './pairing';
 import { logError } from '../log';
@@ -89,7 +89,7 @@ export const handleScreens: RouteHandler = async (request, env, _ctx, url) => {
     const placeInput = hasPlace ? parsePlaceInput(body.place) : null;
     const place = placeInput ? resolvePlace(placeInput) : null;
     if (hasPlace && !place) return json({ error: 'bad-request', field: 'place' }, 400);
-    const frame = body.frame === undefined ? DEFAULT_FRAME_STOPS : parseFrame(body.frame);
+    const frame = body.frame === undefined ? DEFAULT_FRAME : parseFrame(body.frame);
     if (frame === null) return json({ error: 'bad-request', field: 'frame' }, 400);
     const placeArea = place ? (districtOf(place.lon, place.lat) ?? CITY_AREA.slug) : CITY_AREA.slug;
     const area = areaSlugOf(body.area ?? placeArea);

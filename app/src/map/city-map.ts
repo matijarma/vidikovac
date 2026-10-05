@@ -579,8 +579,6 @@ export interface CityMapHandle {
   addControl?(control: MapControl, position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'): () => void;
   /** [lon, lat] to CSS px of the container on the current camera; null before the map exists. */
   project?(lonLat: readonly [number, number]): { x: number; y: number } | null;
-  /** Ambient emphasis never changes personal selection, camera or follow. */
-  setHighlight?(highlight: MapHighlight | null): void;
   setPresentationProfile?(profile: MapPresentation, symbolScale?: number): void;
   /** The inner city, the current selection, or the screen's stop. */
   fit?(target: 'city' | 'selection' | 'stop'): void;
@@ -821,10 +819,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let profile=MAP_PRESENTATIONS[options.presentationProfile??'desktop'];
   container.dataset.presentationProfile=options.presentationProfile??'desktop';
   let scale = options.symbolScale ?? profile.symbolScale;
-  let highlight: MapHighlight | null = null;
   let destroyCensus: (() => void) | null = null;
   let attribution: unknown = null;
-  const highlightData=()=>({type:'FeatureCollection',features:highlight?[{type:'Feature',properties:{id:highlight.id},geometry:highlight.geometry}]:[]});
   let points = options.points ?? [];
   let lines = options.lines ?? [];
   let disposed = false;
@@ -1693,8 +1689,6 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addSource(l.SOURCES.screenStop, geojson(l.screenStopGeoJson(stop)));
     created.addSource(l.SOURCES.outline, geojson(l.outlineToGeoJson(outline)));
     const palette = l.overlayPalette(theme);
-    created.addSource('ambient-highlight',geojson(highlightData()));
-    created.addLayer({id:'ambient-highlight-area',type:'fill',source:'ambient-highlight',filter:['==',['geometry-type'],'Polygon'],paint:{'fill-color':palette.selection,'fill-opacity':0.12}});
     overlays = l.overlayLayers(palette, overlayOptions(l, palette));
     focusedApplied = focusRouteId();
     tripApplied = tripShape();
@@ -1709,8 +1703,6 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // is never hidden by a pill crossing it.
       for (const layer of cityOverlays) created.addLayer(layer as unknown as Record<string,unknown>, layer.id === l.CITY_SELECTION ? undefined : l.LAYERS.vehicleDots);
     }
-    created.addLayer({id:'ambient-highlight-line',type:'line',source:'ambient-highlight',filter:['!=',['geometry-type'],'Point'],paint:{'line-color':palette.selection,'line-width':3*scale}});
-    created.addLayer({id:'ambient-highlight-point',type:'circle',source:'ambient-highlight',filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':18*scale,'circle-opacity':0,'circle-stroke-color':palette.selection,'circle-stroke-width':2*scale}});
     if (ghosts !== null) putGhosts(created, l);
     for (const entry of stageLayers) putStageLayer(created, l, entry);
     styled = true;
@@ -2095,18 +2087,6 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     map.setSprite?.(l.spriteUrl(next, deps.origin));
     applyOverlays();
     applyCityOverlays();
-    applyHighlightStyle();
-  }
-
-  function applyHighlightStyle(): void {
-    if(!map||!styled||!lib)return;
-    const color=lib.overlayPalette(theme).selection;
-    map.setPaintProperty('ambient-highlight-area','fill-color',color);
-    map.setPaintProperty('ambient-highlight-line','line-color',color);
-    map.setPaintProperty('ambient-highlight-line','line-width',3*scale);
-    map.setPaintProperty('ambient-highlight-point','circle-stroke-color',color);
-    map.setPaintProperty('ambient-highlight-point','circle-radius',18*scale);
-    map.setPaintProperty('ambient-highlight-point','circle-stroke-width',2*scale);
   }
 
   function setLocale(next: string): void {
@@ -2337,11 +2317,6 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       const at = map.project([lonLat[0], lonLat[1]]);
       return { x: at.x, y: at.y };
     },
-    setHighlight(next) {
-      if(JSON.stringify(next)===JSON.stringify(highlight))return;
-      highlight=next;
-      if(styled)setData('ambient-highlight',highlightData());
-    },
     setPresentationProfile(name,nextScale) {
       const next=MAP_PRESENTATIONS[name],size=nextScale??next.symbolScale;
       if(next===profile&&size===scale)return;
@@ -2352,7 +2327,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       if (changedProfile && map && lib) mountAttribution(map, lib);
       if(rescaled&&map&&styled&&lib)putOverlayImages(map,lib,true);
       lastPushedSignature='';
-      applyOverlays();applyCityOverlays();applyHighlightStyle();
+      applyOverlays();applyCityOverlays();
     },
     setClosuresVisible(visible) {
       closuresVisible = visible;

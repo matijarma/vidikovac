@@ -6,7 +6,7 @@
 // Bundler; wrangler bundles the JSON), the same way worker/pairing/stops.ts
 // imports worker/data/zet-stops.json.
 import routes from '../../app/src/data/zet-routes.json';
-import { FRAME_STOPS, type FrameStops } from '../../shared/city/frame';
+import { FRAME_CITY, isFrame, type Frame } from '../../shared/city/frame';
 import {
   DEFAULT_PLACE_STOP_ID,
   PLACE_ADDRESS_MAX,
@@ -27,9 +27,15 @@ export function isTramRoute(routeId: string): boolean {
   return ROUTE_TYPES[routeId]?.type === 0;
 }
 
-/** The frame a request or a 'screen-set' carried, or null when it is not 2, 4 or 6 (a stored legacy 8 included). */
-export function parseFrame(raw: unknown): FrameStops | null {
-  return (FRAME_STOPS as readonly unknown[]).includes(raw) ? (raw as FrameStops) : null;
+/** The frame a request or a 'screen-set' carried, or null when it is not 2, 4, 6 or 'city' (a legacy 8 included). */
+export function parseFrame(raw: unknown): Frame | null {
+  return isFrame(raw) ? raw : null;
+}
+
+/** The 'frame' meta as the record stores it: a number's digits, or the word for the whole city; null for anything else. */
+export function parseStoredFrame(meta: string | null | undefined): Frame | null {
+  if (!meta) return null;
+  return parseFrame(meta === FRAME_CITY ? meta : Number(meta));
 }
 
 /**
