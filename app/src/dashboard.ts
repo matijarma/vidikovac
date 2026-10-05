@@ -356,13 +356,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const main = element.querySelector<HTMLElement>('main')!;
   const regions = { status: region('status'), presentation: region('presentation'), banners: region('banners'), tabs: region('tabs') };
 
-  /** Active modules whose last fetch failed or whose snapshot is down or stale: the shell says it once. A stale
-   *  source is one that stopped answering while its last data stays on the page (status.stale says the same), so
-   *  the quiet line is the page's one stale mark beside the grey clocks (round 3, desktop F23). */
-  function sourcesDown(feed: ReturnType<typeof store.snapshot>): number {
-    return activeModules().filter((m) => feed.errors[m] !== undefined || feed.snapshots[m]?.status === 'down' || feed.snapshots[m]?.status === 'stale').length;
-  }
-
   /**
    * Whether "Na zaslon" can fire and why not when it cannot (D5). The client cannot
    * know it is the room's driver; `role === 'scanner'` is the proxy (B.10).
@@ -383,7 +376,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       secondsLeft: frozen ? 0 : session.secondsLeft(), totalSeconds, expiresAt: s.expiresAt, countdownHidden, paused,
       loading: feed.loading.size > 0, canShare: s.role === 'scanner' && !frozen && s.phase === 'live' && !shareDenied,
       label: deps.label ?? null, role: s.role, participants: s.participants, error, lastRefresh, mapFull,
-      notice, sourcesDown: sourcesDown(feed),
+      notice,
       surface: surface(), stopName: stop?.name ?? null,
       hasScreen: Boolean(s.screen),
       presentation: presentationState, presentationOpen,

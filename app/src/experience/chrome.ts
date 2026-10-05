@@ -60,8 +60,6 @@ export interface ShellState {
   mapFull: boolean;
   /** Shown in the banners row; the hidden live regions do the announcing, so it carries no role. */
   notice: ShellNotice | null;
-  /** Active modules whose last fetch failed or whose snapshot is down, said once in a quiet banner. */
-  sourcesDown: number;
   surface: Surface;
   /** The screen stop's name, for the cast reason line. */
   stopName: string | null;
@@ -251,9 +249,12 @@ export function sessionEndedMarkup(i18n: I18n, s: ShellState, scanUrl: string): 
 
 /**
  * Session-state banners, all in flow: no ticket, access, reconnecting, then
- * the one notice, the silent-sources count and paused. Nothing here overlays
- * the workspace. After the end the row is empty: the closing card stands in
- * the workspace itself (sessionEndedMarkup).
+ * the one notice and paused. Nothing here overlays the workspace. A source
+ * that stopped answering is no banner (owner, 5 Oct 2026: a whole row on
+ * every screen for "1 izvor ne odgovara"): each section's status badge and
+ * the grey clocks say it where it applies (experience/status.ts). After the
+ * end the row is empty: the closing card stands in the workspace itself
+ * (sessionEndedMarkup).
  */
 export function bannersMarkup(i18n: I18n, s: ShellState, scanUrl: string): string {
   const out: string[] = [];
@@ -270,9 +271,6 @@ export function bannersMarkup(i18n: I18n, s: ShellState, scanUrl: string): strin
   }
   if (s.notice && !s.frozen) {
     out.push(`<div class="banner banner-notice" data-key="notice" data-kind="${s.notice.kind}" data-testid="notice"><p class="banner-text">${escapeHtml(s.notice.text)}</p><button type="button" class="btn-quiet icon-btn banner-dismiss" data-action="dismiss-notice" aria-label="${escapeAttribute(i18n.t('common.dismiss'))}">${iconMarkup('x')}</button></div>`);
-  }
-  if (s.sourcesDown > 0 && !s.frozen) {
-    out.push(`<div class="banner banner-quiet" role="status" data-key="sources" data-testid="sources-down"><p class="banner-text">${escapeHtml(i18n.t('shell.sourcesDown', { count: s.sourcesDown }))}</p></div>`);
   }
   if (s.paused && !s.frozen) {
     const time = s.lastRefresh !== null ? zagrebTime(s.lastRefresh) : '';

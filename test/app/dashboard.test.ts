@@ -1342,27 +1342,18 @@ describe('the sticky header and notices in flow', () => {
     expect(pill().dataset.urgency).toBe('none');
     expect(pill().getAttribute('aria-label')).toBe(hr.session.expiredTitle);
   });
-  it('counts the silent sources once in a quiet status banner, with Croatian plurals', async () => {
+  it('a silent source raises no banner: the banners row stays empty while the sections carry their own badges (owner, 5 Oct 2026)', async () => {
     const failing = (...down: ModuleId[]) => (module: ModuleId): ModuleSnapshot => {
       if (down.includes(module)) throw new Error('down');
       return snapshotOf(module);
     };
-    const one = mount({ snapshot: failing('glasnik') });
-    one.session.join();
-    await flush();
-    const banner = one.root.querySelector<HTMLElement>('[data-testid=sources-down]');
-    expect(text(banner)).toBe('1 izvor ne odgovara.');
-    expect(banner?.getAttribute('role')).toBe('status');
-    one.handle.destroy();
     const two = mount({ snapshot: failing('glasnik', 'emsc') });
     two.session.join();
     await flush();
-    expect(text(two.root.querySelector('[data-testid=sources-down]'))).toBe('2 izvora ne odgovaraju.');
+    expect(two.root.querySelector('[data-testid=sources-down]')).toBeNull();
+    expect(two.root.querySelector('[data-testid=banners]')!.children).toHaveLength(0);
+    expect(text(two.root)).not.toContain('ne odgovara');
     two.handle.destroy();
-    const none = mount();
-    none.session.join();
-    await flush();
-    expect(none.root.querySelector('[data-testid=sources-down]')).toBeNull();
   });
   it('a layer change or a closed directory on the phone scrolls the document to the top; the desktop keeps its scroll', () => {
     const win = globalThis as { scrollTo?: (options: ScrollToOptions) => void };
@@ -2242,12 +2233,13 @@ describe('round 3, phone: draws that land on their own, the stale mark, the devi
     expect(frames).toHaveLength(0);
     handle.destroy();
   });
-  it('a stale source counts in the quiet line as one that stopped answering (desktop F23)', async () => {
+  it('a stale source raises no banner either; its section says "zastarjelo od" on its own (desktop F23, owner 5 Oct 2026)', async () => {
     const stale = (module: ModuleId): ModuleSnapshot => (module === 'glasnik' ? { ...snapshotOf(module), status: 'stale', staleSince: '2026-09-11T11:00:00Z' } : snapshotOf(module));
     const { root, session, handle } = mount({ snapshot: stale });
     session.join();
     await flush();
-    expect(text(root.querySelector('[data-testid=sources-down]'))).toBe('1 izvor ne odgovara.');
+    expect(root.querySelector('[data-testid=sources-down]')).toBeNull();
+    expect(root.querySelector('[data-testid=banners]')!.children).toHaveLength(0);
     handle.destroy();
   });
   it('the session sheet counts devices only once a second one is in the view (desktop F17)', () => {

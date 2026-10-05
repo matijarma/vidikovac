@@ -78,8 +78,6 @@
     "session": "Session",
     "remaining": "{time} left",
     "paused": "Refreshing is paused; the view holds the data as of {time}.",
-    "sourcesDown_one": "{count} source is not responding.",
-    "sourcesDown_other": "{count} sources are not responding.",
     "wordmarkLabel": "Kaj ima?, home page",
     "wordmarkSada": "Kaj ima?, back to Now",
     "skip": "Skip to content",
