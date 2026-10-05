@@ -44,6 +44,32 @@ describe('layers.css reflows the workspace by its own room', () => {
   });
 });
 
+// The irritation pass (5 Oct 2026): Vrijeme rebuilt mobile-first. The hourly steps are a grid that never scrolls
+// sideways (two rows of six in a phone's room, one row of twelve from 36rem); its section, which carries the id
+// wx-hourly as a class too, is never the grid; the title stands on a phone; the sun's disc has its own class.
+describe('layers.css: Vrijeme on a phone', () => {
+  const rule = (selector: string): string => new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{([^}]*)\\}`).exec(LAYERS)?.[1] ?? '';
+  it('lays the hourly steps out as a grid of six columns, twelve from 36rem, and never as a scrolling strip', () => {
+    expect(rule('ol.wx-hourly')).toContain('display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));');
+    const wide = /@container ws \(min-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS)?.[1] ?? '';
+    expect(wide).toContain('ol.wx-hourly { grid-template-columns: repeat(12, minmax(0, 1fr)); }');
+    expect(LAYERS).not.toMatch(/wx-hour[^{]*\{[^}]*overflow-x/);
+    // Only the list is the grid: a bare .wx-hourly rule would also lay out its section (head beside the cells).
+    expect(LAYERS).not.toMatch(/(^|\n|, )\.wx-hourly[ ,{]/);
+    expect(LAYERS).not.toMatch(/(^|\n|, )\.wx-warnings[ ,{]/);
+  });
+  it('shows the layer title on a phone and keeps the facts at three across in a phone-sized room', () => {
+    expect(rule('.wx-head .layer-title')).not.toMatch(/clip|position: absolute/);
+    const phone = /@container ws \(min-width: 17rem\) and \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS)?.[1] ?? '';
+    expect(phone).toContain('.wx-figures { grid-template-columns: repeat(3, auto); justify-content: space-between; }');
+    expect(phone).toContain('.wx-figures .wx-fact-value { flex-wrap: nowrap; white-space: nowrap; }');
+  });
+  it('fills the sun disc by its own class, never the figure root', () => {
+    expect(rule('.g-sun-disc')).toContain('fill: var(--tone-weather)');
+    expect(LAYERS).not.toMatch(/\n\.g-sun \{[^}]*fill/);
+  });
+});
+
 describe('links on tinted fills use the on-tint brand tone', () => {
   it('scopes --tone-text-brand to the on-tint token on the safety level and state notes', () => {
     expect(LAYERS).toMatch(/\.sf-level, \.ws \.state \{ --tone-text-brand: var\(--tone-text-brand-on-tint\); \}/);

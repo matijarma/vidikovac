@@ -7,6 +7,7 @@ import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schem
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { renderLayer } from '../../app/src/layers';
 import type { LayerContext } from '../../app/src/layers/types';
+import { hourCell } from '../../app/src/layers/zrak-i-nebo';
 
 const NOW = Date.parse('2026-09-22T10:20:00Z'); // Tue 12:20 in Zagreb
 const hr = createDefaultI18n('hr');
@@ -140,6 +141,58 @@ describe('Vrijeme: the hourly grid (R0, rebuilt in the irritation pass)', () => 
     expect([...cells].map((c) => text(c.querySelector('time')))).toEqual(['12:00', '14:00']);
     expect(renderLayer('zrak-i-nebo', ctx({})).querySelector('[data-testid=weather-hourly]')).toBeNull();
     expect(text(renderLayer('zrak-i-nebo', ctx({})).querySelector('#wx-hourly'))).toContain(hr.t('status.loading'));
+  });
+
+  it('draws each cell as hour, glyph, whole degrees and the chance of rain; a dry step draws no sky, only the slot', () => {
+    const cell = (data: Record<string, unknown>, i18n = hr): HTMLElement => {
+      const host = document.createElement('ol');
+      host.innerHTML = hourCell(i18n, item('dhmz-hourly', 'dhmz-hourly:gric:x', 'forecast', 'Zagreb-Grič', {
+        at: '2026-09-22T13:00:00Z', until: '2026-09-22T14:00:00Z', data: { station: 'gric', ...data },
+      }));
+      return host.firstElementChild as HTMLElement;
+    };
+    const glyph = (li: HTMLElement) => li.querySelector('svg.wx-hour-icon');
+    // Dry, 10 %: the hour, an empty glyph slot, the temperature, an empty rain line; nothing tinted.
+    const dry = cell({ temp: 18.4, prob: 10 });
+    expect([...dry.children].map((c) => c.className || c.tagName.toLowerCase())).toEqual(['time', 'wx-hour-icon', 'wx-hour-temp', 'wx-hour-rain']);
+    expect(text(dry.querySelector('time'))).toBe('15:00');
+    expect(dry.querySelector('time')!.getAttribute('datetime')).toBe('2026-09-22T13:00:00Z');
+    expect(glyph(dry)).toBeNull();
+    expect(dry.querySelector('span.wx-hour-icon')!.getAttribute('aria-hidden')).toBe('true');
+    expect(text(dry.querySelector('.wx-hour-temp'))).toBe('18°');
+    expect(text(dry.querySelector('.wx-hour-rain'))).toBe('');
+    expect(dry.hasAttribute('data-wet')).toBe(false);
+    // The worker's rain word picks the glyph and names it; a chance of 30 % or more tints the cell and is printed.
+    const light = cell({ temp: 16, prob: 45, precip: 0.4, weather: 'slaba kiša' });
+    expect(glyph(light)!.querySelector('use')!.getAttribute('href')).toBe('#icon-cloud-drizzle');
+    expect(glyph(light)!.getAttribute('aria-label')).toBe('slaba kiša');
+    expect(light.getAttribute('data-wet')).toBe('1');
+    expect(text(light.querySelector('.wx-hour-rain'))).toBe('vjerojatnost oborine 45 %');
+    const heavy = cell({ temp: 16, prob: 90, precip: 5, weather: 'jaka kiša' });
+    expect(glyph(heavy)!.querySelector('use')!.getAttribute('href')).toBe('#icon-cloud-rain');
+    expect(glyph(heavy)!.getAttribute('aria-label')).toBe('jaka kiša');
+    // Wet near freezing has no word (it may be snow): the plain drops, named as precipitation.
+    const cold = cell({ temp: -0.6, prob: 20, precip: 0.5 });
+    expect(glyph(cold)!.querySelector('use')!.getAttribute('href')).toBe('#icon-droplets');
+    expect(glyph(cold)!.getAttribute('aria-label')).toBe('oborine');
+    expect(text(cold.querySelector('.wx-hour-temp'))).toBe('−1°');
+    expect(cold.hasAttribute('data-wet')).toBe(false);
+    // English words for the same cell.
+    const en = cell({ temp: 16, prob: 45, weather: 'kiša' }, createDefaultI18n('en'));
+    expect(glyph(en)!.getAttribute('aria-label')).toBe('rain');
+    expect(text(en.querySelector('.wx-hour-rain'))).toBe('chance of precipitation 45 %');
+    // A grid with no wet step and no chance to print leaves both slots out: the hour over the temperature.
+    const host = document.createElement('ol');
+    host.innerHTML = hourCell(hr, item('dhmz-hourly', 'dhmz-hourly:gric:y', 'forecast', 'Zagreb-Grič', { at: '2026-09-22T13:00:00Z', until: '2026-09-22T14:00:00Z', data: { station: 'gric', temp: 21, prob: 0 } }), false);
+    expect([...host.firstElementChild!.children].map((c) => c.className || c.tagName.toLowerCase())).toEqual(['time', 'wx-hour-temp']);
+  });
+
+  it('draws the rain slots in every cell once any step of the grid needs them, and none on a dry day', () => {
+    const slots = (snapshot: ModuleSnapshot) => [...renderLayer('zrak-i-nebo', ctx({ 'dhmz-hourly': snapshot })).querySelectorAll('[data-testid=weather-hourly] > li.wx-hour')]
+      .map((cell) => [cell.querySelectorAll('.wx-hour-icon').length, cell.querySelectorAll('.wx-hour-rain').length].join(''));
+    expect(new Set(slots(HOURLY))).toEqual(new Set(['11']));
+    const dry = snap('dhmz-hourly', Array.from({ length: 6 }, (_, i) => step('gric', i, 15 + i, 5)));
+    expect(new Set(slots(dry))).toEqual(new Set(['00']));
   });
 
   it('R0 review: starts the hourly grid at the current step on an exact hour boundary', () => {
