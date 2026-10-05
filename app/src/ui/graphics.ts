@@ -88,8 +88,11 @@ export function rangeBar(o: RangeBarOptions): string {
     const nx = x(o.now);
     body += `<line class="g-marker" x1="${fmt(nx)}" y1="${y - 12}" x2="${fmt(nx)}" y2="${y + 8}"/><circle class="g-dot" cx="${fmt(nx)}" cy="${y}" r="5"/>`;
     if (o.nowLabel) {
+      // The label's own anchor moves with the marker: its start edge at the figure's start, its centre in the middle,
+      // its end edge at the figure's end. So it always covers the marker and never spills past either side, at any
+      // width and any text size (the label is HTML in rem, the figure scales).
       const pct = Math.min(100, Math.max(0, (nx / W) * 100));
-      nowLabel = `<span class="g-label-now" style="left:${fmt(pct)}%">${escapeHtml(o.nowLabel)}</span>`;
+      nowLabel = `<span class="g-label-now" style="left:${fmt(pct)}%;transform:translateX(-${fmt(pct)}%)">${escapeHtml(o.nowLabel)}</span>`;
     }
   }
   const figure = figureSvg('g-range', `0 0 ${W} 60`, body, o.label);
@@ -139,7 +142,7 @@ export function sunPath(o: SunPathOptions): string {
   let body = `<path class="g-path" d="M ${cx - rx} ${hy} A ${rx} ${ry} 0 0 1 ${cx + rx} ${hy}"/>`;
   body += `<line class="g-horizon" x1="8" y1="${hy}" x2="${W - 8}" y2="${hy}"/>`;
   body += `<line class="g-tick" x1="${cx}" y1="${hy - ry - 4}" x2="${cx}" y2="${hy - ry + 4}"/>`;
-  body += `<circle class="g-sun-halo" cx="${fmt(sx)}" cy="${fmt(sy)}" r="12"/><circle class="g-sun${up ? '' : ' g-sun-down'}" cx="${fmt(sx)}" cy="${fmt(sy)}" r="7"/>`;
+  body += `<circle class="g-sun-halo" cx="${fmt(sx)}" cy="${fmt(sy)}" r="12"/><circle class="g-sun-disc${up ? '' : ' g-sun-down'}" cx="${fmt(sx)}" cy="${fmt(sy)}" r="7"/>`;
   const figure = figureSvg('g-sun', `0 0 ${W} 112`, body, o.label);
   const labels = htmlLabels(`<span>${escapeHtml(o.sunriseLabel)}</span><span>${escapeHtml(o.noonLabel)}</span><span>${escapeHtml(o.sunsetLabel)}</span>`);
   return wrap('sun', `${Math.round(o.sunrise / 60000)}|${Math.round(o.sunset / 60000)}|${Math.round(o.now / 60000)}`, figure + labels);

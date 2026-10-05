@@ -179,10 +179,16 @@
     "onFigure": "na slici {shown} od {total}",
     "magnitude": "M {mag}",
     "depth": "dubina {depth} km",
-    "reference": "Mjerenja, sunce, zrak i bilten Save",
+    "reference": "Više: zrak, Sava, potresi",
     "hourly": "Po satima",
     "bio": "Biometeorološka prognoza",
-    "waves": "Toplinski i hladni valovi"
+    "waves": "Toplinski i hladni valovi",
+    "hourChance": "vjerojatnost oborine",
+    "hourWet": "oborine",
+    "radar": "Radar oborina",
+    "radarAlt": "Radarska slika oborina DHMZ-a oko Zagreba, oko 120 km u promjeru",
+    "radarCaption": "Izvor: DHMZ · snimljeno u {time}",
+    "radarRainNear": "Radar pokazuje kišu u blizini Zagreba."
   },
   "safety": {
     "hitnoSame": "Ista stranica bez skeniranja: Sigurnost",

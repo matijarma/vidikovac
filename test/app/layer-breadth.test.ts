@@ -95,7 +95,7 @@ describe('Sigurnost: HAK road states and the planned cuts (R0)', () => {
   });
 });
 
-describe('Vrijeme: the hourly strip (R0)', () => {
+describe('Vrijeme: the hourly grid (R0, rebuilt in the irritation pass)', () => {
   const step = (station: 'gric' | 'maksimir', hour: number, temp: number | null, prob: number): FeedItem => {
     const at = new Date(Date.parse('2026-09-22T09:00:00Z') + hour * 3_600_000).toISOString();
     return item('dhmz-hourly', `dhmz-hourly:${station}:${at}`, 'forecast', station === 'gric' ? 'Zagreb-Grič' : 'Zagreb-Maksimir', {
@@ -108,11 +108,12 @@ describe('Vrijeme: the hourly strip (R0)', () => {
     ...Array.from({ length: 20 }, (_, i) => step('maksimir', i - 2, 30, 90)),
   ]);
 
-  it('DR1 review: the scrolling hourly list has a named keyboard focus target', () => {
+  it('the hourly grid is a named list that does not scroll, so it needs no focus stop of its own (irritation pass; DR1 gave the old strip one)', () => {
     const section = renderLayer('zrak-i-nebo', ctx({ 'dhmz-hourly': HOURLY }));
-    const strip = section.querySelector<HTMLElement>('[data-testid=weather-hourly]')!;
-    expect(strip.tabIndex).toBe(0);
-    expect(strip.getAttribute('aria-labelledby')).toBe('wx-hourly-title');
+    const grid = section.querySelector<HTMLElement>('ol[data-testid=weather-hourly]')!;
+    expect(grid.classList.contains('wx-hourly')).toBe(true);
+    expect(grid.hasAttribute('tabindex')).toBe(false);
+    expect(grid.getAttribute('aria-labelledby')).toBe('wx-hourly-title');
   });
 
   it('prints twelve cells from the current hour, Grič before Maksimir, the chance of rain from 30 %', () => {
@@ -121,11 +122,14 @@ describe('Vrijeme: the hourly strip (R0)', () => {
     expect(cells).toHaveLength(12);
     // 12:20 now: the step of the current hour (12:00, begun at most an hour ago) is the first.
     expect(text(cells[0]!.querySelector('time'))).toBe('12:00');
-    expect(text(cells[0]!.querySelector('.wx-hour-temp'))).toBe('17 °C');
-    expect(text(section.querySelector('[data-testid=weather-hourly]'))).not.toContain('30 °C'); // Maksimir's steps are not used
-    const wet = [...cells].find((c) => c.querySelector('.wx-hour-rain'));
-    expect(text(wet!.querySelector('.wx-hour-rain'))).toBe('vjerojatnost 70 %');
-    expect(section.querySelectorAll('.wx-hour-rain')).toHaveLength(1);
+    expect(text(cells[0]!.querySelector('.wx-hour-temp'))).toBe('17°');
+    expect(text(section.querySelector('[data-testid=weather-hourly]'))).not.toContain('30°'); // Maksimir's steps are not used
+    // Every cell keeps its rain line so the rows line up; only the step at 70 % says anything in it.
+    const wet = [...cells].filter((c) => c.getAttribute('data-wet') === '1');
+    expect(wet).toHaveLength(1);
+    expect(text(wet[0]!.querySelector('.wx-hour-rain'))).toBe('vjerojatnost oborine 70 %');
+    expect(wet[0]!.querySelector('.wx-hour-rain .visually-hidden')?.textContent).toBe('vjerojatnost oborine ');
+    expect([...cells].filter((c) => text(c.querySelector('.wx-hour-rain')) !== '')).toHaveLength(1);
     expect(text(section.querySelector('#wx-hourly-title'))).toContain('Po satima');
     expect(text(section.querySelector('.provenance'))).toContain('Izvor: dhmz-hourly');
   });
@@ -138,7 +142,7 @@ describe('Vrijeme: the hourly strip (R0)', () => {
     expect(text(renderLayer('zrak-i-nebo', ctx({})).querySelector('#wx-hourly'))).toContain(hr.t('status.loading'));
   });
 
-  it('R0 review: starts the hourly strip at the current step on an exact hour boundary', () => {
+  it('R0 review: starts the hourly grid at the current step on an exact hour boundary', () => {
     const section = renderLayer('zrak-i-nebo', ctx({ 'dhmz-hourly': HOURLY }, { now: Date.parse('2026-09-22T10:00:00Z') }));
     const cells = section.querySelectorAll('[data-testid=weather-hourly] > li.wx-hour');
     expect(cells).toHaveLength(12);

@@ -111,8 +111,9 @@ describe('layer registry', () => {
     expect(LAYER_MODULES['uprava-i-pravo']).toEqual(['glasnik', 'dogadanja']);
     expect(LAYER_MODULES['u-pokretu']).toEqual(['zet-rt', 'prometnice', 'dogadanja']);
     expect(LAYER_MODULES['zrak-i-nebo']).toContain('dhmz-now');
-    // R0: Vrijeme's hourly strip reads DHMZ's hourly steps; Sigurnost lists HAK's road states and the planned cuts.
-    expect(LAYER_MODULES['zrak-i-nebo']).toEqual(['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly', 'dhmz-bio', 'dhmz-waves']);
+    // R0: Vrijeme's hourly grid reads DHMZ's hourly steps, and since the irritation pass its radar inset DHMZ's radar;
+    // Sigurnost lists HAK's road states and the planned cuts.
+    expect(LAYER_MODULES['zrak-i-nebo']).toEqual(['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly', 'dhmz-bio', 'dhmz-waves', 'dhmz-radar']);
     expect(LAYER_MODULES['grad-sada']).toEqual(expect.arrayContaining(['dhmz-radar', 'dhmz-bio', 'dhmz-waves']));
     expect(LAYER_MODULES.sigurnost).toEqual(['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo', 'hak', 'prekidi']);
     expect(ALL_LAYER_MODULES).toContain('glasnik');
@@ -716,8 +717,9 @@ describe('Vrijeme: observation, today, sun, warnings and quakes (T3.1)', () => {
     expect([...section.querySelectorAll('svg.g')].map((svg) => svg.getAttribute('class'))).toEqual(['g g-range', 'g g-sun', 'g g-radar']);
   });
 
-  it('reads wind, humidity and pressure as three labelled facts on one strip, the wind with an arrow that flies with it', () => {
-    const facts = weather().querySelector('.wx-reference .wx-figures')!;
+  it('reads wind, humidity and pressure as three labelled facts on one row under the temperature, the wind with an arrow that flies with it', () => {
+    const facts = weather().querySelector('#wx-now .wx-figures')!;
+    expect(facts.closest('details'), 'the facts are on the page, not behind "Više"').toBeNull();
     expect(facts.querySelectorAll('.wx-fact')).toHaveLength(3);
     expect(text(facts)).toContain('hPa');
     expect(text(facts)).toContain('1013 hPa');
@@ -732,7 +734,7 @@ describe('Vrijeme: observation, today, sun, warnings and quakes (T3.1)', () => {
   });
 
   it('says "bez vjetra" with no arrow when the station reads zero', () => {
-    const facts = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-now': CALM } }).querySelector('.wx-reference .wx-figures')!;
+    const facts = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-now': CALM } }).querySelector('#wx-now .wx-figures')!;
     expect(text(facts.querySelector('[data-testid=wind-text]'))).toBe('bez vjetra');
     expect(facts.querySelector('.wx-arrow')).toBeNull();
   });

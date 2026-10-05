@@ -76,7 +76,8 @@ describe('the layers that carry them', () => {
     expect(section.querySelector('#cv-consultations h3')!.textContent).toBe(jump.textContent);
   });
   it('keeps the Croatian words', () => {
-    expect(hr.weather.reference).toBe('Mjerenja, sunce, zrak i bilten Save');
+    // The irritation pass (5 Oct 2026): the disclosure is "Više" and says what it holds; the facts and the sun are on the page.
+    expect(hr.weather.reference).toBe('Više: zrak, Sava, potresi');
     expect(hr.civic.consultations).toBe('Nacionalna savjetovanja');
   });
 });

@@ -31,8 +31,9 @@ export const LAYER_MODULES: Record<LayerId, ModuleId[]> = {
   'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice', 'emsc', 'dogadanja', 'glasnik', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi', 'dhmz-radar', 'dhmz-bio', 'dhmz-waves'],
   // Transport notices (ZET's two feeds) ride in the dogadanja module.
   'u-pokretu': ['zet-rt', 'prometnice', 'dogadanja'],
-  // DHMZ's hourly steps are Vrijeme's strip (R0); the bio forecast and the waves its two sections (R3).
-  'zrak-i-nebo': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly', 'dhmz-bio', 'dhmz-waves'],
+  // DHMZ's hourly steps are Vrijeme's grid (R0); the bio forecast and the waves its two sections (R3); the radar its
+  // inset around Zagreb (irritation pass, 5 Oct 2026).
+  'zrak-i-nebo': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly', 'dhmz-bio', 'dhmz-waves', 'dhmz-radar'],
   // HAK's road states and the planned cuts are listed in Sigurnost (R0).
   sigurnost: ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo', 'hak', 'prekidi'],
   // dogadanja is one module, session tier, shared by both layers below: each
