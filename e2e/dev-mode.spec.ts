@@ -65,7 +65,9 @@ async function devGeometry(page: Page, s: Surface): Promise<Geometry> {
       line.remove();
       return Math.round(y * 100) / 100;
     };
-    const measure = () => ({ head: box(q(head)), first: box(q(first)), still: [...document.querySelectorAll(still)].map(box) });
+    // The desk's zero-height spacer absorbs the mark's column (5 Oct 2026: the mark has its own grid area), so only
+    // boxes with a height are compared: the controls at the far end and the tab bar.
+    const measure = () => ({ head: box(q(head)), first: box(q(first)), still: [...document.querySelectorAll(still)].map(box).filter((b) => b.height > 0) });
     const mark = q('#dev-mark')!;
     const word = q(wordmark)!;
     const text = word.querySelector('.ki-wordmark-text') ?? word;

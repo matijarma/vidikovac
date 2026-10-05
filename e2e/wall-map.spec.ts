@@ -141,9 +141,13 @@ test('the framed wall: the measured Kadar, buses, whole numbers, counted BAJS di
 
   // 5. The legend: the entries the map draws (round 2 F9: the three stations of WALL_BIKES are a counted disc, an
   // empty station's dot and a blank disc, so the tram line, the counted disc and the empty station's dot show).
+  // From 22:00 to 06:00 Zagreb time the on-duty pharmacy's ring is on the map and named in the legend (owner,
+  // 5 Oct 2026; kiosk/mapview.ts pharmacyHours), so a run at night sees a fourth entry.
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: 'Europe/Zagreb' }).format(new Date()));
+  const expectedLegend = hour >= 22 || hour < 6 ? ['tram', 'bikes', 'bikesEmpty', 'pharmacy'] : ['tram', 'bikes', 'bikesEmpty'];
   const legend = page.locator('.k-map-legend');
-  await expect(legend.locator('span:not([hidden])')).toHaveCount(3);
-  expect(await legend.locator('span:not([hidden])').evaluateAll((els) => els.map((el) => el.getAttribute('data-legend')))).toEqual(['tram', 'bikes', 'bikesEmpty']);
+  await expect(legend.locator('span:not([hidden])')).toHaveCount(expectedLegend.length);
+  expect(await legend.locator('span:not([hidden])').evaluateAll((els) => els.map((el) => el.getAttribute('data-legend')))).toEqual(expectedLegend);
   expect(await legend.innerText()).not.toContain('?');
 
   // 7. The own name always drawn (decision 19); no other name over a pill; a covered BAJS number is a pill passing.
