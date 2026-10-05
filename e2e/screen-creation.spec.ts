@@ -32,7 +32,8 @@ test.describe('real self-service screen', () => {
     const wallHasFocus = () => page.evaluate(() => document.activeElement?.classList.contains('kiosk') ?? false);
     await expect.poll(wallHasFocus, { message: 'the wall takes the focus when the invitation mounts' }).toBe(true);
     await expect(shell).toHaveAttribute('tabindex', '-1');
-    // Postavke open only on a press held past LONG_PRESS_MS (800 ms) on the brand.
+    // Postavke open only on a press held past LONG_PRESS_MS (800 ms) on the brand. This first press arms the wake
+    // lock and nothing else: fullscreen is a double tap since 5 Oct 2026, so the page keeps its 1366 x 768 window.
     await page.getByTestId('kiosk-brand').click({ delay: 900 });
     const panel = page.getByTestId('kiosk-settings-panel');
     await expect(panel).toBeVisible();

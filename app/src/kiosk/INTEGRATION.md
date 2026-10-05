@@ -234,8 +234,16 @@ brand or anywhere else on a screen-sized wall; a shorter press or a finger that
 moves more than 12 px opens nothing (`bindLongPress` in `kiosk/settings.ts`,
 bound once on the brand and once on the kiosk root with `accept: wallPressable`
 and `keys: false`, both timed through the kiosk's own timer seam so a test's
-`tick()` drives them; the press is never stopped, so the first-tap fullscreen
-and wake-lock listener still hears it). While the touch answers, the touch's
+`tick()` drives them; the press is never stopped, so the first-tap wake-lock
+listener and the double tap still hear it). Fullscreen is a double tap
+(`bindDoubleTap` in `kiosk/settings.ts`, decision 4 of 5 Oct 2026): two
+releases within `DOUBLE_TAP_MS` (400 ms) and `DOUBLE_TAP_SLOP_PX` (24 px),
+judged by the events' own timestamps, each a single pointer held shorter than
+`LONG_PRESS_MS`, anywhere on a screen-sized wall but a control or an open
+panel; `deps.requestFullscreen` (default `requestFullscreen()` on the
+document element) enters it and the next double tap leaves it through
+`deps.exitFullscreen` while `document.fullscreenElement` is set. The first
+`pointerdown` arms only the wake lock; a handheld gets neither. While the touch answers, the touch's
 own targets (a stop or pharmacy ring on the map, a row of
 `[data-testid=nearby-rows]`, the footer's `strip-pharmacy`) keep their tap and
 a press held on them opens no settings. Enter or Space open the panel at once,

@@ -572,8 +572,12 @@ Administrativni API `/api/admin/beacons` služi postavama i opozivu uz
 provjerenu Access autorizaciju. Samoposluga `/api/screens` koristi isti
 BeaconDO/RoomDO protokol. Nema zasebne demonstracijske sesije.
 
-Za prikaz preko cijelog zaslona upotrijebiti mogućnost preglednika. U postavkama
-uređaja osigurati da se zaslon ne gasi tijekom rada. Automatsko pokretanje
+Za prikaz preko cijelog zaslona dvaput brzo dodirnuti zaslon bilo gdje osim na
+gumbu ili otvorenoj ploči (dva dodira unutar 0,4 s i 24 piksela); sljedeći
+dvostruki dodir vraća prozor. Može se upotrijebiti i mogućnost preglednika.
+Jedan dodir ne mijenja prikaz: prvi dodir samo traži od preglednika da ne
+gasi zaslon, a telefon ne traži ni to. U postavkama uređaja svejedno
+osigurati da se zaslon ne gasi tijekom rada. Automatsko pokretanje
 na ciljnom Raspberry Pi ili doniranom uređaju provjerava se u pilotu; ova
 verzija ne tvrdi da su fizičke postave već testirane.
 

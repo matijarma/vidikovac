@@ -17,7 +17,7 @@ import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
 import { SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS, SETTINGS_SEND_DELAY_MS } from '../../app/src/kiosk/settings';
-import { LONG_PRESS_BEAT_MS, LONG_PRESS_MS } from '../../app/src/kiosk/constants';
+import { DOUBLE_TAP_MS, LONG_PRESS_BEAT_MS, LONG_PRESS_MS } from '../../app/src/kiosk/constants';
 import { RHYTHM_STORAGE_KEY, type Rhythm } from '../../app/src/kiosk/prefs';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
 import { cityWindowView, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
@@ -124,6 +124,7 @@ function mount(opts: MountOptions = {}) {
   const loadLastRun = opts.loadLastRun ?? vi.fn(async () => null);
   const fetchSentences = opts.fetchSentences ?? vi.fn(async () => []);
   const requestFullscreen = vi.fn(async () => {});
+  const exitFullscreen = vi.fn(async () => {});
   const requestWakeLock = vi.fn(async () => {});
   /** The theme-or-resize listener the controller registers; a test fires it after mutating its viewport object. */
   let repaint: (() => void) | null = null;
@@ -145,12 +146,12 @@ function mount(opts: MountOptions = {}) {
     },
     setInterval: (fn: () => void, ms: number) => { const t: Timer = { fn, ms, cleared: false }; timers.push(t); return t; },
     clearInterval: (h: unknown) => { (h as Timer).cleared = true; },
-    requestFullscreen, requestWakeLock,
+    requestFullscreen, exitFullscreen, requestWakeLock,
   });
   /** The timers mountKiosk arms synchronously (the 1 s and 20 s ticks); the teaser poll arms itself only after the first load settles. */
   const armedAtMount = new Set(timers);
   return {
-    root, handle, beacon, timers, raw, sessions, fetchData, fetchSentences, createScreen, loadStops, loadStreets, loadLastRun, requestFullscreen, requestWakeLock,
+    root, handle, beacon, timers, raw, sessions, fetchData, fetchSentences, createScreen, loadStops, loadStreets, loadLastRun, requestFullscreen, exitFullscreen, requestWakeLock,
     theme: themeFake.theme, themeCalls: themeFake.calls, themeListenerCount: themeFake.listenerCount,
     goOffline: () => { beaconStatus = 'offline'; },
     get handlers() { return handlers!; },
@@ -2461,12 +2462,53 @@ describe('alerts, polling, the first tap and disposal', () => {
     k.handlers.onStatus('live');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
-  it('asks for fullscreen and a wake lock on the first tap only', () => {
-    const k = mount({ stored: STORED });
-    q(k.root, '[data-testid=kiosk]')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    q(k.root, '[data-testid=kiosk]')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    expect(k.requestFullscreen).toHaveBeenCalledTimes(1);
-    expect(k.requestWakeLock).toHaveBeenCalledTimes(1);
+  // Decision 4 (5 Oct 2026): fullscreen is a double tap anywhere on the wall, and the next one leaves it; the
+  // wake lock still arms on the first touch.
+  describe('the first tap and the double tap', () => {
+    /** A tap on `el` at `at` ms by the events' own clock, `x` px across: one pointer down and up again 60 ms later. */
+    const tap = (el: Element, at: number, x = 500, y = 400): void => {
+      for (const [type, stamp] of [['pointerdown', at], ['pointerup', at + 60]] as const) {
+        const event = new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, clientX: x, clientY: y });
+        Object.defineProperty(event, 'timeStamp', { value: stamp, configurable: true });
+        el.dispatchEvent(event);
+      }
+    };
+    it('one tap arms the wake lock only; two taps within 400 ms ask for fullscreen once', () => {
+      const k = mount({ stored: STORED });
+      const wall = q(k.root, '[data-testid=kiosk]')!;
+      tap(wall, 10_000);
+      expect(k.requestWakeLock).toHaveBeenCalledTimes(1);
+      expect(k.requestFullscreen).not.toHaveBeenCalled();
+      // A second tap after the window starts a new pair instead.
+      tap(wall, 10_000 + DOUBLE_TAP_MS + 100);
+      expect(k.requestFullscreen).not.toHaveBeenCalled();
+      tap(wall, 10_000 + DOUBLE_TAP_MS + 300);
+      expect(k.requestFullscreen).toHaveBeenCalledTimes(1);
+      expect(k.exitFullscreen).not.toHaveBeenCalled();
+      expect(k.requestWakeLock).toHaveBeenCalledTimes(1);
+      k.handle.destroy();
+    });
+    it('a double tap while the page is fullscreen leaves it; two taps far apart or on a control are no double tap', () => {
+      const k = mount({ stored: STORED });
+      const wall = q(k.root, '[data-testid=kiosk]')!;
+      tap(wall, 20_000, 100);
+      tap(wall, 20_200, 400);
+      expect(k.requestFullscreen).not.toHaveBeenCalled();
+      const brandButton = q(k.root, '[data-testid=kiosk-brand]')!;
+      tap(brandButton, 30_000);
+      tap(brandButton, 30_200);
+      expect(k.requestFullscreen).not.toHaveBeenCalled();
+      Object.defineProperty(document, 'fullscreenElement', { value: document.documentElement, configurable: true });
+      try {
+        tap(wall, 40_000);
+        tap(wall, 40_250);
+        expect(k.exitFullscreen).toHaveBeenCalledTimes(1);
+        expect(k.requestFullscreen).not.toHaveBeenCalled();
+      } finally {
+        delete (document as { fullscreenElement?: unknown }).fullscreenElement;
+      }
+      k.handle.destroy();
+    });
   });
   it('speaks English when the page does, panels included', async () => {
     const k = mount({ stored: STORED, locale: 'en', i18n:createDefaultI18n('en') });
@@ -2988,6 +3030,12 @@ describe('handheld: the kiosk on a phone', () => {
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('handheld');
     q(k.root, '[data-testid=kiosk]')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     q(k.root, '[data-testid=kiosk]')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    // A double tap is no fullscreen either: the phone keeps the browser's own gestures.
+    for (const [type, stamp] of [['pointerdown', 1_000], ['pointerup', 1_050], ['pointerdown', 1_200], ['pointerup', 1_250]] as const) {
+      const event = new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, clientX: 100, clientY: 100 });
+      Object.defineProperty(event, 'timeStamp', { value: stamp, configurable: true });
+      q(k.root, '[data-testid=kiosk]')!.dispatchEvent(event);
+    }
     expect(k.requestFullscreen).not.toHaveBeenCalled();
     expect(k.requestWakeLock).not.toHaveBeenCalled();
     k.handle.destroy();

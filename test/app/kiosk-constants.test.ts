@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
-import { LONG_PRESS_MS } from '../../app/src/kiosk/constants';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX, LONG_PRESS_MS } from '../../app/src/kiosk/constants';
 
 const APP = join(import.meta.dirname, '..', '..', 'app', 'src');
 const read = (rel: string): string => readFileSync(join(APP, rel), 'utf8');
@@ -13,6 +13,11 @@ const read = (rel: string): string => readFileSync(join(APP, rel), 'utf8');
 describe('lane S constants', () => {
   it('opens settings after an 800 ms press', () => {
     expect(LONG_PRESS_MS).toBe(800);
+  });
+
+  it('toggles fullscreen on two taps within 400 ms and 24 px, each shorter than the settings press', () => {
+    expect([DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX]).toEqual([400, 24]);
+    expect(DOUBLE_TAP_MS).toBeLessThan(LONG_PRESS_MS);
   });
 
   it('declares the 40 px and 28 px legibility floors on the kiosk sheet’s :root', () => {

@@ -12,14 +12,14 @@ import { SCREEN_SET_MIN_MS } from '../../worker/protocol';
 import { FRAME_RADIUS_M, frameRadiusM, frameSpanM, frameStopsFrom } from '../../shared/city/frame';
 import type { ScreenPlace } from '../../shared/city/place';
 import type { ScreenSetInput } from '../../app/src/beacon';
-import { LONG_PRESS_MS } from '../../app/src/kiosk/constants';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX, LONG_PRESS_MS } from '../../app/src/kiosk/constants';
 import { FIELD_SPAN_M, HANDHELD_SPAN_M } from '../../app/src/kiosk/mapview';
 import {
   DEFAULT_RHYTHM, DEFAULT_WALL_VIEW, nextInCycle, readRhythm, readView, RHYTHM_STORAGE_KEY, VIEW_STORAGE_KEY, writeRhythm, writeView,
   type Rhythm, type WallView,
 } from '../../app/src/kiosk/prefs';
 import {
-  bindLongPress, LONG_PRESS_SLOP_PX, mountSettings, placeText, samePlace, SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS, SETTINGS_SEND_DELAY_MS,
+  bindDoubleTap, bindLongPress, LONG_PRESS_SLOP_PX, mountSettings, placeText, samePlace, SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS, SETTINGS_SEND_DELAY_MS,
   wallPlaceOf, wallSpanM, type PlaceFieldOptions, type SettingsScreen,
 } from '../../app/src/kiosk/settings';
 import { kioskStrings } from '../../app/src/kiosk/strings';
@@ -774,6 +774,89 @@ describe('the long press on the brand', () => {
       stamped(b.button, 'pointerup', 5_000 + LONG_PRESS_MS * 2);
       expect(b.open).not.toHaveBeenCalled();
     });
+  });
+});
+
+// Decision 4 of the irritation pass (5 Oct 2026): fullscreen on a double tap, judged like the long press by the
+// events' own timestamps.
+describe('the double tap (bindDoubleTap)', () => {
+  const liftAll = (): void => { for (const id of [0, 1, 2, 3]) document.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: id })); };
+  function wall(accept?: (event: PointerEvent) => boolean) {
+    liftAll();
+    const element = document.createElement('div');
+    document.body.replaceChildren(element);
+    const onDoubleTap = vi.fn();
+    const unbind = bindDoubleTap(element, { within: DOUBLE_TAP_MS, slop: DOUBLE_TAP_SLOP_PX, onDoubleTap, ...(accept ? { accept } : {}) });
+    const event = (type: string, at: number, x: number, y = 300, pointerId = 1): void => {
+      const e = new PointerEvent(type, { bubbles: true, cancelable: true, pointerId, clientX: x, clientY: y });
+      Object.defineProperty(e, 'timeStamp', { value: at, configurable: true });
+      element.dispatchEvent(e);
+    };
+    /** One pointer down at `at` and up `held` ms later, `moved` px to the right of where it came down. */
+    const tap = (at: number, x = 200, held = 80, moved = 0): void => { event('pointerdown', at, x); event('pointerup', at + held, x + moved); };
+    return { element, onDoubleTap, unbind, event, tap };
+  }
+
+  it('waits 400 ms and 24 px by default and calls once for two taps inside both; a third tap starts a new pair', () => {
+    expect([DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX]).toEqual([400, 24]);
+    const w = wall();
+    w.tap(1_000);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(1_000 + DOUBLE_TAP_MS, 200 + DOUBLE_TAP_SLOP_PX); // the releases exactly 400 ms and 24 px apart
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(1);
+    w.tap(1_600);
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(1);
+    w.tap(1_800);
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(2);
+  });
+
+  it('two taps too far apart in time or space are no pair, and the later one starts the next', () => {
+    const w = wall();
+    w.tap(1_000);
+    w.tap(1_000 + DOUBLE_TAP_MS + 1);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(1_000 + DOUBLE_TAP_MS + 101, 200 + DOUBLE_TAP_SLOP_PX + 1);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(1_000 + DOUBLE_TAP_MS + 300, 200 + DOUBLE_TAP_SLOP_PX + 1);
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(1);
+  });
+
+  it('a press held for Postavke or a finger that slides is no tap, and forgets the first one', () => {
+    const w = wall();
+    w.tap(1_000);
+    w.tap(1_100, 200, LONG_PRESS_MS);
+    w.tap(1_100 + LONG_PRESS_MS + 100);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(5_000);
+    w.tap(5_150, 200, 80, DOUBLE_TAP_SLOP_PX + 6);
+    w.tap(5_300, 230);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+  });
+
+  it('a second finger, a cancelled pointer or a refused press ends the pair; unbound, nothing counts', () => {
+    const w = wall((event) => !(event.clientX > 900));
+    w.tap(1_000);
+    // A second finger comes down while the first tap's pair is open.
+    w.event('pointerdown', 1_100, 200, 300, 1);
+    w.event('pointerdown', 1_110, 600, 300, 2);
+    w.event('pointerup', 1_150, 200, 300, 1);
+    w.event('pointerup', 1_160, 600, 300, 2);
+    w.tap(1_200);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(3_000);
+    w.event('pointercancel', 3_100, 200);
+    w.tap(3_200);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(5_000);
+    w.tap(5_100, 950);
+    w.tap(5_200);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(5_300);
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(1);
+    w.unbind();
+    w.tap(7_000);
+    w.tap(7_100);
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(1);
   });
 });
 

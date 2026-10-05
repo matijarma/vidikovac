@@ -225,6 +225,8 @@ test('passive kiosk keeps whole rows, one short sentence and a scannable QR thro
   await expect(page.getByTestId('safety-strip')).toContainText('nedostupni');
   await check('outage');
   await page.screenshot({path:'test-results/readable-city/kiosk-outage.png'});
+  // A single press no longer enters fullscreen (a double tap does, since 5 Oct 2026, and this scene taps nothing);
+  // should anything have, the resizes below start from the window.
   await page.evaluate(async()=>{if(document.fullscreenElement)await document.exitFullscreen();});
   for(const viewport of [{width:1080,height:1920},{width:3840,height:2160},{width:320,height:568}]){
     await page.setViewportSize(viewport);
