@@ -132,7 +132,8 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       +`<span data-legend="bikes"><b class="k-legend-bike k-legend-disc">7</b> ${e(s.legend.bikes)}</span>`
       +`<span data-legend="bikesEmpty"><b class="k-legend-bike k-legend-dot" aria-hidden="true"></b> ${e(s.legend.bikesEmpty)}</span>`
       +`<span data-legend="bikesFar"><b class="k-legend-bike k-legend-dot" aria-hidden="true"></b> ${e(s.legend.bikesFar)}</span>`
-      +`<span data-legend="culture"><b class="k-legend-culture">●</b> ${e(s.legend.culture)}</span>`;
+      +`<span data-legend="culture"><b class="k-legend-culture">●</b> ${e(s.legend.culture)}</span>`
+      +`<span data-legend="pharmacy"><b class="k-legend-ring" aria-hidden="true"></b> ${e(s.legend.pharmacy)}</span>`;
     geography.appendChild(legend);
   }
   // R3: DHMZ's radar around Zagreb, made once and only toggled (calm motion: no node comes or goes after mount; no fade).

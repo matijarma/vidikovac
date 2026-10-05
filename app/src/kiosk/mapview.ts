@@ -60,6 +60,7 @@ import { ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { dataNumber, dataText } from '../panels/panel';
 import { districtBySlug } from './districts';
 import { fmtNumber, sameZagrebDay } from './format';
+import { zagrebHour } from '../format';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from './layout';
 import { isLive, kioskQuakes, nearestPharmacy, PHARMACY_POINTS, recentQuakes, windowOf } from './local';
 import { stopDistanceM } from './stops';
@@ -462,6 +463,20 @@ export function assemblyPoints(geo: ModuleSnapshot | undefined, stop: ScreenStop
   return rows.slice(0, ASSEMBLY_CAP).map((r) => r.point);
 }
 
+/** Within this distance of the kiosk's own place the sentence's or a reveal's highlight ring is not drawn
+ *  (owner, 5 Oct 2026): the departures sentence names the wall's own stop, and a 72 px hollow ring around the
+ *  own-place marker, on and off with the sentence, read as a second, unexplained mark on "here". The ring
+ *  stays for every other subject: a closure, a venue, the pharmacy down the street. */
+export const OWN_PLACE_HIGHLIGHT_M = 60;
+
+/** `highlight` unless it is a point on the kiosk's own place (OWN_PLACE_HIGHLIGHT_M), then null. */
+export function highlightAwayFromPlace<T extends { geometry: { type: string; coordinates: unknown } }>(highlight: T | null, place: { lon: number; lat: number } | null): T | null {
+  if (!highlight || !place || highlight.geometry.type !== 'Point') return highlight;
+  const [lon, lat] = highlight.geometry.coordinates as [number, number];
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return highlight;
+  return stopDistanceM({ lon, lat }, place) <= OWN_PLACE_HIGHLIGHT_M ? null : highlight;
+}
+
 /** Within this distance of the screen's stop the pharmacy's address label is
  *  dropped (R-KP18): at Trg bana Jelačića the address "Trg bana Josipa
  *  Jelačića 3" sat on the stop's own name, the biggest label on the picture.
@@ -512,9 +527,20 @@ export function cityPoints(snapshots: FeedSnapshots, stop: ScreenStop | null, no
     ...placedEvents(snapshots.dogadanja, now),
     ...kioskQuakePoints(snapshots.emsc, now, locale),
     ...assemblyPoints(snapshots['ckan-geo'], stop, safetyState(snapshots, now).level === 'urgent'),
-    ...pharmacyPoint(stop, pharmacyLabelled),
+    ...(pharmacyHours(now) ? pharmacyPoint(stop, pharmacyLabelled) : []),
     ...seatPoint(stop),
   ];
+}
+
+/** The on-duty pharmacy's ring is on the map from 22:00 to 06:00 Zagreb time, the hours the "U blizini" list
+ *  gives the pharmacy its timeless row (city/nearby.ts NIGHT_FROM_HOUR, NIGHT_UNTIL_HOUR); by day a second ring
+ *  beside the own place, hidden under passing pills, was a mark nobody could read (owner, 5 Oct 2026). The
+ *  safety strip names the pharmacy at every hour. */
+export const PHARMACY_RING_FROM_HOUR = 22;
+export const PHARMACY_RING_UNTIL_HOUR = 6;
+export function pharmacyHours(now: number): boolean {
+  const hour = zagrebHour(now);
+  return hour !== null && (hour >= PHARMACY_RING_FROM_HOUR || hour < PHARMACY_RING_UNTIL_HOUR);
 }
 
 /** The unframed whole-city window (ruling of 22 Sep): today's thinning, each BAJS station a
@@ -802,7 +828,7 @@ export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, lab
 }
 
 /** The wall legend's entries (kiosk.legend.*), in its order. */
-export type LegendKind = 'tram' | 'bikes' | 'bikesEmpty' | 'bikesFar' | 'culture';
+export type LegendKind = 'tram' | 'bikes' | 'bikesEmpty' | 'bikesFar' | 'culture' | 'pharmacy';
 /** What the legend may explain, from the marks the map is handed (lane w-labels2, 24 Sep: a strip drew no
  *  station and no venue, and its legend still listed both). The tram line is always on the map; BAJS by what
  *  its stations draw (round 2 F9, owner, 24 Sep: the legend describes what is drawn): `bikes` while a disc
@@ -819,6 +845,8 @@ export function legendKinds(points: readonly MapPoint[]): LegendKind[] {
   if (bikes.some((p) => p.props?.far === true)) kinds.push('bikesFar');
   if (points.some((p) => (p.place === 'city' && p.props?.category !== 'bikes' && p.props?.category !== 'air' && Number(p.props?.eventCount ?? 0) > 0)
     || (p.place === 'event' && p.props?.source !== 'komunalne'))) kinds.push('culture');
+  // The pharmacy's hollow ring, on the map at night (pharmacyHours): named, so the ring is not a riddle.
+  if (points.some((p) => p.place === 'pharmacy')) kinds.push('pharmacy');
   return kinds;
 }
 

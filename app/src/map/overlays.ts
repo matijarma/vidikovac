@@ -82,6 +82,8 @@ export const LAYERS = Object.freeze({
   placeSeat: 'place-seat',
   placeQuakeLabels: 'place-quake-labels',
   screenStopLabel: 'screen-stop-label',
+  /** The own place's marker laid over the pills on the public screen (owner, 5 Oct 2026); NEVER elsewhere. */
+  screenStopOver: 'screen-stop-over',
   screenStopGuard: 'screen-stop-guard',
   vehicleSelectedNose: 'vehicle-selected-nose',
   vehicleSelected: 'vehicle-selected',
@@ -1077,9 +1079,11 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       { minzoom: stopZoom, filter: stops },
     ),
     circle(LAYERS.stopsSelected, SOURCES.stops, { 'circle-radius': zoomInterpolate(11, 6 * s, 16, 11 * s), 'circle-color': p.selection, 'circle-opacity': 0, 'circle-stroke-color': p.selection, 'circle-stroke-width': 3 }, { filter: filters[LAYERS.stopsSelected] }),
-    // The screen's own stop: on the public screen the largest ring on the map
-    // (R-KP4: 9 x s, a 2 x s halo), the anchor the whole picture is about.
-    circle(LAYERS.screenStop, SOURCES.screenStop, { 'circle-radius': (prozor ? 9 : 7) * s, 'circle-color': p.screenStop, 'circle-stroke-color': p.halo, 'circle-stroke-width': prozor ? 2 * s : 2 }),
+    // The screen's own stop on a phone or desk: a 7 x s disc under the pills, as it has always stood. On the
+    // public screen this layer draws nothing and the own-place marker is laid over the pills instead (below,
+    // LAYERS.screenStopOver): the anchor the whole picture is about was hidden under every tram standing at
+    // the stop (owner, 5 Oct 2026). Both layers are always in the list, so setProzor stays one styleDiff.
+    circle(LAYERS.screenStop, SOURCES.screenStop, { 'circle-radius': 7 * s, 'circle-color': p.screenStop, 'circle-stroke-color': p.halo, 'circle-stroke-width': 2 }, prozor ? { filter: NEVER } : {}),
     // The bodies: over the rails and the stop rings, under every dot, nose and
     // pill. Flat-ended, because a vehicle ends flat and a round cap would add
     // a width to the length; the pill inks, so a body is its pill's colour
@@ -1139,7 +1143,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     // stop seeing them on the day it matters.
     placeMark({ id: LAYERS.placeAssembly, kind: 'assembly', image: PLACE_SQUARE_RING_IMAGE, color: p.label, sort: 10 }),
     // Hollow, never a filled pin: the coordinate is approximate and the
-    // published address under it is the exact part.
+    // published address under it is the exact part. On the map at night only
+    // (kiosk/mapview.ts pharmacyHours), named in the legend; under the pills
+    // as every name is (decision 17).
     placeMark({ id: LAYERS.placePharmacy, kind: 'pharmacy', image: PLACE_RING_IMAGE, color: p.label, sort: 5 }),
     {
       id: LAYERS.placeQuakeLabels,
@@ -1185,6 +1191,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     noseLayer(p, LAYERS.vehicleTwoWayFore, pillsYield ? NEVER : twoWayFilter, pillZoom, undefined, NOSE_ROTATE, s, alpha, blocks),
     noseLayer(p, LAYERS.vehicleTwoWayAft, pillsYield ? NEVER : twoWayFilter, pillZoom, undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
     pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), pillZoom, s, p, inks, mark, blocks, pillsYield),
+    // The screen's own place on the public screen: the largest ring on the map (R-KP4: 9 x s, now a 3 x s
+    // halo), over the pills, so a tram standing at the stop never hides where "here" is (owner, 5 Oct 2026).
+    circle(LAYERS.screenStopOver, SOURCES.screenStop, { 'circle-radius': 9 * s, 'circle-color': p.screenStop, 'circle-stroke-color': p.halo, 'circle-stroke-width': 3 * s }, prozor ? {} : { filter: NEVER }),
     // On a strip (pillsYield) the own name must not lie under a hub pill standing on the place: an unseen
     // copy of it, above the pills, is placed before them, and a pill that would cover it yields. Everywhere
     // else it places nothing, and decision 19's name under the pills is the only one.

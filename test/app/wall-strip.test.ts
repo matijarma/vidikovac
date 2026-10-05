@@ -195,9 +195,11 @@ describe('the legend follows what the map draws', () => {
     expect(legendKinds([{ id: 'bajs-4', title: '', lon: 0, lat: 0, place: 'city', props: { category: 'bikes', badge: '', spent: true } }])).toEqual(['tram']);
     expect(legendKinds([{ id: 'culture-1', title: 'Gavella', lon: 0, lat: 0, place: 'city', props: { category: 'culture', badge: '1', eventCount: 1 } }])).toEqual(['tram', 'culture']);
     expect(legendKinds([{ id: 'event:1', title: 'Koncert', lon: 0, lat: 0, place: 'event', props: { source: 'kvartovske' } }])).toEqual(['tram', 'culture']);
-    // A communal work is a square in the works ink, not culture; the pharmacy and a vehicle are neither.
+    // A communal work is a square in the works ink, not culture; the pharmacy's ring is named as itself (owner,
+    // 5 Oct 2026: a ring nobody could place), and only while the map carries it (mapview.ts pharmacyHours).
+    expect(legendKinds([{ id: 'event:2', title: 'Radovi', lon: 0, lat: 0, place: 'event', props: { source: 'komunalne' } }])).toEqual(['tram']);
     expect(legendKinds([{ id: 'event:2', title: 'Radovi', lon: 0, lat: 0, place: 'event', props: { source: 'komunalne' } },
-      { id: 'pharmacy:x', title: '', lon: 0, lat: 0, place: 'pharmacy' }])).toEqual(['tram']);
+      { id: 'pharmacy:x', title: '', lon: 0, lat: 0, place: 'pharmacy' }])).toEqual(['tram', 'pharmacy']);
     // R0: a framed wall whose only programme is the City's calendar (kultura-zg) still names "Kultura večeras".
     const now = Date.parse('2026-09-22T15:45:00Z');
     const city: CityState = { ...emptyCity(), places: [{ id: 'culture-gavella', category: 'culture', name: 'Gavella', lon: 15.97, lat: 45.81, sourceId: 'culture', sourceRecord: 'g' }] };
@@ -222,7 +224,7 @@ describe('the legend follows what the map draws', () => {
     document.body.appendChild(host);
     const inv = mountInvitation(host, { strings: kioskStrings('hr'), i18n: createDefaultI18n('hr'), locale: 'hr', lightweight: false, reducedMotion: true });
     const shown = () => [...host.querySelectorAll<HTMLElement>('.k-map-legend > span')].filter((el) => !el.hidden).map((el) => el.textContent?.trim());
-    expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli', 'BAJS: prazna stanica', 'BAJS stanica', '● Kultura večeras']);
+    expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli', 'BAJS: prazna stanica', 'BAJS stanica', '● Kultura večeras', 'Dežurna ljekarna']);
     inv.setLegend(['tram']);
     expect(shown()).toEqual(['6 Tramvajska linija']);
     inv.setLegend(['tram', 'bikes']);
@@ -232,6 +234,9 @@ describe('the legend follows what the map draws', () => {
     expect(shown()).toEqual(['6 Tramvajska linija', 'BAJS stanica']);
     inv.setLegend(['tram', 'bikes', 'bikesEmpty', 'culture']);
     expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli', 'BAJS: prazna stanica', '● Kultura večeras']);
+    // The night frame: the pharmacy's hollow ring, named (owner, 5 Oct 2026).
+    inv.setLegend(['tram', 'pharmacy']);
+    expect(shown()).toEqual(['6 Tramvajska linija', 'Dežurna ljekarna']);
     inv.destroy();
     host.remove();
     // The entries are inline-flex, which would outrank the hidden attribute: the stylesheet says hidden is gone.

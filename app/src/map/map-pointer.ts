@@ -128,7 +128,7 @@ export function bindCityMapPointer(m: PointerMap, l: PointerIds, host: PointerHo
     ];
     const box = boxOf(tolerance);
     const first = (layers: string[], within: number[][] = box): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(within, { layers })[0];
-    const own = first([l.LAYERS.screenStop]);
+    const own = first([l.LAYERS.screenStop, l.LAYERS.screenStopOver]);
     if (own) return { kind: 'stop', id: String(own.properties.id), ids: host.siblingPlatforms(String(own.properties.name)) };
     // Its ring may not be laid out yet (lane p-map3): the map is ready once the basemap is in, and a tap straight
     // after it found no rendered ring. The stop is where the map says it is, so its reach is measured from there.

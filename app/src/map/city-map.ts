@@ -1108,7 +1108,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function writeMarkProbe(m: MapApi, pushed: VehicleFeatureCollection | null): void {
     container.dataset.zoom = m.getZoom().toFixed(2);
     writeCenterProbe(m);
-    if (pushed) probeHasMarks = pushed.features.length > 0;
+    if (pushed) {
+      probeHasMarks = pushed.features.length > 0;
+      // data-moved and data-merged: how many of the last push's marks stand away from their reports, drawn
+      // aside from a counted disc (vehicle-features.ts, `moved`) or merged with others at the members' mean
+      // (a cluster). A browser proof's measure of how far the picture departs from the model (5 Oct 2026).
+      container.dataset.moved = String(pushed.features.filter((f) => (f.properties.moved ?? 0) > 0).length);
+      container.dataset.merged = String(pushed.features.filter((f) => f.properties.id.startsWith('cluster:')).length);
+    }
   }
 
   /** `data-center`: the camera's centre as "lon,lat" (5 decimals), beside
@@ -1824,6 +1831,31 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function onCameraMove(): void {
     lastPushedSignature = '';
     loop.nudge();
+    // A stopped loop (paused under the open sheet, held on a quiet feed) draws no next frame: the merged
+    // and stepped-aside marks of the last push, valid for the camera they were pushed at, would stand off
+    // their vehicles until the loop runs again (owner, 5 Oct 2026). One still repaint per camera beat.
+    if ((paused || held) && styled) repaintStill();
+  }
+
+  /** The last drawn frame pushed again at the camera as it stands now, once per animation beat, without
+   *  stepping the model: nothing is reckoned forward, the picture only follows the camera. */
+  let stillRepaintDue = false;
+  function repaintStill(): void {
+    if (stillRepaintDue) return;
+    stillRepaintDue = true;
+    const beat = deps.raf ?? ((cb: (t: number) => void) => globalThis.setTimeout(() => cb(now()), 16));
+    beat(() => {
+      stillRepaintDue = false;
+      const m = map;
+      const l = lib;
+      if (!m || !l || !styled || !container.isConnected || lastDrawn.length === 0) return;
+      const project = m.project && m.getZoom() >= pillZoomNow(l) ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
+      const kept = keptVehicleId();
+      const fc = l.vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined, ...stepAside(m, l, project) });
+      m.getSource(l.SOURCES.vehicles)?.setData(fc);
+      pushBodies(m, l);
+      writeMarkProbe(m, fc);
+    });
   }
 
   /** A move a person made (drag, wheel, keyboard) ends a follow; the wrapper's own easeTo carries no originalEvent. */

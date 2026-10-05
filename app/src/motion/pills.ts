@@ -368,9 +368,15 @@ function intersects(a: Box, b: Box): boolean {
  *  own single, so a tap never loses the mark it was aimed at. */
 export function clusterPills<T extends PillPoint>(
   points: readonly T[],
-  opts: { selectedId?: string | null } = {},
+  opts: { selectedId?: string | null; maxMergePx?: number } = {},
 ): Array<Single<T> | Cluster<T>> {
   const selectedId = opts.selectedId ?? null;
+  // The ground cap (map/vehicle-features.ts DISPLACE_MAX_M): two pills whose centres stand further apart than
+  // this on the screen keep their own places however much their boxes overlap, because a merged mark stands at
+  // the members' mean and a tram drawn hundreds of metres off its track reads as displaced, not as tidy
+  // (owner, 5 Oct 2026). Pairwise: a chain still joins through the pairs that pass.
+  const maxMerge = opts.maxMergePx ?? Number.POSITIVE_INFINITY;
+  const near = (a: PillPoint, b: PillPoint): boolean => Math.hypot(a.x - b.x, a.y - b.y) <= maxMerge;
   const rest = selectedId === null ? points : points.filter((p) => p.id !== selectedId);
   const selected = selectedId === null ? undefined : points.find((p) => p.id === selectedId);
 
@@ -390,7 +396,7 @@ export function clusterPills<T extends PillPoint>(
   }
   for (let i = 0; i < rest.length; i++) {
     for (let j = i + 1; j < rest.length; j++) {
-      if (intersects(boxes[i]!, boxes[j]!)) union(i, j);
+      if (intersects(boxes[i]!, boxes[j]!) && near(rest[i]!, rest[j]!)) union(i, j);
     }
   }
 
@@ -532,7 +538,10 @@ function hopPast(own: Capsule, obstacles: readonly Obstacle[], side: 1 | -1): nu
  * of the pill geometry) moved off the `discs` and off the marks placed before
  * it, as described above. Every mark comes back, moved or not.
  */
-export function deflectMarks(marks: readonly DeflectableMark[], discs: readonly DiscObstacle[]): Map<string, PlacedMark> {
+export function deflectMarks(marks: readonly DeflectableMark[], discs: readonly DiscObstacle[], opts: { maxPx?: number } = {}): Map<string, PlacedMark> {
+  // The hop's cap in this frame's px: DEFLECT_MAX_PX, or less where the camera makes that many px a long way
+  // on the ground (map/vehicle-features.ts DISPLACE_MAX_M).
+  const cap = Math.min(DEFLECT_MAX_PX, opts.maxPx ?? DEFLECT_MAX_PX);
   const placed = new Map<string, PlacedMark>();
   const before: Obstacle[] = [];
   const order = [...marks].sort((a, b) => (DEFLECT_RANK[a.kind] ?? 2) - (DEFLECT_RANK[b.kind] ?? 2) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -559,7 +568,7 @@ export function deflectMarks(marks: readonly DeflectableMark[], discs: readonly 
     const uy = -Math.cos(rad);
     const vertical = mark.bearing !== null && Math.abs(uy) > Math.abs(ux);
     const side: 1 | -1 = vertical ? (uy < 0 ? -1 : 1) : (own.y - nearest.y < 0 ? -1 : 1);
-    const hop = hopPast(own, inWay, side);
+    const hop = Math.min(cap, hopPast(own, inWay, side));
     // Never a jump: at most DEFLECT_GAIN per pixel of true overlap, nothing at a touch.
     const m = Math.min(hop, DEFLECT_GAIN * overlap);
     const at = { x: mark.x, y: mark.y + side * m, moved: m };

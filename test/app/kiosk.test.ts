@@ -516,7 +516,7 @@ describe('the integrated companion sentence', () => {
     const points = handle.update.mock.lastCall?.[0] as MapPoint[];
     expect(points.some(point => point.routeId !== undefined)).toBe(false);
     expect(points.some(point => point.id === 'stop:106_1')).toBe(true);
-    expect(points.some(point => point.place === 'pharmacy')).toBe(true);
+    expect(points.some(point => point.place === 'pharmacy')).toBe(false); // 14:32: the pharmacy's ring is a night mark (kiosk/mapview.ts pharmacyHours)
     expect(handle.setModes.mock.calls.every(([modes]) => modes === null || modes.size > 0)).toBe(true);
     expect(q(k.root, '[data-testid=map-note]')!.hidden).toBe(false);
     expect(k.root.querySelectorAll('[data-testid=map-note]')).toHaveLength(1);
@@ -1722,8 +1722,8 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(sentenceText(k.root).length).toBeLessThanOrEqual(80);
     expect(q(k.root,'.k-map-legend')).not.toBeNull();
     // Plain items from kiosk.legend.* (WP2; round 2 F9: BAJS in three entries, by what the map draws), never a caveat: a BAJS disc with no count is grey and blank, not "?".
-    expect(k.root.querySelectorAll('.k-map-legend span')).toHaveLength(5);
-    expect([...k.root.querySelectorAll<HTMLElement>('.k-map-legend span')].map((el) => el.dataset.legend)).toEqual(['tram', 'bikes', 'bikesEmpty', 'bikesFar', 'culture']);
+    expect(k.root.querySelectorAll('.k-map-legend span')).toHaveLength(6);
+    expect([...k.root.querySelectorAll<HTMLElement>('.k-map-legend span')].map((el) => el.dataset.legend)).toEqual(['tram', 'bikes', 'bikesEmpty', 'bikesFar', 'culture', 'pharmacy']);
     expect(text(q(k.root, '.k-map-legend'))).not.toContain('?');
     expect(q(k.root, '[data-testid=kiosk-weather]')).toBeNull();
     expect(k.root.querySelectorAll('.k-weather-current .k-temp')).toHaveLength(0);

@@ -56,7 +56,7 @@ import { frameStrip, PHARMACY_HOURS, stripMarkup } from './kiosk/frame';
 import { cardMarkup, mountInvitation, wallMapNote, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, radarInsetShown, radarNow, staleCopy } from './kiosk/local';
-import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints } from './kiosk/mapview';
+import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints, highlightAwayFromPlace } from './kiosk/mapview';
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from './kiosk/pharmacies';
 import { groupDepartures, mountTouchPanel, taktCandidates, TOUCH_MS, type TouchPanelHandle } from './kiosk/timeline';
 import { beatIndex, EMPTY_HISTORY, recordTaktShown, takt, type TaktHistory, type TaktReveal } from '../../shared/kiosk/takt';
@@ -510,6 +510,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     }
     return null;
   }
+  /** The map's emphasis: a reveal's row first, else the sentence's reference, and never a point on the wall's own
+   *  place (kiosk/mapview.ts highlightAwayFromPlace): the own-place marker already says "here". */
+  function wallHighlight(): MapHighlight | null {
+    const place = placeForNearby();
+    return highlightAwayFromPlace(revealHighlight() ?? sentenceHighlight(), { lon: place.lon, lat: place.lat });
+  }
   /** data-skipped-text on the root: the rows the last selection left out for their third-party text, and why. */
   function paintSkippedText(reasons: readonly ExternalTextRejection[]): void {
     const census = skippedTextCensus(reasons);
@@ -646,7 +652,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     currentSentence = next;
     if (next && !sentenceSuspended()) shownSentences.set(next.text, at);
     paintSentence();
-    mapAdapter.handle()?.setHighlight?.(revealHighlight() ?? sentenceHighlight());
+    mapAdapter.handle()?.setHighlight?.(wallHighlight());
     // Templates above paint synchronously, including the cold and failed-network paths.
     ensureSentences();
     // A touch's board follows the same beat, and its deadline is read on it too.
@@ -889,7 +895,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     container.inert=true;
     // The legend explains what the map draws, and nothing it does not (mapview.ts legendKinds).
     invitation?.setLegend((container.dataset.legend ?? 'tram bikes culture').split(' '));
-    mapAdapter.handle()?.setHighlight?.(revealHighlight() ?? sentenceHighlight());
+    mapAdapter.handle()?.setHighlight?.(wallHighlight());
     mapContainer = container;
     if (container.parentElement !== host) {
       // The box changed while the container sat outside the layout; resumeMap re-measures it.

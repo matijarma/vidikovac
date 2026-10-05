@@ -209,10 +209,14 @@ grad (polje „Adresa ili stajalište” ostavljeno prazno) otvara kartu na
 prozoru cijeloga grada, od Črnomerca do Maksimira i od Save do Mirogoja;
 zaslon s izabranim mjestom otvara kadar oko tog mjesta, opisan u sljedećem
 odlomku. Na prozoru cijeloga grada su tramvajska mreža u neutralnoj sivoj boji,
-ispod svega ostaloga, pločice tramvaja u plavoj boji aplikacije, prsten i ime
+ispod svega ostaloga, pločice tramvaja u plavoj boji aplikacije, oznaka i ime
 mjesta zaslona bez ijednoga drugog stajališta, BAJS stanice s barem jednim
-biciklom kao male tirkizne točke bez broja, zatvorene prometnice, prsten
-dežurne ljekarne i kulturna mjesta s programom večeras. Imena se ne ispisuju:
+biciklom kao male tirkizne točke bez broja, zatvorene prometnice, noću (od
+22 do 6 sati, dok je dežurna ljekarna u popisu „U blizini”) šuplji prsten
+dežurne ljekarne i kulturna mjesta s programom večeras. Oznaka mjesta zaslona
+stoji iznad pločica vozila, pa je tramvaj na stajalištu ne prekriva; prsten
+kojim karta ističe predmet rečenice u zaglavlju ne crta se na samom mjestu
+zaslona (od 5. listopada 2026.). Imena se ne ispisuju:
 ni nazivi gradskih četvrti s podloge, ni nazivi BAJS stanica i kulturnih
 mjesta. Kvadrate događanja i komunalnih radova prozor cijeloga grada ne
 crta: oznaka bez imena ne govori ništa, a kadar oko izabranog mjesta ih
@@ -254,8 +258,9 @@ nema oznake „+N”: nema geografskih skupina mjesta, a spojena oznaka vozila
 ispisuje svaku liniju. Legenda uz kartu opisuje ono što karta crta, bez
 upitnika: „Tramvajska linija”, uz disk s brojem „BAJS: slobodni bicikli”, uz
 točku prazne stanice „BAJS: prazna stanica”, uz točku na prozoru cijeloga
-grada „BAJS stanica” i „Kultura večeras”; stavke kojih na karti nema legenda
-ne ispisuje, a pod `?lagano=1`, gdje karte nema, nema ni legende.
+grada „BAJS stanica”, „Kultura večeras” i noću uz šuplji prsten „Dežurna
+ljekarna”; stavke kojih na karti nema legenda ne ispisuje, a pod `?lagano=1`,
+gdje karte nema, nema ni legende.
 
 Isječak DHMZ-ova radarskog kompozita prikazuje se kad radar pokazuje kišu
 unutar kvadrata od 30 km oko Zagreba ili satna prognoza najbliže postaje

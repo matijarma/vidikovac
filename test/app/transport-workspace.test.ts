@@ -1370,23 +1370,31 @@ describe('the map under the sheet (round 3, phone A)', () => {
 });
 
 describe('Karta marks the breadth rows of the "U blizini" list (R0)', () => {
-  it('puts the marks among the points handed to the map (its options or its update), never twice, and a tap on a mark without a record opens no sheet', () => {
+  it('puts the marks among the points handed to the map (its options or its update), never twice, draws every rail station as a stop-like bead instead of a rail mark, and a tap on a mark without a record opens no sheet', () => {
     const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const marks = [
       { id: 'nearby:opennow:n2', title: 'Ljekarna Centar', lon: 15.979, lat: 45.812, kind: 'open' },
-      { id: 'rail-hz-gk', title: 'Savski Marof', lon: 15.9784, lat: 45.8046, kind: 'rail' },
+      { id: 'rail-hz-gk', title: 'Zagreb Glavni kolodvor', lon: 15.9784, lat: 45.8046, kind: 'rail' },
     ];
     const { context } = ctx({ maps, nearby: () => ({ html: NEARBY_HTML, pill: '2 km · ~15 min', radiusM: 2000, marks }) });
-    context.city = emptyCity();
+    const stations: Place[] = [
+      { id: 'rail-hz-gk', category: 'rail', name: 'Zagreb Glavni kolodvor', lon: 15.9784, lat: 45.8046, sourceId: 'hz-schedule', sourceRecord: 'GK' },
+      { id: 'rail-hz-zk', category: 'rail', name: 'Zagreb Zapadni kolodvor', lon: 15.9574, lat: 45.8078, sourceId: 'hz-schedule', sourceRecord: 'ZK' },
+    ];
+    context.city = { ...emptyCity(), places: stations };
     render(context);
     const handle = last();
     const updates = (handle.update as ReturnType<typeof vi.fn>).mock.calls;
     const points = (updates.length > 0 ? updates.at(-1)![0] : handle.options.points) as { id: string; props?: Record<string, unknown> }[];
     const ids = points.map((p) => p.id);
     expect(ids).toContain('nearby:opennow:n2');
-    expect(ids).toContain('rail-hz-gk');
     expect(ids.filter((id) => id === 'nearby:opennow:n2')).toHaveLength(1);
     expect(points.find((p) => p.id === 'nearby:opennow:n2')!.props).toMatchObject({ category: 'nearby', kind: 'open', badge: '', eventCount: 0 });
+    // Owner, 5 Oct 2026: a station is a stop on the map, never a place disc. Both stations are beads; the rail
+    // row's mark adds nothing over the one it names.
+    expect(ids.filter((id) => id === 'rail-hz-gk')).toHaveLength(1);
+    expect(points.find((p) => p.id === 'rail-hz-gk')!.props).toMatchObject({ category: 'rail', badge: '', eventCount: 0 });
+    expect(points.find((p) => p.id === 'rail-hz-zk')!.props).toMatchObject({ category: 'rail' });
     handle.options.onSelect!({ kind: 'place', id: 'nearby:opennow:n2' });
     expect(q('[data-testid=city-detail]')).toBeNull();
     expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset.sheet).toBe('peek');

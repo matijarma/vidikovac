@@ -340,7 +340,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const c=ctx(); if(c.session?.frozen)return;
     // The venues with a programme tonight are on the map from the first render; the BAJS stations come with the
     // city's live file (core/city-store.ts start()). The City's cycle paths are asked for wherever they are drawn.
-    c.ensureCity?.(drawsCityPaths()?['culture','cycle-paths']:['culture']);
+    // The rail stations are on every Karta as stop-like beads (cityMapPoints), so their chunk comes with the venues'.
+    c.ensureCity?.(drawsCityPaths()?['culture','cycle-paths','hz-schedule']:['culture','hz-schedule']);
     if(query)c.ensureCity?.(['culture','water','toilets','sport','dogs','markets','recycling','wifi','cycle-parking','garages','charging','heritage','streets','hz-schedule']);
   }
   /** The place Karta is framed on and its sheet is titled with: the page's (city/place.ts, the one Sada is
@@ -418,9 +419,18 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       if(point.id===selected?.id||seen.has(point.id))continue;
       seen.add(point.id);points.push(point);
     }
-    // The breadth rows' points of the "U blizini" list (R0): an 8 px dot in the place colour, never twice.
+    // The rail stations (the catalogue's hz-schedule) as the stops' own beads on every Karta (owner, 5 Oct 2026): a
+    // station is a stop, not a landmark, and a tap opens its board as a tap on a stop does (map/city-layers.ts).
+    for(const station of cityState().places){
+      if(station.category!=='rail'||!Number.isFinite(station.lon)||!Number.isFinite(station.lat))continue;
+      if(station.id===selected?.id||seen.has(station.id))continue;
+      seen.add(station.id);
+      points.push({id:station.id,title:station.name,lon:station.lon!,lat:station.lat!,place:'city',props:{category:'rail',badge:'',eventCount:0,priority:2}});
+    }
+    // The breadth rows' points of the "U blizini" list (R0): an 8 px dot in the place colour, never twice. A rail
+    // row's station is already on the map as a bead and gets no place dot over it.
     for(const mark of nearbyList()?.marks??[]){
-      if(mark.id===selected?.id||seen.has(mark.id))continue;
+      if(mark.kind==='rail'||mark.id===selected?.id||seen.has(mark.id))continue;
       seen.add(mark.id);
       points.push({id:mark.id,title:mark.title,lon:mark.lon,lat:mark.lat,place:'city',props:{category:'nearby',badge:'',eventCount:0,priority:1,kind:mark.kind}});
     }

@@ -307,6 +307,23 @@ describe('the city places’ marks', () => {
       case 'min': return Math.min(...rest.map((x) => ev(x) as number));
       case '+': return rest.reduce((n: number, x) => n + (ev(x) as number), 0);
       case 'sqrt': return Math.sqrt(ev(rest[0]) as number);
+      case 'step': {
+        const v = ev(rest[0]) as number;
+        let out = rest[1];
+        for (let i = 2; i + 1 < rest.length; i += 2) if (v >= (rest[i] as number)) out = rest[i + 1];
+        return ev(out);
+      }
+      case 'interpolate': {
+        const v = ev(rest[1]) as number;
+        const stops: [number, number][] = [];
+        for (let i = 2; i + 1 < rest.length; i += 2) stops.push([rest[i] as number, ev(rest[i + 1]) as number]);
+        if (v <= stops[0]![0]) return stops[0]![1];
+        for (let i = 1; i < stops.length; i++) {
+          const [z0, a] = stops[i - 1]!, [z1, b] = stops[i]!;
+          if (v <= z1) return a + ((v - z0) / (z1 - z0)) * (b - a);
+        }
+        return stops[stops.length - 1]![1];
+      }
       case 'case': {
         for (let i = 0; i + 1 < rest.length; i += 2) if (ev(rest[i]) === true) return ev(rest[i + 1]);
         return ev(rest[rest.length - 1]);
@@ -332,8 +349,8 @@ describe('the city places’ marks', () => {
   it('draws a BAJS station as a 20 px disc with its count in it at every zoom on the wall’s scale', () => {
     expect([BIKE_DISC_RADIUS_PX, BIKE_COUNT_PX]).toEqual([10, 12]);
     const dots = byId('city-place-dots'), badges = byId('city-place-badges');
-    // Nothing on these layers follows the camera any more.
-    expect(JSON.stringify([dots, badges])).not.toContain('"zoom"');
+    // No count follows the camera; of the dots only the rail bead does, as the stop it stands for (below).
+    expect(JSON.stringify(badges)).not.toContain('"zoom"');
     for (const zoom of [12.7, 13, 13.5, 14, 16]) {
       expect(evaluate(dots.paint!['circle-radius'], bike('7'), zoom), `bike @${zoom}`).toBe(20);
       expect(evaluate(dots.paint!['circle-radius'], bike('', true), zoom), `unknown bike @${zoom}`).toBe(20);
@@ -344,8 +361,12 @@ describe('the city places’ marks', () => {
       expect(evaluate(dots.paint!['circle-radius'], plain, zoom), `plain @${zoom}`).toBe(16);
       expect(evaluate(badges.layout!['text-size'], venue, zoom), `venue text @${zoom}`).toBe(24);
     }
-    // Full strength at every zoom: no opacity ramp is left to fade a count away.
-    for (const key of ['circle-opacity', 'circle-stroke-opacity']) expect(dots.paint![key], key).toBeUndefined();
+    // Full strength at every zoom: no opacity ramp is left to fade a count away (the rail bead's own ramp,
+    // tested below, touches nothing else).
+    for (const key of ['circle-opacity', 'circle-stroke-opacity']) for (const zoom of [11, 12.7, 14, 16]) {
+      expect(evaluate(dots.paint![key], bike('7'), zoom), `${key} bike @${zoom}`).toBe(1);
+      expect(evaluate(dots.paint![key], venue, zoom), `${key} venue @${zoom}`).toBe(1);
+    }
     expect(badges.paint!['text-opacity']).toBeUndefined();
     // A count is never dropped by a collision.
     expect(badges.layout!['text-allow-overlap']).toBe(true);
@@ -399,6 +420,29 @@ describe('the city places’ marks', () => {
     }
   });
 
+  it('draws a rail station as a stop: the stops’ bead and ink growing with the zoom, hidden below the stops’ zoom, named with the stop names (owner, 5 Oct 2026)', () => {
+    const rail = { category: 'rail', badge: '', eventCount: 0, priority: 2 };
+    const dots = byId('city-place-dots');
+    expect(evaluate(dots.paint!['circle-color'], rail, 14)).toBe(palette.stopFill);
+    expect(evaluate(dots.paint!['circle-stroke-color'], rail, 14)).toBe(palette.stopStroke);
+    // overlays.ts LAYERS.stops off the wall: 1.5 px at STOP_ZOOM, 2.6 at 14, 4.5 at 16, times the surface's scale 2.
+    expect(evaluate(dots.paint!['circle-radius'], rail, overlays.STOP_ZOOM)).toBe(3);
+    expect(evaluate(dots.paint!['circle-radius'], rail, 14)).toBeCloseTo(5.2);
+    expect(evaluate(dots.paint!['circle-radius'], rail, 16)).toBe(9);
+    expect(evaluate(dots.paint!['circle-opacity'], rail, overlays.STOP_ZOOM - 0.1)).toBe(0);
+    expect(evaluate(dots.paint!['circle-opacity'], rail, overlays.STOP_ZOOM)).toBe(0.5);
+    expect(evaluate(dots.paint!['circle-opacity'], rail, 14)).toBe(1);
+    // Every other place keeps its plain mark, drawn at full strength.
+    expect(evaluate(dots.paint!['circle-opacity'], plain, 12)).toBe(1);
+    expect(evaluate(dots.paint!['circle-stroke-color'], plain, 12)).toBe(palette.halo);
+    const names = byId('city-place-labels').layout!['text-field'];
+    expect(evaluate(names, rail, 13)).toBe('');
+    expect(evaluate(names, { ...rail, title: 'Zagreb Zapadni kolodvor' }, overlays.STOP_LABEL_ZOOM)).toBe('Zagreb Zapadni kolodvor');
+    expect(evaluate(names, { ...venue, title: 'Gavella' }, 12)).toBe('Gavella');
+    // The framed wall names no station either.
+    expect(evaluate(byId('city-place-labels', cityLayers(palette, null, 2, 'venues')).filter, rail, 14)).toBe(false);
+  });
+
   it('keeps a station of the unframed whole-city window a small dot without its number', () => {
     const far = bike('7', false, { far: true });
     expect(BIKE_FAR_RADIUS_PX).toBe(3);
@@ -416,7 +460,10 @@ describe('the city places’ marks', () => {
     expect(all.layout!.visibility).toBe('visible');
     expect(all.filter).toBeUndefined();
     // Every surface that names city places names a venue at every zoom (lane p-map); a station from 13.
-    expect(all.layout!['text-field']).toEqual(['step', ['zoom'], ['case', ['in', ['get', 'category'], ['literal', ['bikes', 'air']]], '', ['get', 'title']], 13, ['get', 'title']]);
+    expect(all.layout!['text-field']).toEqual(['step', ['zoom'],
+      ['case', ['in', ['get', 'category'], ['literal', ['bikes', 'air', 'rail']]], '', ['get', 'title']],
+      13, ['case', ['==', ['get', 'category'], 'rail'], '', ['get', 'title']],
+      overlays.STOP_LABEL_ZOOM, ['get', 'title']]);
     expect(all.minzoom).toBeUndefined();
     const venues = labels('venues');
     expect(venues.layout!.visibility).toBe('visible');
