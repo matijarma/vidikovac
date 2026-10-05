@@ -2,8 +2,9 @@
 // docs/companion-2026-09-22.md §15.6). A screen whose place somebody chose --
 // here the admin route's stop, Trg bana J. Jelačića (106_1), which the Durable
 // Object reads back as a chosen place (placeSet) -- frames its map on the
-// Kadar around that place, 6 stops by default, measured along the tram lines
-// (shared/city/frame.ts). On that frame:
+// Kadar around that place, 4 stops by default (Kadar 2 / 4 / 6, about 1 km
+// at Trg since 5 Oct 2026), measured along the tram lines and held to the
+// Kadar's metre caps (shared/city/frame.ts). On that frame:
 //
 //   1. the camera's zoom is frameView's for the measured radius and the map
 //      host's own laid-out box, within 0.05;

@@ -280,8 +280,8 @@ describe('BeaconDO screen-set', () => {
     const answer = await kiosk.inbox.nextOfType('codes');
     expect(answer.screen).toMatchObject({ kind: 'venue', area: 'zagreb' });
     expect((answer.screen as { stop: { id: string; name: string; district?: string } }).stop).toMatchObject({ id: '106_1', district: 'gornji-grad-medvescak' });
-    // Version 1 names a stop: the stop is the place the operator chose; the frame stays 6.
-    expect(answer.screen).toMatchObject({ place: TRG_PLACE, placeSet: true, frame: 6 });
+    // Version 1 names a stop: the stop is the place the operator chose; the frame stays 4, the default.
+    expect(answer.screen).toMatchObject({ place: TRG_PLACE, placeSet: true, frame: 4 });
     expect((answer.batch as CodeSlot[]).length).toBeGreaterThan(0);
     kiosk.ws.close(1000, 'done');
   });
@@ -335,11 +335,11 @@ describe('BeaconDO screen-set', () => {
     await kiosk.inbox.nextOfType('challenge');
     kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: '106_1', area: 'zagreb' }));
     expect((await kiosk.inbox.nextOfType('error')).error).toBe('auth-required');
-    kiosk.ws.send(v2({ kind: 'stop', stopId: '106_1' }, 8));
+    kiosk.ws.send(v2({ kind: 'stop', stopId: '106_1' }, 6));
     expect((await kiosk.inbox.nextOfType('error')).error).toBe('auth-required');
     await runInDurableObject(beaconStub(testEnv, beaconId), (instance: BeaconDO) => {
       expect(instance.screenMetadata().stop).toBeNull();
-      expect(instance.screenMetadata().frame).toBe(6);
+      expect(instance.screenMetadata().frame).toBe(4);
     });
     kiosk.ws.close(1000, 'done');
   });
@@ -348,12 +348,12 @@ describe('BeaconDO screen-set', () => {
 // place-v2: the settings panel's toggles send { place, frame }. A stop place carries only its
 // id and is resolved against the DO's own table; the area follows from the place.
 describe('BeaconDO screen-set version: 2', () => {
-  it('stores a stop place and frame 8 (version: 2), the stop and its district with it', async () => {
+  it('stores a stop place and frame 6 (version: 2), the stop and its district with it', async () => {
     const { beaconId, kiosk } = await onlineKiosk('podsljeme');
-    kiosk.ws.send(v2({ kind: 'stop', stopId: '106_1', address: 'Trg bana Josipa Jelačića 3' }, 8));
+    kiosk.ws.send(v2({ kind: 'stop', stopId: '106_1', address: 'Trg bana Josipa Jelačića 3' }, 6));
     const answer = await kiosk.inbox.nextOfType('codes');
     expect(answer.screen).toMatchObject({
-      frame: 8, area: 'gornji-grad-medvescak', stop: { id: '106_1' }, placeSet: true,
+      frame: 6, area: 'gornji-grad-medvescak', stop: { id: '106_1' }, placeSet: true,
       place: { ...TRG_PLACE, address: 'Trg bana Josipa Jelačića 3' },
     });
     expect((answer.batch as CodeSlot[]).length).toBeGreaterThan(0);
@@ -364,9 +364,9 @@ describe('BeaconDO screen-set version: 2', () => {
 
   it('stores an address place with no stop (version: 2), the area from its point', async () => {
     const { beaconId, kiosk } = await onlineKiosk('stenjevec');
-    kiosk.ws.send(v2({ ...ILICA, name: '  Ilica ', stray: 'dropped' }, 4));
+    kiosk.ws.send(v2({ ...ILICA, name: '  Ilica ', stray: 'dropped' }, 2));
     const answer = await kiosk.inbox.nextOfType('codes');
-    expect(answer.screen).toMatchObject({ stop: null, area: districtOf(ILICA.lon, ILICA.lat) ?? 'zagreb', frame: 4, placeSet: true });
+    expect(answer.screen).toMatchObject({ stop: null, area: districtOf(ILICA.lon, ILICA.lat) ?? 'zagreb', frame: 2, placeSet: true });
     expect((answer.screen as ScreenMetadata).place).toEqual(ILICA);
     expect(await metaOf(beaconId, 'stopId')).toBe('');
     kiosk.ws.close(1000, 'done');
@@ -374,25 +374,26 @@ describe('BeaconDO screen-set version: 2', () => {
 
   it('place null (version: 2) is the whole city: no stop, area zagreb, read back as Trg with placeSet false', async () => {
     const { beaconId, kiosk } = await onlineKiosk('crnomerec');
-    kiosk.ws.send(v2(null, 6));
+    kiosk.ws.send(v2(null, 4));
     const answer = await kiosk.inbox.nextOfType('codes');
-    expect(answer.screen).toMatchObject({ stop: null, area: 'zagreb', place: TRG_PLACE, placeSet: false, frame: 6 });
+    expect(answer.screen).toMatchObject({ stop: null, area: 'zagreb', place: TRG_PLACE, placeSet: false, frame: 4 });
     expect(await metaOf(beaconId, 'place')).toBe('');
     kiosk.ws.close(1000, 'done');
   });
 
-  it('refuses a place it cannot resolve with bad-place and a frame outside 4/6/8 with bad-frame: one error frame each, nothing written, the window untouched', async () => {
+  it('refuses a place it cannot resolve with bad-place and a frame outside 2/4/6 (a legacy 8 too) with bad-frame: one error frame each, nothing written, the window untouched', async () => {
     const { beaconId, kiosk } = await onlineKiosk('novi-zagreb-istok');
     const before = await screenOf(beaconId);
     const refusals: Array<[string, string]> = [
-      [v2({ kind: 'stop', stopId: 'invented' }, 6), 'bad-place'],
-      [v2({ kind: 'address', name: 'X', lon: 0, lat: 0 }, 6), 'bad-place'],
-      [v2({ kind: 'address', name: 'Ilica\u0000', lon: 15.97, lat: 45.8135 }, 6), 'bad-place'],
-      [v2({ kind: 'tram', name: 'Trg', lon: 15.97, lat: 45.81, stopId: '106_1' }, 6), 'bad-place'],
-      [v2({ ...ILICA, stopId: '106_1' }, 6), 'bad-place'],
-      [v2('Ilica 25', 6), 'bad-place'],
-      [JSON.stringify({ t: 'screen-set', version: 2, frame: 6 }), 'bad-place'],
+      [v2({ kind: 'stop', stopId: 'invented' }, 4), 'bad-place'],
+      [v2({ kind: 'address', name: 'X', lon: 0, lat: 0 }, 4), 'bad-place'],
+      [v2({ kind: 'address', name: 'Ilica\u0000', lon: 15.97, lat: 45.8135 }, 4), 'bad-place'],
+      [v2({ kind: 'tram', name: 'Trg', lon: 15.97, lat: 45.81, stopId: '106_1' }, 4), 'bad-place'],
+      [v2({ ...ILICA, stopId: '106_1' }, 4), 'bad-place'],
+      [v2('Ilica 25', 4), 'bad-place'],
+      [JSON.stringify({ t: 'screen-set', version: 2, frame: 4 }), 'bad-place'],
       [v2({ kind: 'stop', stopId: '106_1' }, 5), 'bad-frame'],
+      [v2({ kind: 'stop', stopId: '106_1' }, 8), 'bad-frame'],
       [v2(null, '6'), 'bad-frame'],
       [JSON.stringify({ t: 'screen-set', version: 2, place: null }), 'bad-frame'],
     ];
@@ -405,8 +406,8 @@ describe('BeaconDO screen-set version: 2', () => {
     expect(await screenOf(beaconId)).toEqual(before);
     expect(await metaOf(beaconId, 'place')).toBeNull();
     // No refusal stamped the window: a good frame is taken at once.
-    kiosk.ws.send(v2({ kind: 'stop', stopId: '106_1' }, 8));
-    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ place: TRG_PLACE, frame: 8 });
+    kiosk.ws.send(v2({ kind: 'stop', stopId: '106_1' }, 6));
+    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ place: TRG_PLACE, frame: 6 });
     kiosk.ws.close(1000, 'done');
   });
 
@@ -416,19 +417,19 @@ describe('BeaconDO screen-set version: 2', () => {
     const at = Date.now();
     const clock = (ms: number) => runInDurableObject(stub, (instance: BeaconDO) => { vi.spyOn(instance, 'now').mockReturnValue(ms); });
     await clock(at);
-    kiosk.ws.send(v2({ kind: 'stop', stopId: '106_1' }, 8));
+    kiosk.ws.send(v2({ kind: 'stop', stopId: '106_1' }, 6));
     const applied = (await kiosk.inbox.nextOfType('codes')).screen;
     const earliest = at + SCREEN_SET_MIN_MS - SCREEN_SET_ARRIVAL_SLACK_MS;
     await clock(earliest - 1);
-    kiosk.ws.send(v2(ILICA, 4));
+    kiosk.ws.send(v2(ILICA, 2));
     expect((await kiosk.inbox.nextOfType('error')).error).toBe('screen-set-rate');
     await kiosk.inbox.expectSilence(200);
     expect(await screenOf(beaconId)).toEqual(applied);
     // Measured from the last accepted frame, not from the refused one; a frame the panel
     // spaced by the full window still counts when the first one arrived a little late.
     await clock(earliest);
-    kiosk.ws.send(v2(ILICA, 4));
-    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ place: ILICA, frame: 4, stop: null });
+    kiosk.ws.send(v2(ILICA, 2));
+    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ place: ILICA, frame: 2, stop: null });
     kiosk.ws.close(1000, 'done');
   });
 
@@ -438,13 +439,13 @@ describe('BeaconDO screen-set version: 2', () => {
     await authKiosk(b, secret);
     const at = Date.now();
     await clockOf(beaconId, at);
-    a.ws.send(v2({ kind: 'stop', stopId: '106_1' }, 8));
+    a.ws.send(v2({ kind: 'stop', stopId: '106_1' }, 6));
     const applied = (await a.inbox.nextOfType('codes')).screen;
-    expect(applied).toMatchObject({ place: TRG_PLACE, frame: 8 });
+    expect(applied).toMatchObject({ place: TRG_PLACE, frame: 6 });
     // The other socket hears the change too, so its copy is the DO's state.
     expect((await b.inbox.nextOfType('codes')).screen).toEqual(applied);
     await clockOf(beaconId, at + 1_000);
-    b.ws.send(v2(ILICA, 4));
+    b.ws.send(v2(ILICA, 2));
     expect((await b.inbox.nextOfType('error')).error).toBe('screen-set-rate');
     await b.inbox.expectSilence(150);
     expect(await screenOf(beaconId)).toEqual(applied);
@@ -452,13 +453,13 @@ describe('BeaconDO screen-set version: 2', () => {
     a.ws.close(1000, 'reconnect');
     const c = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
     expect((await authKiosk(c, secret)).screen).toEqual(applied);
-    c.ws.send(v2(ILICA, 4));
+    c.ws.send(v2(ILICA, 2));
     expect((await c.inbox.nextOfType('error')).error).toBe('screen-set-rate');
     expect(await screenOf(beaconId)).toEqual(applied);
     await clockOf(beaconId, at + SCREEN_SET_MIN_MS);
-    c.ws.send(v2(ILICA, 4));
+    c.ws.send(v2(ILICA, 2));
     const next = (await c.inbox.nextOfType('codes')).screen;
-    expect(next).toMatchObject({ place: ILICA, frame: 4 });
+    expect(next).toMatchObject({ place: ILICA, frame: 2 });
     expect((await b.inbox.nextOfType('codes')).screen).toEqual(next);
     expect(await screenOf(beaconId)).toEqual(next);
     b.ws.close(1000, 'done');
@@ -470,12 +471,12 @@ describe('BeaconDO screen-set version: 2', () => {
     const stub = beaconStub(testEnv, beaconId);
     const at = Date.now();
     await runInDurableObject(stub, (instance: BeaconDO) => { vi.spyOn(instance, 'now').mockReturnValue(at); });
-    kiosk.ws.send(v2(ILICA, 8));
-    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ place: ILICA, frame: 8 });
+    kiosk.ws.send(v2(ILICA, 6));
+    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ place: ILICA, frame: 6 });
     await runInDurableObject(stub, (instance: BeaconDO) => { vi.spyOn(instance, 'now').mockReturnValue(at + SCREEN_SET_MIN_MS); });
     kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: null, area: 'trnje' }));
     // No stop: no place stored, read back as Trg with placeSet false; the area stays as sent.
-    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ area: 'trnje', stop: null, place: TRG_PLACE, placeSet: false, frame: 8 });
+    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ area: 'trnje', stop: null, place: TRG_PLACE, placeSet: false, frame: 6 });
     kiosk.ws.close(1000, 'done');
   });
 
@@ -505,20 +506,30 @@ describe('BeaconDO legacy records', () => {
     return { beaconId, secret };
   };
 
-  it('a legacy record with a stop and no place meta reads its place from the stop, frame 6, on every path', async () => {
+  it('a legacy record with a stop and no place meta reads its place from the stop, frame 4, on every path', async () => {
     const { beaconId, secret } = await legacyCreate('106_1');
     expect(await metaOf(beaconId, 'place')).toBeNull();
     expect(await metaOf(beaconId, 'frame')).toBeNull();
     const screen = await screenOf(beaconId);
-    expect(screen).toMatchObject({ stop: { id: '106_1' }, area: 'donji-grad', place: TRG_PLACE, placeSet: true, frame: 6 });
+    expect(screen).toMatchObject({ stop: { id: '106_1' }, area: 'donji-grad', place: TRG_PLACE, placeSet: true, frame: 4 });
     const kiosk = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
     expect((await authKiosk(kiosk, secret)).screen).toEqual(screen);
     kiosk.ws.close(1000, 'done');
   });
 
+  it('a Kadar 8 stored before Kadar 2 / 4 / 6 (5 Oct 2026) reads back as the default 4, and nothing is rewritten', async () => {
+    const { beaconId, secret } = await legacyCreate('106_1');
+    await setMetaOf(beaconId, 'frame', '8');
+    expect((await screenOf(beaconId)).frame).toBe(4);
+    const kiosk = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
+    expect((await authKiosk(kiosk, secret)).screen).toMatchObject({ frame: 4 });
+    kiosk.ws.close(1000, 'done');
+    expect(await metaOf(beaconId, 'frame')).toBe('8');
+  });
+
   it('a legacy record without a stop reads as Trg bana Jelačića with placeSet false', async () => {
     const { beaconId } = await legacyCreate(null);
-    expect(await screenOf(beaconId)).toMatchObject({ stop: null, area: 'donji-grad', place: TRG_PLACE, placeSet: false, frame: 6 });
+    expect(await screenOf(beaconId)).toMatchObject({ stop: null, area: 'donji-grad', place: TRG_PLACE, placeSet: false, frame: 4 });
   });
 
   it('the default place is the table\'s Trg bana J. Jelačića, a tram place', () => {
@@ -536,7 +547,7 @@ describe('BeaconDO legacy records', () => {
     });
     const cityId = randomId(5);
     expect(await beaconStub(testEnv, cityId).create({
-      beaconId: cityId, venueType: 'kafic', area: 'zagreb', operatorLabel: 'x', stopId: null, secret: randomId(20), place: null, frame: 6,
+      beaconId: cityId, venueType: 'kafic', area: 'zagreb', operatorLabel: 'x', stopId: null, secret: randomId(20), place: null, frame: 4,
     })).toEqual({ created: true });
     expect(await metaOf(cityId, 'place')).toBe('');
     expect(await screenOf(cityId)).toMatchObject({ stop: null, place: TRG_PLACE, placeSet: false });
@@ -571,6 +582,7 @@ describe('BeaconDO legacy records', () => {
         { stopId: '106_1', place: { ...TRG_PLACE, kind: 'tram', lon: 15.99 } },
         { stopId: '106_1', place: { ...TRG_PLACE, kind: 'bus' } },
         { stopId: null, place: null, frame: 5 as 6 },
+        { stopId: null, place: null, frame: 8 as 6 },
       ];
       for (const shape of refused) {
         await expect(instance.create({ ...base, stopId: null, ...shape })).rejects.toThrow('beacon-create-invalid');
@@ -583,7 +595,7 @@ describe('BeaconDO legacy records', () => {
     const extras = { note: '<b>x</b>', secret: 'leak' };
     expect(await beaconStub(testEnv, stopId).create({
       beaconId: stopId, venueType: 'kafic', area: 'donji-grad', operatorLabel: 'x', stopId: '106_1', stop: TRG_STOP, secret: randomId(20),
-      place: { ...TRG_PLACE, kind: 'tram', address: 'Trg bana Josipa Jelačića 3', ...extras } as ScreenPlace, frame: 6,
+      place: { ...TRG_PLACE, kind: 'tram', address: 'Trg bana Josipa Jelačića 3', ...extras } as ScreenPlace, frame: 4,
     })).toEqual({ created: true });
     expect(JSON.parse((await metaOf(stopId, 'place'))!)).toEqual({ ...TRG_PLACE, address: 'Trg bana Josipa Jelačića 3' });
     const addressId = randomId(5);

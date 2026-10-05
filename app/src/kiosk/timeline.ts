@@ -1433,17 +1433,31 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
 // same row Sada and Karta print, so "uživo" means the same thing on all three),
 // and every other string here is a return of vetExternal. Whole rows and whole
 // words: each builder offers its variants from the richest to the leanest, and
-// the panel keeps the first its box holds whole.
+// the panel keeps the first its box holds whole. When none does, the leanest is
+// made to fit (TOUCH_FITS) rather than left to overflow: a body clipped by its
+// box showed only its first line, a row's "uvijek", with the title cut away
+// below it (owner, 5 Oct 2026).
 
-/** How long a touch keeps its detail before the wall returns by itself [O-58]. */
-export const TOUCH_MS = 60_000;
+/** How long a touch keeps its detail before the wall returns by itself [O-58]; 30 s since 5 Oct 2026 (60 s held
+ *  the list away for a whole minute), and a second tap on the detail or its row gives the list back at once. */
+export const TOUCH_MS = 30_000;
+
+/**
+ * The last resort of the touch panel's fit, in order, set as `data-fit` on the leanest variant's body when no
+ * variant holds whole (kiosk-city.css): `lean` drops the secondary lines (`.k-touch-line`, the timetable line),
+ * `clamp` also clamps the title to two lines with an ellipsis, and `tight` to one. The first that fits stays;
+ * `tight` stays regardless, the most the box can hold.
+ */
+export const TOUCH_FITS = ['lean', 'clamp', 'tight'] as const;
+export type TouchFit = (typeof TOUCH_FITS)[number];
 
 export type TouchKind = 'stop' | 'row' | 'pharmacy';
 
 export interface TouchPanelHandle {
   /** The panel's section while it shows something; null while the box is the list's. */
   element(): HTMLElement | null;
-  /** Puts the first of `variants` (richest first) the box holds whole over the list; an empty list gives the box back. */
+  /** Puts the first of `variants` (richest first) the box holds whole over the list, else the leanest made to fit
+   *  (TOUCH_FITS); an empty list gives the box back. */
   show(kind: TouchKind, variants: readonly string[]): void;
   /** Gives the box back to the list: the panel leaves the DOM. */
   clear(): void;
@@ -1485,6 +1499,13 @@ export function mountTouchPanel(host: HTMLElement, deps: { measure?: TimelineMea
         section.innerHTML = markup;
         const body = section.firstElementChild as HTMLElement | null;
         if (!body || !measure.box(body).overflow) return;
+      }
+      // Nothing held whole: the leanest variant stays, its secondary lines dropped first, then its title clamped.
+      const body = section.firstElementChild as HTMLElement | null;
+      if (!body) return;
+      for (const fit of TOUCH_FITS) {
+        body.dataset.fit = fit;
+        if (!measure.box(body).overflow) return;
       }
     },
     clear,

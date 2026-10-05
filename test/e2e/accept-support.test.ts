@@ -93,11 +93,11 @@ const rect = (top: number, h = 40, w = 100): DOMRect => ({ x: 0, y: top, left: 0
 
 // --- the numbers -----------------------------------------------------------------------------
 describe('the numbers the specs hold', () => {
-  it('names the plan\'s targets: a place of ≥ 3 characters, ≤ 2 structural mutations per idle minute, a 60 s board, 390×844 and 1440×900, axe A/AA serious+critical', () => {
+  it('names the plan\'s targets: a place of ≥ 3 characters, ≤ 2 structural mutations per idle minute, a 30 s board, 390×844 and 1440×900, axe A/AA serious+critical', () => {
     expect(PLACE_MIN_CHARS).toBe(3);
     expect(IDLE_MINUTE_MS).toBe(60_000);
     expect(IDLE_MUTATIONS_MAX).toBe(2);
-    expect(TOUCH_BOARD_MS).toBe(60_000);
+    expect(TOUCH_BOARD_MS).toBe(30_000);
     expect(PHONE_VIEWPORT).toEqual({ width: 390, height: 844 });
     expect(DESK_VIEWPORT).toEqual({ width: 1440, height: 900 });
     expect(AXE_TAGS).toEqual(['wcag2a', 'wcag2aa', 'wcag21aa']);

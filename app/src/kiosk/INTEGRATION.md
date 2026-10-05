@@ -16,7 +16,9 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
   this order: a place somebody chose (`placeSet` true) frames N stops around
   it on a wall, the square of side 2R on the field's shorter side
   (`map/frame.ts` `frameView`, R measured per place along the tram lines by
-  `shared/city/frame.ts` `frameRadiusM`, Kadar 4 / 6 / 8); a phone's band, and
+  `shared/city/frame.ts` `frameRadiusM`, Kadar 2 / 4 / 6, the 25th percentile
+  of the ways out held to each Kadar's `FRAME_RADIUS_CAP_M`, about
+  0.7 / 1 / 1.3 km at Trg bana J. Jelačića); a phone's band, and
   a stop from a caller before place-v2, keep the centred street-level camera;
   the read-path default place (`placeSet` false) keeps `CITY_WINDOW`, the whole city fitted
   to the field with 24 px of clearance. The frame and the window are fitted
@@ -99,7 +101,7 @@ twice for one screen and never reaches into MapLibre itself.
 Contract testids across this hand-off (global constraints, contract 8; the
 whole probe list is `docs/companion-2026-09-22.md` §15.6): `kiosk-live` names
 the field's section; `kiosk-map-host` and `kiosk-map` name the map container
-inside it, and `kiosk-map-host` carries `data-frame="4|6|8"` and, once the
+inside it, and `kiosk-map-host` carries `data-frame="2|4|6"` and, once the
 style idles, `data-major-labels="<count>"`; `map-note` is the outage
 note over the map, and `.k-map-legend` holds the three legend items of
 `kiosk.legend.*`. The front page carries no panel: beside the field it has the
@@ -232,11 +234,24 @@ brand or anywhere else on a screen-sized wall; a shorter press or a finger that
 moves more than 12 px opens nothing (`bindLongPress` in `kiosk/settings.ts`,
 bound once on the brand and once on the kiosk root with `accept: wallPressable`
 and `keys: false`, both timed through the kiosk's own timer seam so a test's
-`tick()` drives them; the press is never stopped, so the first-tap fullscreen
-and wake-lock listener still hears it). While the touch answers, the touch's
-own targets (a stop or pharmacy ring on the map, a row of
-`[data-testid=nearby-rows]`, the footer's `strip-pharmacy`) keep their tap and
-a press held on them opens no settings. Enter or Space open the panel at once,
+`tick()` drives them; the press is never stopped, so the first-tap wake-lock
+listener and the double tap still hear it). Fullscreen is a double tap
+(`bindDoubleTap` in `kiosk/settings.ts`, decision 4 of 5 Oct 2026): two
+releases within `DOUBLE_TAP_MS` (400 ms) and `DOUBLE_TAP_SLOP_PX` (24 px),
+judged by the events' own timestamps, each a single pointer held shorter than
+`LONG_PRESS_MS`, anywhere on a screen-sized wall but a control or an open
+panel; `deps.requestFullscreen` (default `requestFullscreen()` on the
+document element) enters it and the next double tap leaves it through
+`deps.exitFullscreen` while `document.fullscreenElement` is set. The first
+`pointerdown` arms only the wake lock; a handheld gets neither. Since 5 Oct
+2026 the wall-wide press arms on the touch's own targets too (a stop or
+pharmacy ring on the map, a row of `[data-testid=nearby-rows]`, the footer's
+`strip-pharmacy`, the open detail): `wallPressable` refuses only the brand,
+the open panel, Osnovno and the DEV grid, and once a press has opened
+Postavke `bindLongPress` swallows the one `click` its release makes (a
+capture listener on the bound element, retired by the next `pointerdown` or
+key), so `onTouch` opens no detail under the panel. A tap keeps its touch.
+Enter or Space open the panel at once,
 on the focused brand or whenever the wall has focus (`onWallKey` on
 `document`): the kiosk root carries `tabindex="-1"` (focusable, never a tab
 stop) and `focusWall()` gives it the focus when a phase mounts and on any
@@ -247,7 +262,7 @@ the start screen; there is no wizard and no provisioning aside, on a wall or
 on a phone. Its rows are click-toggles that name their current state: Mjesto
 (`toggle-place` opens the shared `kiosk/place-field.ts` field,
 `settings-place-city` sets the whole city), Kadar
-(`toggle-frame[data-value=4|6|8]`), Prikaz
+(`toggle-frame[data-value=2|4|6]`), Prikaz
 (`toggle-view[data-value=map|schema]`), Tema (`toggle-theme`), Ritam
 (`toggle-rhythm[data-value=20|30|60]`) and Zaslon (expiry and "Zaboravi
 zaslon"). Prikaz and Ritam belong to this browser (`kiosk/prefs.ts`,
@@ -273,10 +288,16 @@ as its own chunk on the first touch, `loadStopBoardRows`), then one "Vozni
 red" line of `TIMETABLE_LINE_TRIPS` (4) later trips; a row of the list opens
 `rowDetailVariants`, the pharmacy `pharmacyDetailVariants` (the vetted
 caption, the name and the curated phone). The panel shows the first variant
-its box holds whole and closes after `TOUCH_MS` (60 s, by its timer and by
-the deadline checked on every tick and poll), when an outage starts under an
-open board, on a phase change, on a presentation and on destroy; a second
-touch replaces it. Touch does nothing on a handheld, in a paired composition
+its box holds whole; when none does, the leanest stays with `data-fit` set
+on its body by `TOUCH_FITS` (`lean` drops its `.k-touch-line` and timetable
+lines, `clamp` also clamps its title to two lines, `tight` to one; the first
+that fits, else `tight`), so its title always shows: a body left overflowing
+under `overflow: hidden` showed only its first line, "uvijek". It closes
+after `TOUCH_MS` (30 s since 5 Oct 2026, by its timer and by the deadline
+checked on every tick and poll), on a tap on the open panel or a second tap
+on what it shows (the same row, ring or pharmacy, `onTouch`), when an outage
+starts under an open board, on a phase change, on a presentation and on
+destroy; a touch on another subject replaces it. Touch does nothing on a handheld, in a paired composition
 or presentation, in Postavke and while Osnovno is open. On the schema only the
 map's ring hit test is off (`touchOnMap` returns null), so the list's rows and
 the footer's pharmacy item still open their panels.
@@ -296,13 +317,14 @@ socket, `ScreenMetadata` on `joined`, 10-minute screens and 5-minute one-hop
 grants are unchanged.
 
 `ScreenMetadata` carries `place` (`ScreenPlace`, `shared/city/place.ts`),
-`placeSet` and `frame` (`FrameStops`, 4 | 6 | 8, `shared/city/frame.ts`),
+`placeSet` and `frame` (`FrameStops`, 2 | 4 | 6, `shared/city/frame.ts`),
 always present on the create response, the scan grant and the room `joined`
 frame. Records made before place-v2 are enriched on read (`screenMetadata()`
 and `worker/pairing/place.ts`), never migrated: a stored stop is the chosen
 place (`placeSet: true`); no place and no stop reads as Trg bana J. Jelačića
 with `placeSet: false`, so the list and the departures always have a place
-while the map keeps the whole-city window; a missing frame reads as 6. The
+while the map keeps the whole-city window; a missing frame, or a Kadar 8
+stored before Kadar 2 / 4 / 6 (5 Oct 2026), reads as 4, the default. The
 kiosk reads the same answer through `wallPlaceOf()` (`kiosk/settings.ts`),
 which also covers a credential copy stored before the deploy, and frames the
 invitation with `wallSpanM()`: the whole measured circle

@@ -55,7 +55,7 @@ export interface ScreenMetadata {
    * the map keeps the whole-city window. True when the operator chose the place.
    */
   placeSet?: boolean;
-  /** How many tram stops around the place the wall frames (Kadar 4 / 6 / 8; shared/city/frame.ts). */
+  /** How many tram stops around the place the wall frames (Kadar 2 / 4 / 6; shared/city/frame.ts). */
   frame?: FrameStops;
   /**
    * A DEV screen (worker/routes/dev.ts): opened with ?DEV, never paired with a code, counted

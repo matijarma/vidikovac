@@ -19,7 +19,7 @@ test.describe('real self-service screen', () => {
     await expect(setup.getByTestId('setup-suggestions')).toBeVisible({ timeout: 30_000 });
     await setup.locator('[data-testid=setup-suggestion][data-kind=stop]').filter({ hasText: 'Kvaternikov trg' }).first().click();
     await expect(field).toHaveValue('Kvaternikov trg');
-    await expect(preview).toHaveText('Na zaslonu: Kvaternikov trg i 6 stajališta uokolo');
+    await expect(preview).toHaveText('Na zaslonu: Kvaternikov trg i 4 stajališta uokolo');
     await setup.getByTestId('setup-create').click();
     await expect(page.getByTestId('kiosk-invitation')).toBeVisible({ timeout: 30_000 });
     // The header names the place the Worker resolved from its own stop table, and carries no operator control.
@@ -27,23 +27,24 @@ test.describe('real self-service screen', () => {
     await expect(page.getByTestId('kiosk-settings')).toHaveCount(0);
     await expect(page.getByTestId('kiosk-theme')).toHaveCount(0);
     const shell = page.locator('.kiosk');
-    await expect(shell).toHaveAttribute('data-frame', '6');
+    await expect(shell).toHaveAttribute('data-frame', '4');
     // The wall itself holds the keyboard's focus from the moment it mounts (lane/w-settings): the root, never a tab stop.
     const wallHasFocus = () => page.evaluate(() => document.activeElement?.classList.contains('kiosk') ?? false);
     await expect.poll(wallHasFocus, { message: 'the wall takes the focus when the invitation mounts' }).toBe(true);
     await expect(shell).toHaveAttribute('tabindex', '-1');
-    // Postavke open only on a press held past LONG_PRESS_MS (800 ms) on the brand.
+    // Postavke open only on a press held past LONG_PRESS_MS (800 ms) on the brand. This first press arms the wake
+    // lock and nothing else: fullscreen is a double tap since 5 Oct 2026, so the page keeps its 1366 x 768 window.
     await page.getByTestId('kiosk-brand').click({ delay: 900 });
     const panel = page.getByTestId('kiosk-settings-panel');
     await expect(panel).toBeVisible();
     const kadar = panel.getByTestId('toggle-frame');
-    await expect(kadar).toHaveAttribute('data-value', '6');
+    await expect(kadar).toHaveAttribute('data-value', '4');
     await kadar.click();
     // The toggle says the new state at once; the shell follows only the DO's answer to the one
     // screen-set version 2 frame the panel sends 0.8 s after the click. The panel stays open.
-    await expect(kadar).toHaveAttribute('data-value', '8');
-    await expect(kadar).toHaveText('Kadar: 8 stajališta odavde');
-    await expect(shell).toHaveAttribute('data-frame', '8', { timeout: 30_000 });
+    await expect(kadar).toHaveAttribute('data-value', '6');
+    await expect(kadar).toHaveText('Kadar: 6 stajališta odavde');
+    await expect(shell).toHaveAttribute('data-frame', '6', { timeout: 30_000 });
     await expect(panel).toBeVisible();
     await kadar.press('Escape');
     await expect(panel).toBeHidden();

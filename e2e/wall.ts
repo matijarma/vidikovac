@@ -49,7 +49,7 @@ export const WALL_PROBES = Object.freeze({
   rowTime: 'time',
   /** The wall map container: data-map-status, data-zoom, data-pills, data-bodies, data-feed, data-markers, data-unlabelled (WP2). */
   map: '[data-testid=kiosk-map]',
-  /** `[data-frame=4|6|8][data-major-labels]` (WP2). */
+  /** `[data-frame=2|4|6][data-major-labels]` (WP2; Kadar 2 / 4 / 6 since 5 Oct 2026). */
   mapHost: '[data-testid=kiosk-map-host]',
   /** The one quiet outage note on the map (WP1). */
   mapNote: '[data-testid=map-note]',

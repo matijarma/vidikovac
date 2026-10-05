@@ -5,7 +5,7 @@
 //
 // Six rows of click-toggles, each click changing the state at once -- no
 // draft, no Spremi: Mjesto (the place, changed through the shared "Adresa ili
-// stajalište" field or set to the whole city), Kadar (4 / 6 / 8 stops),
+// stajalište" field or set to the whole city), Kadar (2 / 4 / 6 stops),
 // Prikaz (map / schema), Tema, Ritam (20 / 30 / 60 s) and Zaslon (the expiry
 // and the one way to forget the screen).
 //
@@ -29,7 +29,7 @@ import { escapeHtml } from '../ui/dom/escape';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { iconMarkup, type IconName } from '../ui/icons';
 import type { ThemePreference } from '../ui/theme';
-import { LONG_PRESS_BEAT_MS, LONG_PRESS_MS } from './constants';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX, LONG_PRESS_BEAT_MS, LONG_PRESS_MS } from './constants';
 import { clock, sameZagrebDay, weekdayDayMonth } from './format';
 import { FIELD_SPAN_M, HANDHELD_SPAN_M } from './mapview';
 import { placeInputOf } from './places';
@@ -115,9 +115,10 @@ export interface LongPressDeps {
 /**
  * A press held on `target` for LONG_PRESS_MS opens the settings; a shorter press, a finger that
  * moves more than LONG_PRESS_SLOP_PX, or a pointer that leaves opens nothing. Enter or Space on
- * the focused target opens at once (a keyboard is an operator's tool). The timer goes through
+ * the focused target opens at once (a keyboard is an operator's tool). The click that follows a
+ * press that opened is swallowed on the target, so the press is never also a tap. The timer goes through
  * the injected pair, so the kiosk's clock -- and a test's -- drives it. The press is never
- * stopped: the kiosk's first-tap fullscreen and wake-lock listener hears it too. Returns the
+ * stopped: the kiosk's first-tap wake-lock listener and its double tap hear it too. Returns the
  * unbinding.
  *
  * The press is judged twice, and the timer is only the early answer. While the finger stays
@@ -131,6 +132,9 @@ export interface LongPressDeps {
  * timer got its turn. A clock the tests fake never reaches these stamps, which is why the
  * unit tests set them on the events themselves.
  */
+/** What retires the swallow of a long press's click: the next gesture, a finger or a key. */
+const RETIRES = ['pointerdown', 'keydown'] as const;
+
 export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => void {
   let timer: unknown = null;
   /** The frame after the timer (review N6), then the beat. */
@@ -152,7 +156,26 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
     downAt = null;
   };
   const near = (event: PointerEvent): boolean => origin !== null && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) <= LONG_PRESS_SLOP_PX;
-  const onBeat = (): void => { beat = null; if (origin === null) return; disarm(); deps.open('pointer'); };
+  /** The click a press's release makes after the press opened the panel belongs to the press, not to a tap: kiosk.ts
+   *  onTouch would open a row's detail under Postavke (5 Oct 2026, the press arms on the rows too). It is swallowed
+   *  once, in the capture phase on the target, before anything inside or below hears it. The next pointerdown or key
+   *  anywhere retires the swallow, so a release that made no click here can never eat a later tap. */
+  let swallowing: (() => void) | null = null;
+  const swallowClick = (): void => {
+    swallowing?.();
+    const doc = target.ownerDocument;
+    const eat = (event: Event): void => { event.stopPropagation(); event.preventDefault(); retire(); };
+    const retire = (): void => {
+      target.removeEventListener('click', eat, true);
+      for (const type of RETIRES) doc.removeEventListener(type, retire, true);
+      swallowing = null;
+    };
+    target.addEventListener('click', eat, true);
+    for (const type of RETIRES) doc.addEventListener(type, retire, true);
+    swallowing = retire;
+  };
+  const opened = (): void => { swallowClick(); deps.open('pointer'); };
+  const onBeat = (): void => { beat = null; if (origin === null) return; disarm(); opened(); };
   const down = (event: PointerEvent): void => {
     if (event.button > 0) return; // a secondary button is not a press
     disarm();
@@ -176,7 +199,7 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
     const long = beat !== null || frame !== null || (downAt !== null && timer !== null && Number.isFinite(event.timeStamp) && event.timeStamp - downAt >= LONG_PRESS_MS);
     const opens = long && near(event);
     disarm();
-    if (opens) deps.open('pointer');
+    if (opens) opened();
   };
   const gone = (): void => { disarm(); };
   /** A second finger anywhere on the document ends a press already armed (N7); the document's own listener
@@ -202,6 +225,7 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
   target.addEventListener('contextmenu', menu);
   return () => {
     disarm();
+    swallowing?.();
     target.removeEventListener('pointerdown', down);
     target.removeEventListener('pointermove', move);
     target.removeEventListener('pointerup', up);
@@ -209,6 +233,78 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
     target.ownerDocument.removeEventListener('pointerdown', elsewhere, true);
     if (keys) target.removeEventListener('keydown', key);
     target.removeEventListener('contextmenu', menu);
+  };
+}
+
+// --- The double tap: fullscreen on and off ------------------------------------
+
+export interface DoubleTapDeps {
+  /** The second tap of a pair. */
+  onDoubleTap: () => void;
+  /** The most time between the two releases, by the events' own clock (default DOUBLE_TAP_MS). */
+  within?: number;
+  /** The most distance between the two taps, and the most a finger may move during one (default DOUBLE_TAP_SLOP_PX). */
+  slop?: number;
+  /** Whether a press here counts at all (kiosk.ts: never on a handheld, a control or an open panel). Omitted, every
+   *  primary press does. A press that is refused forgets a first tap. */
+  accept?: (event: PointerEvent) => boolean;
+}
+
+/**
+ * Two taps on `target`, their releases within `within` ms and `slop` px of each other, call onDoubleTap once; the
+ * next tap starts a new pair. A tap is one finger (or the primary button) down and up again within the slop and
+ * shorter than LONG_PRESS_MS, the press that opens Postavke: a held press, a finger that moves, a second finger
+ * anywhere on the document or a cancelled pointer is no tap and forgets a first one. The releases are judged by
+ * the events' own timestamps, as bindLongPress judges its press, so a wall whose main thread is busy drawing its
+ * map still counts a real double tap. Nothing is stopped: the long press, the first tap's wake lock and the
+ * read-only touch hear the same events. Returns the unbinding.
+ */
+export function bindDoubleTap(target: HTMLElement, deps: DoubleTapDeps): () => void {
+  const within = deps.within ?? DOUBLE_TAP_MS;
+  const slop = deps.slop ?? DOUBLE_TAP_SLOP_PX;
+  const pointers = downPointers(target.ownerDocument);
+  /** The press under way: its pointer, where and when it came down. */
+  let press: { id: number; x: number; y: number; at: number } | null = null;
+  /** The first tap of a pair: where and when it was released. */
+  let first: { x: number; y: number; at: number } | null = null;
+  const forget = (): void => { press = null; first = null; };
+  const point = (event: PointerEvent): { x: number; y: number } => ({
+    x: Number.isFinite(event.clientX) ? event.clientX : 0,
+    y: Number.isFinite(event.clientY) ? event.clientY : 0,
+  });
+  const down = (event: PointerEvent): void => {
+    if (event.button > 0) return; // a secondary button is not a tap
+    if (pointers.size > 1 || (deps.accept && !deps.accept(event))) { forget(); return; }
+    press = { id: event.pointerId, ...point(event), at: event.timeStamp };
+  };
+  const up = (event: PointerEvent): void => {
+    const pressed = press;
+    press = null;
+    if (!pressed || pressed.id !== event.pointerId || event.button > 0) return;
+    const at = point(event);
+    const held = event.timeStamp - pressed.at;
+    if (Math.hypot(at.x - pressed.x, at.y - pressed.y) > slop || !(held < LONG_PRESS_MS)) { first = null; return; }
+    const tap = { ...at, at: event.timeStamp };
+    const gap = first ? tap.at - first.at : NaN;
+    if (first && gap >= 0 && gap <= within && Math.hypot(tap.x - first.x, tap.y - first.y) <= slop) {
+      first = null;
+      deps.onDoubleTap();
+      return;
+    }
+    first = tap;
+  };
+  /** A second finger anywhere on the document ends the pair (downPointers has counted it first). */
+  const elsewhere = (event: PointerEvent): void => { if (event.button <= 0 && pointers.size > 1) forget(); };
+  target.addEventListener('pointerdown', down);
+  target.addEventListener('pointerup', up);
+  target.addEventListener('pointercancel', forget);
+  target.ownerDocument.addEventListener('pointerdown', elsewhere, true);
+  return () => {
+    forget();
+    target.removeEventListener('pointerdown', down);
+    target.removeEventListener('pointerup', up);
+    target.removeEventListener('pointercancel', forget);
+    target.ownerDocument.removeEventListener('pointerdown', elsewhere, true);
   };
 }
 

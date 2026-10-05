@@ -52,6 +52,7 @@ import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase
 import { essentialsMarkup, essentialsRows, fitEssentials } from './kiosk/essentials';
 import { presentationLabelKind } from './kiosk/external';
 import { clock, weekdayDayMonth } from './kiosk/format';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX } from './kiosk/constants';
 import { frameStrip, PHARMACY_HOURS, stripMarkup } from './kiosk/frame';
 import { cardMarkup, mountInvitation, wallMapNote, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
@@ -71,7 +72,7 @@ import type { PairedContext, PairedHandle } from './kiosk/paired';
 import { mountPlaceField } from './kiosk/place-field';
 import type { StreetGeo } from './kiosk/places';
 import { readRhythm, readView, writeRhythm, writeView, type Rhythm, type WallView } from './kiosk/prefs';
-import { bindLongPress, mountSettings, wallPlaceOf, wallSpanM, type LongPressVia, type SettingsHandle, type WallPlace } from './kiosk/settings';
+import { bindDoubleTap, bindLongPress, mountSettings, wallPlaceOf, wallSpanM, type LongPressVia, type SettingsHandle, type WallPlace } from './kiosk/settings';
 import { mountStart, type StartHandle, type StartScreenInput } from './kiosk/start';
 import { CITY_CENTRE, routeType } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
@@ -159,7 +160,9 @@ export interface KioskDeps {
   loadTouchContent?: () => TouchContent | Promise<TouchContent>;
   setInterval?: (fn: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
+  /** Fullscreen on a double tap (kiosk/settings.ts bindDoubleTap), and off on the next one while the page is fullscreen. */
   requestFullscreen?: () => Promise<void>;
+  exitFullscreen?: () => Promise<void>;
   requestWakeLock?: () => Promise<void>;
   /** Test seam: the viewport to lay out for; defaults to the root's box, then the window. */
   viewport?: Viewport;
@@ -1181,31 +1184,38 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (row.kind === 'pharmacy') return { kind: 'pharmacy', pharmacy: pharmaciesByDistance(null).find((p) => p.label === row.sub) ?? nearestPharmacy(stop) };
     return { kind: 'row', id: row.id };
   }
+  /** Whether two touches name the same subject: the same stop, the same row, the pharmacy. */
+  function sameTouch(a: Touch, b: Touch): boolean {
+    if (a.kind === 'stop' && b.kind === 'stop') return a.stop.id === b.stop.id;
+    if (a.kind === 'row' && b.kind === 'row') return a.id === b.id;
+    return a.kind === 'pharmacy' && b.kind === 'pharmacy';
+  }
   function onTouch(event: MouseEvent): void {
     if (!touchable() || !(event.target instanceof Element)) return;
     const target = event.target;
-    // The open detail is read, not pressed.
-    if (target.closest('.k-touch')) return;
+    // The open detail is read, and a tap on it gives the list back (owner, 5 Oct 2026: the detail stood over the
+    // list with no way back).
+    if (target.closest('.k-touch')) { if (touch) closeTouch(); return; }
     const row = target.closest<HTMLElement>('[data-testid=nearby-rows] > .nearby-row');
     const next = row ? touchOnRow(row)
       : target.closest('[data-testid=strip-pharmacy]') ? { kind: 'pharmacy' as const, pharmacy: nearestPharmacy(stop) }
         : target.closest('[data-testid=kiosk-map-host]') ? touchOnMap(event) : null;
-    if (next) openTouch(next);
+    if (!next) return;
+    // A second tap on what the detail shows (its row, its ring, the pharmacy) closes it; another subject replaces it.
+    if (touch && sameTouch(touch, next)) { closeTouch(); return; }
+    openTouch(next);
   }
   /** Whether a press at this point arms the wall-wide long press to Postavke (lane/w-settings, second step: the
    *  operator was told "press and hold anywhere on the wall for about a second"). On a screen-sized wall in the
-   *  invitation, anywhere but the brand (its own binding), the open panel and the basics, and never on one of the
-   *  touch's own targets while the touch answers: a stop or pharmacy ring under the finger, a row of the list, the
-   *  footer's pharmacy. Those keep their tap, and a press held on them opens no settings. A handheld keeps the
-   *  browser's own gestures and only the brand's press. */
+   *  invitation, anywhere but the brand (its own binding), the open panel and the basics -- the touch's own targets
+   *  included since 5 Oct 2026 (a ring, a row of the list, the footer's pharmacy, the open detail): a press held
+   *  there opens Postavke, and bindLongPress swallows the click its release makes, so no detail opens under the
+   *  panel; a tap still opens the detail. A handheld keeps the browser's own gestures and only the brand's press. */
   function wallPressable(event: MouseEvent): boolean {
     if (disposed || layout.size === 'handheld' || phase !== 'invitation') return false;
     const target = event.target;
     if (!(target instanceof Element)) return false;
-    if (target.closest('[data-testid=kiosk-brand], [data-testid=kiosk-settings-panel], [data-testid=kiosk-essentials], [data-testid=dev]')) return false;
-    if (!touchable()) return true;
-    if (target.closest('[data-testid=nearby-rows] > .nearby-row, [data-testid=strip-pharmacy]')) return false;
-    return !(target.closest('[data-testid=kiosk-map-host]') && touchOnMap(event));
+    return !target.closest('[data-testid=kiosk-brand], [data-testid=kiosk-settings-panel], [data-testid=kiosk-essentials], [data-testid=dev]');
   }
 
   function invitationModel(): InvitationModel {
@@ -1857,19 +1867,36 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   }
 
   // --- Wiring ---------------------------------------------------------------------
-  // First tap only: a kiosk browser grants fullscreen and the wake lock on a
-  // user gesture, and never asks again. A handheld is a phone in a hand, not
-  // a screen on a wall: it gets neither, and the listener stays armed until
-  // a tap lands on a screen-sized layout.
+  /** A browser call that may be missing or refused: neither is the wall's business. */
+  const quietly = (call: () => Promise<unknown> | undefined): void => {
+    try { void Promise.resolve(call()).catch(() => {}); } catch { /* not offered by this browser */ }
+  };
+  // First tap only: a kiosk browser grants the wake lock on a user gesture,
+  // and never asks again. A handheld is a phone in a hand, not a screen on a
+  // wall: it gets no wake lock, and the listener stays armed until a tap
+  // lands on a screen-sized layout.
   const onFirstTap = (): void => {
     if (layout.size === 'handheld') return;
     element.removeEventListener('pointerdown', onFirstTap);
-    void (deps.requestFullscreen ?? (() => document.documentElement.requestFullscreen()))().catch(() => {});
-    void (deps.requestWakeLock ?? (async () => {
+    quietly(deps.requestWakeLock ?? (async () => {
       await (navigator as { wakeLock?: { request(type: 'screen'): Promise<unknown> } }).wakeLock?.request('screen');
-    }))().catch(() => {});
+    }));
   };
   element.addEventListener('pointerdown', onFirstTap);
+  // Fullscreen is a double tap anywhere on a screen-sized wall, and the next double tap leaves it (decision 4,
+  // 5 Oct 2026): the first tap asking for it surprised whoever touched the wall only to read it. Never on a
+  // handheld, on a control or inside an open panel, where two quick taps are two presses of a toggle.
+  const doc = element.ownerDocument;
+  const toggleFullscreen = (): void => {
+    if (doc.fullscreenElement) quietly(deps.exitFullscreen ?? (() => doc.exitFullscreen()));
+    else quietly(deps.requestFullscreen ?? (() => doc.documentElement.requestFullscreen()));
+  };
+  const wallTappable = (event: PointerEvent): boolean => {
+    if (disposed || layout.size === 'handheld') return false;
+    const target = event.target;
+    return !(target instanceof Element) || !target.closest('button, a, input, select, textarea, [data-testid=kiosk-settings-panel], [data-testid=kiosk-essentials], [data-testid=dev]');
+  };
+  const unbindDoubleTap = bindDoubleTap(element, { within: DOUBLE_TAP_MS, slop: DOUBLE_TAP_SLOP_PX, accept: wallTappable, onDoubleTap: toggleFullscreen });
   // The strip is rebuilt on every poll, so its button is reached by delegation.
   strip.addEventListener('click', (event) => {
     if ((event.target as HTMLElement).closest('[data-testid=kiosk-essentials-open]')) openEssentials();
@@ -1994,6 +2021,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       stopTheme();
       unbindBrand();
       unbindWall();
+      unbindDoubleTap();
       document.removeEventListener('keydown', onWallKey);
       beacon?.close(); beacon = null;
       session?.close(); session = null;

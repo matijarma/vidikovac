@@ -12,14 +12,14 @@ import { SCREEN_SET_MIN_MS } from '../../worker/protocol';
 import { FRAME_RADIUS_M, frameRadiusM, frameSpanM, frameStopsFrom } from '../../shared/city/frame';
 import type { ScreenPlace } from '../../shared/city/place';
 import type { ScreenSetInput } from '../../app/src/beacon';
-import { LONG_PRESS_MS } from '../../app/src/kiosk/constants';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX, LONG_PRESS_MS } from '../../app/src/kiosk/constants';
 import { FIELD_SPAN_M, HANDHELD_SPAN_M } from '../../app/src/kiosk/mapview';
 import {
   DEFAULT_RHYTHM, DEFAULT_WALL_VIEW, nextInCycle, readRhythm, readView, RHYTHM_STORAGE_KEY, VIEW_STORAGE_KEY, writeRhythm, writeView,
   type Rhythm, type WallView,
 } from '../../app/src/kiosk/prefs';
 import {
-  bindLongPress, LONG_PRESS_SLOP_PX, mountSettings, placeText, samePlace, SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS, SETTINGS_SEND_DELAY_MS,
+  bindDoubleTap, bindLongPress, LONG_PRESS_SLOP_PX, mountSettings, placeText, samePlace, SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS, SETTINGS_SEND_DELAY_MS,
   wallPlaceOf, wallSpanM, type PlaceFieldOptions, type SettingsScreen,
 } from '../../app/src/kiosk/settings';
 import { kioskStrings } from '../../app/src/kiosk/strings';
@@ -66,7 +66,7 @@ function panel(opts: { screen?: Partial<SettingsScreen>; online?: boolean; theme
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const time = fakeClock();
-  let screen: SettingsScreen = { place: KVATERNIKOV, frame: 6, expiresAt: NOW + 20 * 3_600_000, ...opts.screen };
+  let screen: SettingsScreen = { place: KVATERNIKOV, frame: 4, expiresAt: NOW + 20 * 3_600_000, ...opts.screen };
   let online = opts.online ?? true;
   let theme: ThemePreference = opts.theme ?? 'solar';
   let rhythm: Rhythm = 20;
@@ -130,8 +130,8 @@ describe('Postavke: one click-toggle per row', () => {
     expect([...p.handle.element.querySelectorAll('.k-settings-label')].map(text)).toEqual(['Mjesto', 'Kadar', 'Prikaz', 'Tema', 'Ritam', 'Zaslon']);
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Kvaternikov trg');
     expect(text(p.q('[data-testid=toggle-place]'))).toBe('Promijeni');
-    expect(p.q('[data-testid=toggle-frame]').dataset.value).toBe('6');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
+    expect(p.q('[data-testid=toggle-frame]').dataset.value).toBe('4');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
     expect(p.q('[data-testid=toggle-view]').dataset.value).toBe('map');
     expect(text(p.q('[data-testid=toggle-view]'))).toBe('Prikaz: karta');
     expect(text(p.q('[data-testid=toggle-theme]'))).toBe('Tema: po suncu');
@@ -152,17 +152,17 @@ describe('Postavke: one click-toggle per row', () => {
     expect(p.q('[data-testid=settings-place-city]').hidden).toBe(true);
   });
 
-  it('cycles Kadar 6 → 8 → 4 → 6 on the button itself, the text changing at once', () => {
+  it('cycles Kadar 4 → 6 → 2 → 4 on the button itself, the text changing at once', () => {
     const p = panel();
     p.handle.open();
     const frame = p.q('[data-testid=toggle-frame]');
     p.click('toggle-frame');
-    expect(frame.dataset.value).toBe('8');
-    expect(text(frame)).toBe('Kadar: 8 stajališta odavde');
+    expect(frame.dataset.value).toBe('6');
+    expect(text(frame)).toBe('Kadar: 6 stajališta odavde');
+    p.click('toggle-frame');
+    expect(text(frame)).toBe('Kadar: 2 stajališta odavde');
     p.click('toggle-frame');
     expect(text(frame)).toBe('Kadar: 4 stajališta odavde');
-    p.click('toggle-frame');
-    expect(text(frame)).toBe('Kadar: 6 stajališta odavde');
   });
 
   it('applies Prikaz, Ritam and Tema at once in this browser, never as a frame to the DO', () => {
@@ -191,7 +191,7 @@ describe('Postavke: one click-toggle per row', () => {
   it('speaks English from the one catalogue', () => {
     const p = panel({ locale: 'en' });
     p.handle.open();
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Frame: 6 stops from here');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Frame: 4 stops from here');
     expect(text(p.q('[data-testid=toggle-rhythm]'))).toBe('Rhythm: 20 s');
     expect(text(p.q('[data-testid=toggle-view]'))).toBe('View: map');
   });
@@ -205,11 +205,11 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.time.advance(SETTINGS_SEND_DELAY_MS - 1);
     expect(p.sent).toEqual([]);
     p.time.advance(1);
-    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '236_2' }, frame: 8 }]);
+    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '236_2' }, frame: 6 }]);
     // The panel waits for the DO's answer without closing, and repaints from it.
     p.answer();
     expect(p.handle.isOpen()).toBe(true);
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 8 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
     p.time.advance(SAVE_TIMEOUT_MS * 2);
     expect(p.sent).toHaveLength(1);
     expect(p.q('[data-testid=settings-error]').hidden).toBe(true);
@@ -218,15 +218,15 @@ describe('Postavke: the send queue and the DO’s window', () => {
   it('three quick clicks send one frame carrying the last state', () => {
     const p = panel();
     p.handle.open();
-    p.click('toggle-frame'); // 8
+    p.click('toggle-frame'); // 6
     p.time.advance(300);
-    p.click('toggle-frame'); // 4
+    p.click('toggle-frame'); // 2
     p.time.advance(300);
     p.click('toggle-place');
-    p.click('settings-place-city'); // the whole city, frame 4
+    p.click('settings-place-city'); // the whole city, frame 2
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Cijeli grad');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent).toEqual([{ place: null, frame: 4 }]);
+    expect(p.sent).toEqual([{ place: null, frame: 2 }]);
     p.answer();
     p.time.advance(SCREEN_SET_MIN_MS + SAVE_TIMEOUT_MS);
     expect(p.sent).toHaveLength(1);
@@ -245,37 +245,37 @@ describe('Postavke: the send queue and the DO’s window', () => {
   it('a second change inside five seconds waits for the window, counted from the DO’s answer', () => {
     const p = panel();
     p.handle.open();
-    p.click('toggle-frame'); // 8
+    p.click('toggle-frame'); // 6
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     expect(p.sent).toHaveLength(1);
     p.time.advance(200);
     p.answer();
-    p.click('toggle-frame'); // 4
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
+    p.click('toggle-frame'); // 2
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 2 stajališta odavde');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     expect(p.sent).toHaveLength(1);
     p.time.advance(SCREEN_SET_MIN_MS - SETTINGS_SEND_DELAY_MS - 1);
     expect(p.sent).toHaveLength(1);
     p.time.advance(1);
-    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '236_2' }, frame: 8 }, { place: { kind: 'stop', stopId: '236_2' }, frame: 4 }]);
+    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '236_2' }, frame: 6 }, { place: { kind: 'stop', stopId: '236_2' }, frame: 2 }]);
   });
 
   it('keeps one frame in flight: a change made before the answer goes after it, the latest state winning', () => {
     const p = panel();
     p.handle.open();
-    p.click('toggle-frame'); // 8
-    p.time.advance(SETTINGS_SEND_DELAY_MS);
-    p.click('toggle-frame'); // 4
     p.click('toggle-frame'); // 6
-    p.click('toggle-frame'); // 8 again: the frame in flight already carries it
+    p.time.advance(SETTINGS_SEND_DELAY_MS);
+    p.click('toggle-frame'); // 2
+    p.click('toggle-frame'); // 4
+    p.click('toggle-frame'); // 6 again: the frame in flight already carries it
     p.time.advance(SCREEN_SET_MIN_MS);
     expect(p.sent).toHaveLength(1);
     p.answer();
     p.time.advance(SCREEN_SET_MIN_MS);
     expect(p.sent).toHaveLength(1);
-    p.click('toggle-frame'); // 4
+    p.click('toggle-frame'); // 2
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent.map((f) => f.frame)).toEqual([8, 4]);
+    expect(p.sent.map((f) => f.frame)).toEqual([6, 2]);
   });
 
   it('a refusal repaints the toggles from the DO’s truth with one sentence, and nothing is re-sent', () => {
@@ -285,10 +285,10 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     // An error word that belongs to something else on the socket is not this panel's.
     p.handle.refused('auth-required');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 8 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
     expect(p.q('[data-testid=settings-error]').hidden).toBe(true);
     p.handle.refused('bad-frame');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
     expect(text(p.q('[data-testid=settings-error]'))).toBe('Poslužitelj nije prihvatio mjesto. Odaberi ponovno.');
     expect(p.handle.isOpen()).toBe(true);
     p.time.advance(SCREEN_SET_MIN_MS + SAVE_TIMEOUT_MS);
@@ -309,7 +309,7 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     p.handle.refused('screen-set-rate');
     expect(text(p.q('[data-testid=settings-error]'))).toBe('Pričekaj koji trenutak pa odaberi ponovno.');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
     p.click('toggle-frame');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     expect(p.sent).toHaveLength(1);
@@ -326,11 +326,11 @@ describe('Postavke: the send queue and the DO’s window', () => {
     expect(p.q('[data-testid=settings-error]').hidden).toBe(true);
     p.time.advance(1);
     expect(text(p.q('[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
     p.time.advance(60_000);
     expect(p.sent).toHaveLength(1);
-    p.answer({ place: { kind: 'stop', stopId: '236_2' }, frame: 8 });
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 8 stajališta odavde');
+    p.answer({ place: { kind: 'stop', stopId: '236_2' }, frame: 6 });
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
     expect(p.handle.isOpen()).toBe(true);
   });
 
@@ -342,7 +342,7 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     expect(p.sent).toEqual([]);
     expect(text(p.q('[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
   });
 
   it('a click made just before the panel closes is still sent', () => {
@@ -400,7 +400,7 @@ describe('Postavke: Mjesto through the shared field', () => {
     p.handle.open();
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Zapruđe · Zapruđe 12');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '200_1', address: 'Zapruđe 12' }, frame: 6 }]);
+    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '200_1', address: 'Zapruđe 12' }, frame: 4 }]);
   });
 
   it('sends an address place with its point, and names it by what was typed', () => {
@@ -412,19 +412,19 @@ describe('Postavke: Mjesto through the shared field', () => {
     p.fields[0]!.options.onChange({ kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, '');
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Ilica 25');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent).toEqual([{ place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 6 }]);
+    expect(p.sent).toEqual([{ place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 4 }]);
     p.answer();
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Ilica 25');
   });
 
   it('"Cijeli grad" sends place null with the frame it shows', () => {
-    const p = panel({ screen: { frame: 8 } });
+    const p = panel({ screen: { frame: 6 } });
     p.handle.open();
     p.click('toggle-place');
     p.click('settings-place-city');
     expect(p.fields[0]!.destroyed).toBe(true);
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent).toEqual([{ place: null, frame: 8 }]);
+    expect(p.sent).toEqual([{ place: null, frame: 6 }]);
   });
 
   it('a second press on Promijeni closes the field, and so does closing the panel', () => {
@@ -497,6 +497,50 @@ describe('the long press on the brand', () => {
     b.pointer('pointerup');
     b.time.advance(LONG_PRESS_MS);
     expect(b.open).toHaveBeenCalledTimes(1);
+  });
+
+  // 5 Oct 2026: the wall-wide press arms on the rows of the list too, whose click opens a row's detail; the click a
+  // press's release makes belongs to the press, not to a tap.
+  it('swallows the one click that follows a press that opened, before anything inside or below hears it; a tap\'s click passes', () => {
+    const b = brand();
+    const heard = vi.fn();
+    const inner = document.createElement('span');
+    b.button.appendChild(inner);
+    document.body.addEventListener('click', heard);
+    inner.addEventListener('click', heard);
+    try {
+      b.pointer('pointerdown');
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).toHaveBeenCalledTimes(1);
+      b.pointer('pointerup');
+      inner.click();
+      expect(heard).not.toHaveBeenCalled();
+      // Once only: the next tap's click is heard, on the span and on the body.
+      b.pointer('pointerdown');
+      b.pointer('pointerup');
+      inner.click();
+      expect(heard).toHaveBeenCalledTimes(2);
+      // A release that made no click here leaves nothing behind: the next gesture's pointerdown retires the swallow.
+      heard.mockClear();
+      b.pointer('pointerdown');
+      b.time.advance(LONG_PRESS_MS);
+      b.pointer('pointerup');
+      b.pointer('pointerdown');
+      b.pointer('pointerup');
+      inner.click();
+      expect(heard).toHaveBeenCalledTimes(2);
+      // So does a key, and the keyboard's own open swallows nothing.
+      heard.mockClear();
+      b.pointer('pointerdown');
+      b.time.advance(LONG_PRESS_MS);
+      b.pointer('pointerup');
+      b.button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      expect(b.open).toHaveBeenCalledTimes(4);
+      inner.click();
+      expect(heard).toHaveBeenCalledTimes(2);
+    } finally {
+      document.body.removeEventListener('click', heard);
+    }
   });
 
   it('a short press, a pointer that leaves or a secondary button opens nothing', () => {
@@ -738,6 +782,19 @@ describe('the long press on the brand', () => {
       expect(b.open).toHaveBeenCalledTimes(1);
     });
 
+    it('the click after a release that opened is swallowed as well, once', () => {
+      const b = brand();
+      const heard = vi.fn();
+      b.button.addEventListener('click', heard);
+      stamped(b.button, 'pointerdown', 1_000);
+      stamped(b.button, 'pointerup', 1_000 + LONG_PRESS_MS);
+      expect(b.open).toHaveBeenCalledTimes(1);
+      b.button.click();
+      expect(heard).not.toHaveBeenCalled();
+      b.button.click();
+      expect(heard).toHaveBeenCalledTimes(1);
+    });
+
     it('a release one millisecond short of LONG_PRESS_MS opens nothing', () => {
       const b = brand();
       stamped(b.button, 'pointerdown', 1_000);
@@ -777,39 +834,124 @@ describe('the long press on the brand', () => {
   });
 });
 
+// Decision 4 of the irritation pass (5 Oct 2026): fullscreen on a double tap, judged like the long press by the
+// events' own timestamps.
+describe('the double tap (bindDoubleTap)', () => {
+  const liftAll = (): void => { for (const id of [0, 1, 2, 3]) document.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: id })); };
+  function wall(accept?: (event: PointerEvent) => boolean) {
+    liftAll();
+    const element = document.createElement('div');
+    document.body.replaceChildren(element);
+    const onDoubleTap = vi.fn();
+    const unbind = bindDoubleTap(element, { within: DOUBLE_TAP_MS, slop: DOUBLE_TAP_SLOP_PX, onDoubleTap, ...(accept ? { accept } : {}) });
+    const event = (type: string, at: number, x: number, y = 300, pointerId = 1): void => {
+      const e = new PointerEvent(type, { bubbles: true, cancelable: true, pointerId, clientX: x, clientY: y });
+      Object.defineProperty(e, 'timeStamp', { value: at, configurable: true });
+      element.dispatchEvent(e);
+    };
+    /** One pointer down at `at` and up `held` ms later, `moved` px to the right of where it came down. */
+    const tap = (at: number, x = 200, held = 80, moved = 0): void => { event('pointerdown', at, x); event('pointerup', at + held, x + moved); };
+    return { element, onDoubleTap, unbind, event, tap };
+  }
+
+  it('waits 400 ms and 24 px by default and calls once for two taps inside both; a third tap starts a new pair', () => {
+    expect([DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX]).toEqual([400, 24]);
+    const w = wall();
+    w.tap(1_000);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(1_000 + DOUBLE_TAP_MS, 200 + DOUBLE_TAP_SLOP_PX); // the releases exactly 400 ms and 24 px apart
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(1);
+    w.tap(1_600);
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(1);
+    w.tap(1_800);
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(2);
+  });
+
+  it('two taps too far apart in time or space are no pair, and the later one starts the next', () => {
+    const w = wall();
+    w.tap(1_000);
+    w.tap(1_000 + DOUBLE_TAP_MS + 1);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(1_000 + DOUBLE_TAP_MS + 101, 200 + DOUBLE_TAP_SLOP_PX + 1);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(1_000 + DOUBLE_TAP_MS + 300, 200 + DOUBLE_TAP_SLOP_PX + 1);
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(1);
+  });
+
+  it('a press held for Postavke or a finger that slides is no tap, and forgets the first one', () => {
+    const w = wall();
+    w.tap(1_000);
+    w.tap(1_100, 200, LONG_PRESS_MS);
+    w.tap(1_100 + LONG_PRESS_MS + 100);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(5_000);
+    w.tap(5_150, 200, 80, DOUBLE_TAP_SLOP_PX + 6);
+    w.tap(5_300, 230);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+  });
+
+  it('a second finger, a cancelled pointer or a refused press ends the pair; unbound, nothing counts', () => {
+    const w = wall((event) => !(event.clientX > 900));
+    w.tap(1_000);
+    // A second finger comes down while the first tap's pair is open.
+    w.event('pointerdown', 1_100, 200, 300, 1);
+    w.event('pointerdown', 1_110, 600, 300, 2);
+    w.event('pointerup', 1_150, 200, 300, 1);
+    w.event('pointerup', 1_160, 600, 300, 2);
+    w.tap(1_200);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(3_000);
+    w.event('pointercancel', 3_100, 200);
+    w.tap(3_200);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(5_000);
+    w.tap(5_100, 950);
+    w.tap(5_200);
+    expect(w.onDoubleTap).not.toHaveBeenCalled();
+    w.tap(5_300);
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(1);
+    w.unbind();
+    w.tap(7_000);
+    w.tap(7_100);
+    expect(w.onDoubleTap).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('what the wall reads from the screen record', () => {
   const base: ScreenMetadata = { kind: 'temporary', expiresAt: NOW + 1, stop: null, area: 'zagreb' };
   it('takes the DO’s place and frame; the read-path default place is not a chosen one', () => {
-    expect(wallPlaceOf({ ...base, place: KVATERNIKOV, placeSet: true, frame: 8 }, isTram)).toEqual({ place: KVATERNIKOV, placeSet: true, frame: 8 });
+    expect(wallPlaceOf({ ...base, place: KVATERNIKOV, placeSet: true, frame: 6 }, isTram)).toEqual({ place: KVATERNIKOV, placeSet: true, frame: 6 });
     const trg = { kind: 'tram' as const, name: TRG.name, lon: TRG.lon, lat: TRG.lat, stopId: TRG.id };
-    expect(wallPlaceOf({ ...base, place: trg, placeSet: false, frame: 6 }, isTram)).toEqual({ place: trg, placeSet: false, frame: 6 });
+    expect(wallPlaceOf({ ...base, place: trg, placeSet: false, frame: 4 }, isTram)).toEqual({ place: trg, placeSet: false, frame: 4 });
     // A place without placeSet came from a DO that stored it: chosen.
     expect(wallPlaceOf({ ...base, place: KVATERNIKOV }, isTram).placeSet).toBe(true);
   });
-  it('reads a record from before place-v2 by its stop, frame 6', () => {
-    expect(wallPlaceOf({ ...base, stop: ZAPRUDE }, isTram)).toEqual({ place: { kind: 'tram', name: 'Zapruđe', lon: 15.99, lat: 45.77, stopId: '200_1' }, placeSet: true, frame: 6 });
+  it('reads a record from before place-v2 by its stop, frame 4', () => {
+    expect(wallPlaceOf({ ...base, stop: ZAPRUDE }, isTram)).toEqual({ place: { kind: 'tram', name: 'Zapruđe', lon: 15.99, lat: 45.77, stopId: '200_1' }, placeSet: true, frame: 4 });
     expect(wallPlaceOf({ ...base, stop: { ...ZAPRUDE, routes: ['220'] } }, isTram).place?.kind).toBe('bus');
   });
   it('is the whole city for a record with no place and no stop, an explicit null, or no record', () => {
     for (const screen of [base, { ...base, place: null }, { ...base, place: null, stop: ZAPRUDE }, null, undefined]) {
-      expect(wallPlaceOf(screen, isTram)).toEqual({ place: null, placeSet: false, frame: 6 });
+      expect(wallPlaceOf(screen, isTram)).toEqual({ place: null, placeSet: false, frame: 4 });
     }
-    expect(wallPlaceOf({ ...base, frame: 5 as never }, isTram).frame).toBe(6);
+    expect(wallPlaceOf({ ...base, frame: 5 as never }, isTram).frame).toBe(4);
+    // A Kadar 8 stored before 5 Oct 2026 is no longer a Kadar: it reads as the default, nothing migrated.
+    expect(wallPlaceOf({ ...base, place: KVATERNIKOV, frame: 8 as never }, isTram).frame).toBe(4);
   });
   it('uses the frame fallback without line order, a handheld band, or the whole-city window', () => {
     const place = { kind: 'address' as const, name: 'Ilica', lon: 15.97, lat: 45.81 };
     const stops = ring(place, [300, 600, 900, 1200, 1500, 1800, 2100, 2400]);
-    const wall = { place, placeSet: true, frame: 6 as const };
-    const measured = frameSpanM(frameRadiusM(place, frameStopsFrom(stops, isTram), 6));
+    const wall = { place, placeSet: true, frame: 4 as const };
+    const measured = frameSpanM(frameRadiusM(place, frameStopsFrom(stops, isTram), 4));
     expect(wallSpanM({ handheld: false, wall, stops, isTram })).toBe(measured);
     // A ring supplies no tram call order. The integrated camera measures the
     // along-line radius in kiosk.ts once the network arrives (decision 6).
-    expect(measured).toBe(2 * FRAME_RADIUS_M[6]);
-    expect(wallSpanM({ handheld: false, wall: { ...wall, frame: 4 }, stops, isTram })).toBe(2 * FRAME_RADIUS_M[4]);
-    expect(wallSpanM({ handheld: false, wall, stops: null, isTram })).toBe(2 * FRAME_RADIUS_M[6]);
+    expect(measured).toBe(2 * FRAME_RADIUS_M[4]);
+    expect(wallSpanM({ handheld: false, wall: { ...wall, frame: 2 }, stops, isTram })).toBe(2 * FRAME_RADIUS_M[2]);
+    expect(wallSpanM({ handheld: false, wall, stops: null, isTram })).toBe(2 * FRAME_RADIUS_M[4]);
     expect(wallSpanM({ handheld: true, wall, stops, isTram })).toBe(HANDHELD_SPAN_M);
     expect(wallSpanM({ handheld: false, wall: { ...wall, placeSet: false }, stops, isTram })).toBe(FIELD_SPAN_M);
-    expect(wallSpanM({ handheld: false, wall: { place: null, placeSet: false, frame: 6 }, stops, isTram })).toBe(FIELD_SPAN_M);
+    expect(wallSpanM({ handheld: false, wall: { place: null, placeSet: false, frame: 4 }, stops, isTram })).toBe(FIELD_SPAN_M);
   });
   it('names a place in the Mjesto row by what the operator typed', () => {
     const s = kioskStrings('hr');

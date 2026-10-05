@@ -1973,20 +1973,20 @@ describe('the desk pair (WP4 chunk E)', () => {
     handle.destroy();
   });
 
-  it('the screen\'s Kadar reaches the phone\'s circle: a frame of 8 widens the pill on both halves', async () => {
-    const eight = mount({ wide: true });
-    eight.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP, frame: 8 });
+  it('the screen\'s Kadar reaches the phone\'s circle: a frame of 6 widens the pill on both halves', async () => {
+    const six = mount({ wide: true });
+    six.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP, frame: 6 });
     await flush();
     const pill = (root: HTMLElement) => text(root.querySelector('[data-testid=transport-workspace] .t-peek-pill'));
     // No stop table is loaded here, so the circle is the frame's fallback radius (shared/city/frame.ts FRAME_RADIUS_M).
-    expect(pill(eight.root)).toBe('2,7 km · ~20 min');
-    expect(text(eight.root.querySelector('#layer-grad-sada .nearby-pill'))).toBe('2,7 km · ~20 min');
-    eight.handle.destroy();
-    const six = mount({ wide: true });
-    six.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
-    await flush();
-    expect(pill(six.root)).toBe('2 km · ~15 min');
+    expect(pill(six.root)).toBe('1,3 km · ~10 min');
+    expect(text(six.root.querySelector('#layer-grad-sada .nearby-pill'))).toBe('1,3 km · ~10 min');
     six.handle.destroy();
+    const four = mount({ wide: true });
+    four.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    await flush();
+    expect(pill(four.root)).toBe('1 km · ~8 min');
+    four.handle.destroy();
   });
 
   it('widening a phone into a desk moves the live workspace into the pair without re-creating it', async () => {

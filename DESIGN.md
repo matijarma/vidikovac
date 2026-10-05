@@ -96,7 +96,7 @@ or Space while the wall has focus.
 The map has a legend of three plain items (tram route, BAJS bike count,
 culture tonight), never a caveat, and no legend stands where no map is drawn
 (lagano). A screen with a place (a stop or an address) opens on a frame of N
-stops around it (Kadar: 4, 6 or 8 "stajališta odavde", default 6), its radius
+stops around it (Kadar: 2, 4 or 6 "stajališta odavde", default 4), its radius
 measured per place and the same number the "U blizini" circle and its pill
 use. The frame is a neighbourhood: buses at every hour, every BAJS station a
 disc carrying its count (a station with no bike a small teal dot without a
@@ -190,15 +190,19 @@ says "unavailable".
 
 Touch, where the screen has it, is read-only and needs no interactive map: the
 wall finds the touched ring itself, within the finger tolerance. A stop ring
-opens that stop's board for 60 seconds: its next three departures in the
+opens that stop's board for 30 seconds: its next three departures in the
 phone's row, then one "Vozni red" line with later trips. A row shows its
 detail (venue, address, the tram to it) and the pharmacy its caption, name and
 phone; the pharmacy opens from its ring, its row or the footer's pharmacy
 item, and a departure row opens the place's own board. The panel covers the
-list in its box and the wall returns by itself: after 60 seconds, when a ZET
+list in its box and the wall returns by itself: after 30 seconds, when a ZET
 outage starts under a board, on a presentation or when the phase changes; a
-second touch replaces the first. Nothing else reacts and the camera never
-moves. Touch is off in a presentation and in Postavke; in the schema view the
+touch on another subject replaces the first, and a touch on the panel or again
+on its subject gives the list back at once. A panel that cannot hold even its
+leanest form drops its secondary lines and clamps its title, so the title
+always shows. A press held anywhere, rows and rings included, opens the
+settings and never a panel; a double tap switches fullscreen on and off.
+Nothing else reacts and the camera never moves. Touch is off in a presentation and in Postavke; in the schema view the
 map takes no touch, while the list and the footer still do. Scanning is the
 only way to take content along.
 
@@ -239,7 +243,7 @@ neighbourhood. Compact landscape and portrait keep the same grammar in their
 own arrangements.
 
 The map is a meaningful geographic view, not a background beneath a route
-board. The screen's place and frame (Kadar: 4, 6 or 8 stops around it,
+board. The screen's place and frame (Kadar: 2, 4 or 6 stops around it,
 measured per place), and public selections, determine framing; without a
 chosen place the whole-city window stays. Do not force every vehicle number to
 overlap at terminals: retain dots and collision-aware labels. Stop rings keep
@@ -253,7 +257,7 @@ place. Route count is not a measure of importance and is not
 used for this. From the thinning zoom up every name is back, exactly as
 derived. A framed screen names by being framed, not by zoom: whatever its
 Kadar, it names the place and the tram interchanges inside its radius and no
-street, so Kadar 4, 6 or 8 never changes the naming grammar; the
+street, so Kadar 2, 4 or 6 never changes the naming grammar; the
 thinning rule belongs to the whole-city window alone. Preserve the map
 instance across polling and composition changes.
 

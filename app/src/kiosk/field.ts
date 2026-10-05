@@ -50,7 +50,7 @@ export interface FieldHandle {
   measureHeight(): number;
   /** Contract 3: how many distinct major street names the map has placed, written on the map host as data-major-labels for the e2e's proof (roads_labels_major, at most 8). */
   setMajorLabels(count: number): void;
-  /** The probe contract (§15.6): the Kadar the map frames, 4, 6 or 8 stops, written on the map host as data-frame beside data-major-labels. Under lagano too: the hidden host keeps the selectors of both fields alike. */
+  /** The probe contract (§15.6): the Kadar the map frames, 2, 4 or 6 stops, written on the map host as data-frame beside data-major-labels. Under lagano too: the hidden host keeps the selectors of both fields alike. */
   setFrame(frame: FrameStops): void;
   /** The field's label and, under lagano, the board. */
   update(model: FieldModel): void;

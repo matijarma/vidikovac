@@ -23,6 +23,12 @@ const windowRule = (selector: string) => ruleIn(cityCss, selector);
 const NOTICE_TITLE_RULE = '.kiosk .k-nearby .nearby-row[data-kind="notice"] .nearby-title';
 // R0 (vis1 F2): the same clamp at three lines, taken only from room the fitter has left (timeline.ts lines3).
 const NOTICE_TITLE_3_RULE = '.kiosk .k-nearby .nearby-row[data-kind="notice"][data-title-lines="3"] .nearby-title';
+// The touch panel's last resort (5 Oct 2026, timeline.ts TOUCH_FITS): only when no variant of a detail holds whole is
+// its title clamped, to two lines and then one, so the title shows instead of being cut away below the time.
+const TOUCH_TITLE_CLAMPS = [
+  '.kiosk .k-touch-body[data-fit=clamp] .k-touch-title',
+  '.kiosk .k-touch-body[data-fit=tight] .k-touch-title',
+];
 
 it('keeps the measured dark compact departures glyph spill inside the row', () => {
   expect(windowRule(":root[data-theme-resolved='dark'] .kiosk[data-size=compact]:not([data-portrait='1']) .k-nearby .nearby-row[data-kind='departures']"))
@@ -271,13 +277,14 @@ describe('public-screen design invariants', () => {
     }
     return out;
   };
-  // The two exceptions, neither of them the wall's product text: the operator's own address field in
+  // Besides the title clamps above (the event, the ZET notice and the touch panel's last resort), the two exceptions,
+  // neither of them the wall's product text: the operator's own address field in
   // Postavke and on the start screen, whose suggestion list is a fixed whole-row listbox; and the
   // phone's tiles (signage.css .tl-*), which the wall loads but no wall renderer draws.
   const operatorField = new Set(['.k-suggest-name', '.k-suggest-meta']);
   const phoneTile = (file: string, sel: string) => file === 'app/src/ui/signage.css' && /\.tl(?:-[\w-]+)?(?![\w-])/.test(sel) && !/\.k-/.test(sel);
   const excepted = (file: string, sel: string) => operatorField.has(sel) || phoneTile(file, sel)
-    || (file === 'app/src/ui/kiosk-city.css' && (sel === EVENT_CLAMP || sel === NOTICE_TITLE_RULE || sel === NOTICE_TITLE_3_RULE));
+    || (file === 'app/src/ui/kiosk-city.css' && (sel === EVENT_CLAMP || sel === NOTICE_TITLE_RULE || sel === NOTICE_TITLE_3_RULE || TOUCH_TITLE_CLAMPS.includes(sel)));
   it('loads the stylesheets the pin reads: the entry\'s own and the ones shared modules import', () => {
     expect(wallSheets).toEqual([
       'app/src/motion/schema.css', 'app/src/motion/schematic.css', 'app/src/ui/base.css', 'app/src/ui/city.css', 'app/src/ui/fonts.css',

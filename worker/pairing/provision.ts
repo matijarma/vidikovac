@@ -21,7 +21,7 @@ export interface ProvisionInput {
    * route and the legacy `{ stopId }` body).
    */
   place?: ScreenPlace | null;
-  /** Kadar 4 / 6 / 8, DEFAULT_FRAME_STOPS when omitted. */
+  /** Kadar 2 / 4 / 6, DEFAULT_FRAME_STOPS when omitted. */
   frame?: FrameStops;
 }
 

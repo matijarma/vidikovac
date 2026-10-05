@@ -1043,7 +1043,7 @@ describe('the on-duty pharmacy on the map (R-KP18)', () => {
 });
 
 // WP2 step 4: a wall with a chosen place (today its configured stop) frames N
-// stops around it (Kadar 4 / 6 / 8, the radius measured per place by
+// stops around it (Kadar 2 / 4 / 6, the radius measured per place by
 // shared/city/frame.ts and handed in once), and the frame is a neighbourhood.
 describe('the kiosk\u2019s framed wall', () => {
   const stub = () => {
@@ -1060,22 +1060,23 @@ describe('the kiosk\u2019s framed wall', () => {
   /** CityMapOptions.cityLabels as one of Section B's three answers (true / false are the older switch for 'all' / 'none'). */
   const labelsOf = (on: unknown) => (on === undefined || on === true ? 'all' : on === false ? 'none' : on);
 
-  it('frames Kadar 6 on the place with buses, the frame\u2019s stops, its tram hubs named, the venues alone named and no square\u2019s title or street name', () => {
+  it('frames Kadar 4 on the place with buses, the frame\u2019s stops, its tram hubs named, the venues alone named and no square\u2019s title or street name', () => {
     const s = stub();
-    requestKioskMap(s.maps, { ...base, frame: 6 }, s.adapter);
+    requestKioskMap(s.maps, { ...base, frame: 4 }, s.adapter);
     const options = first(s);
-    const zoom = frameView(STOP, 2000, 1300, 880).zoom;
+    const zoom = frameView(STOP, 950, 1300, 880).zoom;
     expect(options.center).toEqual([STOP.lon, STOP.lat]);
     expect(options.zoom).toBe(zoom);
     // Decision 58: the frame's stops alone, its tram hubs named, no square's title and no street name.
-    expect(options.prozor).toEqual({ networkKinds: ['tram', 'bus'], stopRoutes: null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: true, placeTitles: false, stopRadius: false, overlapZoom: zoom - 0.1, labelPadding: labelPadding(1300, 880, 4000), majorStreetNames: false, frame: { lon: STOP.lon, lat: STOP.lat, radiusM: 2000 } });
+    expect(options.prozor).toEqual({ networkKinds: ['tram', 'bus'], stopRoutes: null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: true, placeTitles: false, stopRadius: false, overlapZoom: zoom - 0.1, labelPadding: labelPadding(1300, 880, 1900), majorStreetNames: false, frame: { lon: STOP.lon, lat: STOP.lat, radiusM: 950 } });
     expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
     // The pharmacy point carries its name on a neighbourhood's picture, below the detail zoom too (a stop 400 m
-    // south of Trg bana J. Jelačića 3 frames at z13.4); decision 58's placeTitles false keeps the layer from drawing it.
-    // At night, when the ring is on the map (pharmacyHours; by day it is not drawn, owner 5 Oct 2026).
+    // south of Trg bana J. Jelačića 3 frames at z13.6 on the compact wall's Kadar 6); decision 58's placeTitles
+    // false keeps the layer from drawing it. At night, when the ring is on the map (pharmacyHours; by day it is
+    // not drawn, owner 5 Oct 2026).
     const south = { ...STOP, lon: 15.9776, lat: 45.8131 - 400 / 111_320 };
     const near = stub();
-    requestKioskMap(near.maps, { ...base, stop: south, now: NIGHT }, near.adapter);
+    requestKioskMap(near.maps, { ...base, stop: south, now: NIGHT, frame: 6, widthPx: 794, heightPx: 610 }, near.adapter);
     expect(first(near).zoom).toBeLessThan(CITY_DETAIL_ZOOM);
     expect((first(near).points as { place?: string; title: string }[]).find((p) => p.place === 'pharmacy')!.title).toBe('Gradska ljekarna Zagreb');
     // The same stop as the read-path default place keeps the whole-city window, where an address is a detail.
@@ -1092,8 +1093,8 @@ describe('the kiosk\u2019s framed wall', () => {
     expect(kioskCityLabels(true, true)).toBe('venues');
     // The DO's applyScreen moves the place: the frame follows it on the same map, and still draws every stop in it (R-KP19).
     const moved = { ...STOP, id: '200_1', lon: 15.99, lat: 45.8, routes: ['7', '109'] };
-    requestKioskMap(s.maps, { ...base, frame: 6, stop: moved }, s.adapter);
-    expect(s.calls.setView).toHaveBeenLastCalledWith(expect.objectContaining({ center: [15.99, 45.8], zoom: frameView(moved, 2000, 1300, 880).zoom }));
+    requestKioskMap(s.maps, { ...base, frame: 4, stop: moved }, s.adapter);
+    expect(s.calls.setView).toHaveBeenLastCalledWith(expect.objectContaining({ center: [15.99, 45.8], zoom: frameView(moved, 950, 1300, 880).zoom }));
     expect(s.calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ stopRoutes: null }));
     expect(s.factory).toHaveBeenCalledTimes(1);
     // A caller from before place-v2 (no placeSet) keeps the stop's centred street-level camera and its routes' dots.
@@ -1108,9 +1109,9 @@ describe('the kiosk\u2019s framed wall', () => {
     const iso = new Date(NOW - 60_000).toISOString();
     const bike = (id: string, lat: number) => ({ id, name: id, lon: STOP.lon, lat, bikes: 3, docks: 5, capacity: 8, installed: true, renting: true, returning: true, observedAt: iso });
     const city: CityState = { ...emptyCity(), live: { schema: 1 as never, generatedAt: iso, sources: [{ id: 'bajs', name: 'BAJS', url: 'https://example.test/', licence: 'x', status: 'live', count: 2 }],
-      bikes: [bike('near', STOP.lat + 1500 / 111_320), bike('far', STOP.lat + 2500 / 111_320)], air: [], consultations: [] } };
+      bikes: [bike('near', STOP.lat + 700 / 111_320), bike('far', STOP.lat + 2500 / 111_320)], air: [], consultations: [] } };
     const s = stub();
-    requestKioskMap(s.maps, { ...base, frame: 6, city }, s.adapter);
+    requestKioskMap(s.maps, { ...base, frame: 4, city }, s.adapter);
     const points = first(s).points as { id: string; place?: string }[];
     expect(points.filter((p) => p.place === 'city').map((p) => p.id)).toEqual(['bajs-near']);
     expect(points.some((p) => p.place === 'pharmacy')).toBe(false); // 14:32: the ring is a night mark (pharmacyHours)
@@ -1119,7 +1120,7 @@ describe('the kiosk\u2019s framed wall', () => {
     expect((first(night).points as { place?: string }[]).some((p) => p.place === 'pharmacy')).toBe(true);
     // The whole-city window keeps its own rule (far dots across the city).
     const w = stub();
-    requestKioskMap(w.maps, { ...base, frame: 6, city, placeSet: false }, w.adapter);
+    requestKioskMap(w.maps, { ...base, frame: 4, city, placeSet: false }, w.adapter);
     expect((first(w).points as { id: string; place?: string }[]).filter((p) => p.place === 'city').map((p) => p.id)).toEqual(['bajs-near', 'bajs-far']);
   });
 
@@ -1164,27 +1165,27 @@ describe('the kiosk\u2019s framed wall', () => {
     }
   });
 
-  it('frames Kadar 4 and 8 closer and wider, and a measured radius wins over the Kadar\u2019s fallback', () => {
+  it('frames Kadar 2 and 6 closer and wider, and a measured radius wins over the Kadar\u2019s fallback', () => {
     const at = (extra: Record<string, unknown>) => {
       const s = stub();
       requestKioskMap(s.maps, { ...base, ...extra }, s.adapter);
       return first(s);
     };
-    expect(at({ frame: 4 }).zoom).toBe(frameView(STOP, 1300, 1300, 880).zoom);
-    expect(at({ frame: 8 }).zoom).toBe(frameView(STOP, 2700, 1300, 880).zoom);
-    const measured = at({ frame: 6, radiusM: 2182 });
-    expect(measured.zoom).toBe(frameView(STOP, 2182, 1300, 880).zoom);
-    expect((measured.prozor as { labelPadding: number }).labelPadding).toBe(labelPadding(1300, 880, 2 * 2182));
+    expect(at({ frame: 2 }).zoom).toBe(frameView(STOP, 650, 1300, 880).zoom);
+    expect(at({ frame: 6 }).zoom).toBe(frameView(STOP, 1250, 1300, 880).zoom);
+    const measured = at({ frame: 4, radiusM: 1000 });
+    expect(measured.zoom).toBe(frameView(STOP, 1000, 1300, 880).zoom);
+    expect((measured.prozor as { labelPadding: number }).labelPadding).toBe(labelPadding(1300, 880, 2 * 1000));
   });
 
   it('keeps its buses on the frame at every camera, not only from the detail zoom', () => {
     const s = stub();
-    requestKioskMap(s.maps, { ...base, frame: 8, widthPx: 794, heightPx: 610 }, s.adapter);
-    // The compact wall's Kadar 8 is fitted whole below the marks' own floor (lane p-map), its marks drawn from the fit.
-    expect(first(s).zoom).toBe(frameView(STOP, 2700, 794, 610, 24, WALL_FIT_MIN_ZOOM).zoom);
+    requestKioskMap(s.maps, { ...base, frame: 6, widthPx: 669, heightPx: 167 }, s.adapter);
+    // Kadar 6 in a 1280 x 800 window's compact field is fitted whole below the marks' own floor (lane p-map), its marks drawn from the fit.
+    expect(first(s).zoom).toBe(frameView(STOP, 1250, 669, 167, 24, WALL_FIT_MIN_ZOOM).zoom);
     expect(first(s).zoom).toBeLessThan(FIELD_MIN_ZOOM);
     expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
-    requestKioskMap(s.maps, { ...base, frame: 8, widthPx: 794, heightPx: 610, cameraZoom: 12.9 }, s.adapter);
+    requestKioskMap(s.maps, { ...base, frame: 6, widthPx: 669, heightPx: 167, cameraZoom: 12.9 }, s.adapter);
     expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
     expect(s.calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ networkKinds: ['tram', 'bus'], stopLabelTramInterchanges: true }));
   });

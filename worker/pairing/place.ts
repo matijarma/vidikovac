@@ -27,7 +27,7 @@ export function isTramRoute(routeId: string): boolean {
   return ROUTE_TYPES[routeId]?.type === 0;
 }
 
-/** The frame a request or a 'screen-set' carried, or null when it is not 4, 6 or 8. */
+/** The frame a request or a 'screen-set' carried, or null when it is not 2, 4 or 6 (a stored legacy 8 included). */
 export function parseFrame(raw: unknown): FrameStops | null {
   return (FRAME_STOPS as readonly unknown[]).includes(raw) ? (raw as FrameStops) : null;
 }

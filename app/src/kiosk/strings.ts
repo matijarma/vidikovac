@@ -354,7 +354,7 @@ export interface KioskStrings {
     /** Mjesto: the row's label, and the button that opens the "Adresa ili stajalište" field. */
     place: string;
     placeChange: string;
-    /** Kadar: the row's label, and the toggle's text "Kadar: {count} stajališta odavde" (4, 6 or 8). */
+    /** Kadar: the row's label, and the toggle's text "Kadar: {count} stajališta odavde" (2, 4 or 6; "stajališta" is right for all three). */
     frame: string;
     frameValue: string;
     /** Prikaz: the row's label and the toggle's two texts, the map or the schematic network. */

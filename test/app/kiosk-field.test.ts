@@ -20,9 +20,9 @@ describe('the field writes the Kadar on its map host', () => {
     const seen: string[] = [];
     new MutationObserver((records) => { for (const r of records) seen.push(r.attributeName ?? ''); }).observe(host, { attributes: true });
     field.setFrame(6);
-    field.setFrame(8);
+    field.setFrame(2);
     return Promise.resolve().then(() => {
-      expect(host.dataset.frame).toBe('8');
+      expect(host.dataset.frame).toBe('2');
       expect(seen).toEqual(['data-frame']);
     });
   });

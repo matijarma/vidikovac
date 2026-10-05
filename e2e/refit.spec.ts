@@ -37,7 +37,7 @@ const ROUTE_TYPES = read<Record<string, { type: number }>>('app/src/data/zet-rou
 const isTram = (routeId: string): boolean => ROUTE_TYPES[routeId]?.type === 0;
 const STOPS = read<ScreenStop[]>('app/public/data/stops.json');
 const TRG = placeFromStop(STOPS.find((s) => s.id === E2E_STOP_ID)!, isTram);
-/** The wall's measured Kadar 6 around 106_1, as e2e/wall-map.spec.ts states it. */
+/** The wall's measured default Kadar (4) around 106_1, as e2e/wall-map.spec.ts states it. */
 const RADIUS_M = frameRadiusM(TRG, frameStopsFrom(STOPS, isTram, frameLinesOf(decodeNetwork(read('app/public/data/zet-network.json')))), DEFAULT_FRAME_STOPS);
 /** kiosk/mapview.ts CITY_WINDOW (pinned by test/app/map.test.ts), written out: that module's graph reaches JSON a
  *  Playwright program cannot import without an attribute. */
@@ -148,7 +148,7 @@ test('the desktop pair keeps the Karta’s frame inside its canvas at 1280×800,
   await page.goto(FIXTURE_DASHBOARD);
   const map = page.locator(`${PHONE_PROBES.desktopKarta} ${PHONE_PROBES.mapCanvas}`).first();
   await expect(map).toHaveAttribute('data-map-status', /^(ready|tiles-failed)$/, { timeout: 30_000 });
-  // The circle the Karta frames is the "U blizini" one the Sada side prints ("U blizini · 2,2 km · ~16 min"):
+  // The circle the Karta frames is the "U blizini" one the Sada side prints ("U blizini · 1 km · ~8 min"):
   // its stops, less the pill's rounding to a tenth of a kilometre.
   const head = (await page.locator(`${PHONE_PROBES.nearbyHead} >> visible=true`).first().innerText()).replace(/\s+/g, ' ');
   const km = Number(/(\d+(?:,\d)?) km/.exec(head)?.[1]?.replace(',', '.'));

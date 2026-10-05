@@ -11,3 +11,9 @@ export const LONG_PRESS_MS = 800;
 /** The beat after the press timer on which Postavke opens (review N2, kiosk/settings.ts bindLongPress): one task
  *  of the same clock, so a pointermove the queue holds ends the press first. The tests fire it by this delay. */
 export const LONG_PRESS_BEAT_MS = 0;
+/** Two taps on a screen-sized wall whose releases fall this close together switch fullscreen on, or off again
+ *  (kiosk/settings.ts bindDoubleTap; decision 4 of the irritation pass, 5 Oct 2026). A first tap that asked for
+ *  fullscreen surprised whoever touched the wall to read it. */
+export const DOUBLE_TAP_MS = 400;
+/** ... and this close in CSS pixels; a finger that moves farther during a tap is no tap. */
+export const DOUBLE_TAP_SLOP_PX = 24;
