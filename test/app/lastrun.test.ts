@@ -136,8 +136,9 @@ describe('loadLastRun: the stop’s file, once per stop', () => {
   });
   it('caches a live answer per stop: the second call fetches nothing', async () => {
     const fetchImpl = vi.fn(answer(200));
-    const first = await loadLastRun('200_1', asFetch(fetchImpl));
-    const second = await loadLastRun('200_1', asFetch(fetchImpl));
+    const asked = at('2026-09-11T12:00:00Z'); // inside FILE.validUntil, whatever the wall clock says
+    const first = await loadLastRun('200_1', asFetch(fetchImpl), asked);
+    const second = await loadLastRun('200_1', asFetch(fetchImpl), asked);
     expect(second).toBe(first);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
@@ -181,7 +182,7 @@ describe('loadLastRun: the stop’s file, once per stop', () => {
     expect(await loadLastRun('500_1', asFetch(fetchImpl), fetched)).toMatchObject({ status: 'down' });
     fetchImpl.mockImplementation(answer(200));
     expect(await loadLastRun('500_1', asFetch(fetchImpl), fetched + 3_600_000)).toMatchObject({ status: 'live' });
-    expect(await loadLastRun('500_1', asFetch(fetchImpl))).toMatchObject({ status: 'live' });
+    expect(await loadLastRun('500_1', asFetch(fetchImpl), fetched + 7_200_000)).toMatchObject({ status: 'live' });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
   it('evicts a live table once its own validUntil has passed, and fetches a fresh one', async () => {

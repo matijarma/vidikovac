@@ -35,10 +35,13 @@ beforeAll(async () => {
   expect(await loadSadaFeed()).not.toBeNull();
 }, 60_000);
 
-const settle = async (): Promise<void> => {
-  for (let i = 0; i < 6; i += 1) {
+/** Lets MapLibre's failed construction report itself: at least six 20 ms beats, and up to two seconds when a
+ *  predicate is given (the status lands later on a slow or busy host; 5 Oct 2026, a 2-CPU VM under the unit run). */
+const settle = async (until?: () => boolean): Promise<void> => {
+  for (let i = 0; i < 100; i += 1) {
     await new Promise((r) => setTimeout(r, 20));
     for (let j = 0; j < 10; j += 1) await Promise.resolve();
+    if (i >= 5 && (until === undefined || until())) return;
   }
 };
 
@@ -56,7 +59,7 @@ function stillMap(lib: () => Promise<Entry>) {
 describe('a map without WebGL2 (MapLibre v6)', () => {
   it('a still map (the Sada band) says it is unavailable and never builds a half map: no camera, and resize and teardown are safe', async () => {
     const { handle, statuses, container } = stillMap(async () => entry);
-    await settle();
+    await settle(() => statuses.length > 0);
     expect(statuses).toEqual(['unavailable']);
     expect(handle.status?.()).toBe('unavailable');
     expect(handle.camera?.()).toBeNull();
