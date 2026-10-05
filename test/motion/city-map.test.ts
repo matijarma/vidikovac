@@ -3,7 +3,7 @@ import '../../shared/kiosk/external-text';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as basemap from '../../app/src/map/basemap';
 import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, vehicleLabel, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
-import { discObstacles, vehiclesToGeoJson, visibleMarks, visibleStep } from '../../app/src/map/vehicle-features';
+import { discObstacles, vehiclesToGeoJson, visibleMarks, visibleStep, DISPLACE_MAX_M, metresPerProjectedPx } from '../../app/src/map/vehicle-features';
 import { networkToGeoJson, stopsToGeoJson } from '../../app/src/map/external-features';
 import * as overlays from '../../app/src/map/overlays';
 import * as cityPlaces from '../../app/src/map/city-layers';
@@ -463,14 +463,16 @@ describe('the full map draws the model, never the report (R-P2)', () => {
   it('steps a mark aside for a disc\u2019s number through the camera, says how far, and moves nothing without a way back', () => {
     const north = (id: string, short: string, lon: number): Drawn =>
       ({ id, type: 0, routeId: short, short, p: toPlane(lon, 45.81), heading: { x: 0, y: 1 }, speed: 5, confidence: 1, onShape: null });
-    const project = ([lon, lat]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * 1e4, y: (45.9 - lat) * 1e4 });
-    const unproject = ({ x, y }: { x: number; y: number }): [number, number] => [15.9 + x / 1e4, 45.9 - y / 1e4];
-    const disc = { x: (15.97 - 15.9) * 1e4, y: (45.9 - 45.81) * 1e4, r: 10 };
+    // A street-level camera: 1e5 px a degree is about 1.1 m a px (zoom 15.6), where a 20 px hop is 22 m of ground.
+    const F = 1e5;
+    const project = ([lon, lat]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * F, y: (45.9 - lat) * F });
+    const unproject = ({ x, y }: { x: number; y: number }): [number, number] => [15.9 + x / F, 45.9 - y / F];
+    const disc = { x: (15.97 - 15.9) * F, y: (45.9 - 45.81) * F, r: 10 };
     const moved = vehiclesToGeoJson([north('a', '6', 15.97)], { project, unproject, discs: [disc] }).features[0]!;
     // North-bound, dead on the disc: ahead (up the screen, north) by half the plate, the disc's radius and the margin (20 px at scale 1).
     expect(moved.properties.moved).toBeCloseTo(20, 6);
     expect(moved.geometry.coordinates[0]).toBeCloseTo(15.97, 9);
-    expect(moved.geometry.coordinates[1]).toBeCloseTo(45.81 + 20 / 1e4, 9);
+    expect(moved.geometry.coordinates[1]).toBeCloseTo(45.81 + 20 / F, 9);
     const still = vehiclesToGeoJson([north('a', '6', 15.97)], { project, discs: [disc] }).features[0]!;
     expect(still.properties.moved).toBe(0);
     expect(still.geometry.coordinates[0]).toBeCloseTo(15.97, 9);
@@ -478,7 +480,23 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     // The public screen's scale 2: the same step in the pill geometry's px is twice as far on the screen.
     const wall = vehiclesToGeoJson([north('a', '6', 15.97)], { project, unproject, discs: [{ ...disc, x: disc.x / 2, y: disc.y / 2 }], symbolScale: 2 }).features[0]!;
     expect(wall.properties.moved).toBeCloseTo(20, 6);
-    expect(wall.geometry.coordinates[1]).toBeCloseTo(45.81 + 40 / 1e4, 9);
+    expect(wall.geometry.coordinates[1]).toBeCloseTo(45.81 + 40 / F, 9);
+    // The ground cap (DISPLACE_MAX_M, owner 5 Oct 2026): under a coarse camera (1e4 px a degree, about 11 m a px, zoom
+    // 12.3) the same hop would be 220 m, so it stops at a hundred metres of ground, on the phone and on the wall alike.
+    const coarse = 1e4;
+    const projectCoarse = ([lon, lat]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * coarse, y: (45.9 - lat) * coarse });
+    const unprojectCoarse = ({ x, y }: { x: number; y: number }): [number, number] => [15.9 + x / coarse, 45.9 - y / coarse];
+    const metresPerPx = 111.32 / (0.001 * coarse);
+    const discCoarse = { x: (15.97 - 15.9) * coarse, y: (45.9 - 45.81) * coarse, r: 10 };
+    const capped = vehiclesToGeoJson([north('a', '6', 15.97)], { project: projectCoarse, unproject: unprojectCoarse, discs: [discCoarse] }).features[0]!;
+    expect(capped.properties.moved).toBeCloseTo(DISPLACE_MAX_M / metresPerPx, 6);
+    expect((capped.geometry.coordinates[1] - 45.81) * 111_320).toBeCloseTo(DISPLACE_MAX_M, 3);
+    const cappedWall = vehiclesToGeoJson([north('a', '6', 15.97)], { project: projectCoarse, unproject: unprojectCoarse, discs: [{ ...discCoarse, x: discCoarse.x / 2, y: discCoarse.y / 2 }], symbolScale: 2 }).features[0]!;
+    expect((cappedWall.geometry.coordinates[1] - 45.81) * 111_320).toBeCloseTo(DISPLACE_MAX_M, 3);
+    expect(metresPerProjectedPx(projectCoarse, [15.97, 45.81])).toBeCloseTo(metresPerPx, 6);
+    // A projection with one axis only cannot say how far a px is: no cap, the screen alone decides.
+    expect(metresPerProjectedPx(([lon]: [number, number]) => ({ x: (lon - 15.9) * coarse, y: 0 }), [15.97, 45.81])).toBeCloseTo(7.76, 2);
+    expect(metresPerProjectedPx(() => ({ x: 0, y: 0 }), [15.97, 45.81])).toBeNull();
     // The obstacles: the discs with a number, at their drawn radius, in the pill geometry's px.
     const points: MapPoint[] = [
       { id: 'b1', title: '', lon: 15.97, lat: 45.81, place: 'city', props: { category: 'bikes', badge: '7' } },
@@ -490,7 +508,7 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     ];
     expect(discObstacles(points, project, 2)).toEqual([
       { x: disc.x / 2, y: disc.y / 2, r: 10 },
-      { x: (15.974 - 15.9) * 1e4 / 2, y: disc.y / 2, r: 13 },
+      { x: (15.974 - 15.9) * F / 2, y: disc.y / 2, r: 13 },
     ]);
   });
 
@@ -562,15 +580,26 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(fc.features.map((f) => f.properties.cluster)).toEqual([false, false]);
   });
 
-  it('measures the pill boxes at the size the map paints them: on a screen at symbolScale 2 two trams 30 px apart merge, on a phone they stay apart', async () => {
-    const NEAR: MapPoint = { ...A, id: 'vehicle:2', lon: A.lon + 0.003, title: '11', routeId: '11' };
-    const pushedIds = async (symbolScale: number): Promise<string[]> => {
-      const { frame, vehicles } = await harness({ points: [A, NEAR], extra: { symbolScale } });
+  it('measures the pill boxes at the size the map paints them: on a screen at symbolScale 2 two trams 30 px apart merge, on a phone they stay apart; and never across more than two hundred metres of ground', async () => {
+    // A street-level camera (1e5 px a degree, about 1.1 m a px): 30 px is 33 m, well inside the ground cap.
+    const NEAR: MapPoint = { ...A, id: 'vehicle:2', lon: A.lon + 0.0003, title: '11', routeId: '11' };
+    const pushedIds = async (symbolScale: number, points: MapPoint[], pxPerDegree: number): Promise<string[]> => {
+      const { map, frame, vehicles } = await harness({ points, extra: { symbolScale } });
+      map.pxPerDegree = pxPerDegree;
+      map.fire('move');
       frame();
       return (vehicles().calls.at(-1) as FC).features.map((f) => String(f.properties.id));
     };
-    expect(await pushedIds(2)).toEqual(['cluster:vehicle:1,vehicle:2']);
-    expect((await pushedIds(1)).sort()).toEqual(['vehicle:1', 'vehicle:2']);
+    expect(await pushedIds(2, [A, NEAR], 1e5)).toEqual(['cluster:vehicle:1,vehicle:2']);
+    expect((await pushedIds(1, [A, NEAR], 1e5)).sort()).toEqual(['vehicle:1', 'vehicle:2']);
+    // The ground cap (vehicle-features.ts DISPLACE_MAX_M, owner 5 Oct 2026): under the opening camera (1e4 px a
+    // degree, about 11 m a px) the same 30 px are 330 m of ground, and a merged mark midway would stand 165 m from
+    // either tram; the two keep their own places on the wall too, overlapping or not.
+    const FAR: MapPoint = { ...A, id: 'vehicle:2', lon: A.lon + 0.003, title: '11', routeId: '11' };
+    expect((await pushedIds(2, [A, FAR], 1e4)).sort()).toEqual(['vehicle:1', 'vehicle:2']);
+    // Two trams 78 m apart (one stop's frontage) still merge there.
+    const CLOSE: MapPoint = { ...A, id: 'vehicle:2', lon: A.lon + 0.001, title: '11', routeId: '11' };
+    expect(await pushedIds(2, [A, CLOSE], 1e4)).toEqual(['cluster:vehicle:1,vehicle:2']);
   });
 
   it('merges only where pills are drawn: below PILL_ZOOM every vehicle keeps its own dot, and the camera moving in merges them', async () => {
@@ -745,6 +774,33 @@ describe('lifecycle', () => {
     expect(pending()).toBe(1);
     frame(); frame();
     expect(container.dataset.frames).toBe('1');
+  });
+
+  it('a camera move while paused repaints the last frame once at the new camera: merged marks part and nothing is reckoned forward (owner, 5 Oct 2026)', async () => {
+    const CLOSE: MapPoint = { ...A, id: 'vehicle:2', lon: A.lon + 0.001, title: '11', routeId: '11' };
+    const { handle, map, frame, vehicles, pending, container } = await harness({ points: [A, CLOSE], extra: { symbolScale: 2 } });
+    frame();
+    expect((vehicles().calls.at(-1) as FC).features.map((f) => f.properties.id)).toEqual(['cluster:vehicle:1,vehicle:2']);
+    const pushes = vehicles().calls.length;
+    handle.pause();
+    expect(pending()).toBe(0);
+    const framesAt = container.dataset.frames;
+    // The camera moves in to street level (0.001° is now 100 px): the two pills no longer overlap, so the merged
+    // mark, pushed for the old camera, would stand between two trams nobody sees merged. One beat, one push.
+    map.pxPerDegree = 1e5;
+    map.fire('move');
+    map.fire('move');
+    expect(pending()).toBe(1);
+    frame();
+    expect(vehicles().calls.length).toBe(pushes + 1);
+    expect((vehicles().calls.at(-1) as FC).features.map((f) => f.properties.id).sort()).toEqual(['vehicle:1', 'vehicle:2']);
+    expect(container.dataset.frames).toBe(framesAt);
+    expect(pending()).toBe(0);
+    // Running, the loop's own next frame does it (onCameraMove nudges): no extra beat is queued.
+    handle.resume();
+    const queued = pending();
+    map.fire('move');
+    expect(pending()).toBe(queued);
   });
 
   it('applies a report that arrived before the library loaded, draws the artefact\u2019s network and stops once, and stops everything on destroy', async () => {

@@ -156,6 +156,30 @@ function clusterToFeature(cluster: Cluster<VehiclePillPoint>, focusedRoute?: str
  * with buses, never across (see below); an untyped mark ('other') is never
  * merged at all -- it has no number to join a label with.
  */
+/** How far a drawn mark may stand from the vehicle's own position, in metres on the ground: merged with its
+ *  neighbours at their mean, or stepped aside from a disc's number, never further. Before this cap the merge
+ *  and the step were measured in screen px alone, and at Karta's opening zoom (12.7, about 8 m a px) a mark
+ *  could stand 300 m from its tram: the owner read it as a tram off its track that "repositions" on a zoom
+ *  (5 Oct 2026; the probe in review.local/irritation/L1-notes.md). A hundred metres is one stop's frontage
+ *  (kiosk/mapview.ts PHARMACY_LABEL_MIN_M), the distance within which two things are "at the same place". */
+export const DISPLACE_MAX_M = 100;
+
+/** Metres of ground per screen px at `lonLat` under `project`: the longer of two projected steps of a
+ *  thousandth of a degree (111.32 m north, 111.32 m times the latitude's cosine east). Null when the
+ *  projection cannot say (a step of no length, as a test's one-axis projection gives): then no ground cap
+ *  applies and the marks merge and step as the screen alone says. */
+export function metresPerProjectedPx(project: (lonLat: [number, number]) => { x: number; y: number } | null, lonLat: [number, number]): number | null {
+  const at = project(lonLat);
+  const north = project([lonLat[0], lonLat[1] + 0.001]);
+  const east = project([lonLat[0] + 0.001, lonLat[1]]);
+  if (!at || !north || !east) return null;
+  const northPx = Math.hypot(north.x - at.x, north.y - at.y);
+  const eastPx = Math.hypot(east.x - at.x, east.y - at.y);
+  const eastM = 111.32 * Math.cos((lonLat[1] * Math.PI) / 180);
+  const perPx = Math.max(northPx > 0 ? 111.32 / northPx : 0, eastPx > 0 ? eastM / eastPx : 0);
+  return perPx > 0 && Number.isFinite(perPx) ? perPx : null;
+}
+
 export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJsonOptions = {}): VehicleFeatureCollection {
   const features: VehicleFeature[] = [];
   for (const v of drawn) {
@@ -210,9 +234,17 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
     if (mode) mode.push(point);
     else byKind.set(kind, [point]);
   }
+  // The ground cap in the pill geometry's px (the marks are in screen px over the symbol scale): two marks
+  // merge only within twice DISPLACE_MAX_M of each other (each member then stands within the cap of the
+  // mean), and a mark steps aside by at most the cap.
+  const first = features.find((f) => f.properties.kind !== 'other');
+  const perScreenPx = first ? metresPerProjectedPx(project, first.geometry.coordinates) : null;
+  const metresPerPx = perScreenPx === null ? null : perScreenPx * scale;
+  const maxMergePx = metresPerPx === null ? undefined : (2 * DISPLACE_MAX_M) / metresPerPx;
+  const maxStepPx = metresPerPx === null ? undefined : DISPLACE_MAX_M / metresPerPx;
   const merged: VehicleFeature[] = [...alone];
   for (const points of byKind.values()) {
-    for (const group of clusterPills(points, { selectedId })) {
+    for (const group of clusterPills(points, { selectedId, maxMergePx })) {
       merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group, options.focusedRoute));
     }
   }
@@ -231,7 +263,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
     marks.push({ id: feature.properties.id, x: at.x / scale, y: at.y / scale, label: feature.properties.short, kind: feature.properties.kind, bearing: feature.properties.bearing });
     byId.set(feature.properties.id, feature);
   }
-  for (const [id, at] of deflectMarks(marks, options.discs ?? [])) {
+  for (const [id, at] of deflectMarks(marks, options.discs ?? [], { maxPx: maxStepPx })) {
     if (!(at.moved > 0)) continue;
     const feature = byId.get(id)!;
     feature.geometry.coordinates = unproject({ x: at.x * scale, y: at.y * scale });
