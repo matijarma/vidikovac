@@ -1,6 +1,6 @@
 import type { OverlayPalette, StyleLayerLike } from './basemap';
 import { MAP_FONTS } from './basemap';
-import { nameAnchorOffsets } from './overlays';
+import { nameAnchorOffsets, STOP_LABEL_ZOOM, STOP_ZOOM } from './overlays';
 export const CITY_POINTS = 'city-places';
 export const CITY_PATHS = 'city-paths';
 export const CITY_LAYERS = ['city-place-dots','city-place-badges','city-place-labels','city-place-selection','city-path-lines'] as const;
@@ -53,23 +53,39 @@ export type CityLabels = 'all' | 'venues' | 'none';
 export const NOT_VENUES: readonly string[] = ['bikes', 'air'];
 /** From this zoom a surface that names every city place names the stations too ('all'). */
 export const PLACE_NAMES_ZOOM = 13;
+/** A rail station (the catalogue's hz-schedule, category 'rail') is drawn as a
+ *  stop is, not as a place: the stops' own bead in the stops' own ink from the
+ *  stops' own zoom, its name from the stop names' zoom (owner, 5 Oct 2026: a
+ *  handful of commuter stations is no landmark, and a place disc on each read
+ *  as something important). A tap still opens the station's board, as a tap
+ *  on a stop opens the stop's (city/markup.ts, map-pointer.ts). */
+export const RAIL_CATEGORY = 'rail';
 export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels:CityLabels|boolean='all'):StyleLayerLike[] {
   const mode:CityLabels=labels===true?'all':labels===false?'none':labels;
   const isBike=['==',['get','category'],'bikes'];
+  const isRail=['==',['get','category'],RAIL_CATEGORY];
   /** A station or an air station: its count or its mark says it; every other city place is a venue, named. */
   const notVenue=['in',['get','category'],['literal',NOT_VENUES]];
+  /** A station's name comes in with the stop names (STOP_LABEL_ZOOM), later than a BAJS station's. */
+  const notVenueOrRail=['in',['get','category'],['literal',[...NOT_VENUES,RAIL_CATEGORY]]];
   const far=['all',isBike,['==',['get','far'],true]];
   const empty=['all',isBike,['==',['get','badge'],'0']];
   const small=['any',far,empty];
   const spent=['all',isBike,['!',empty],['any',['==',['get','spent'],true],['in',['get','badge'],['literal',SPENT_BADGES]]]];
   // Every city place is drawn at full strength at every zoom: a station with
   // nothing to give is grey, never faded, and no mark is a merged cluster.
-  const color=['case',spent,p.bikeSpent,small,p.bike,['match',['get','category'],'bikes',p.bikeDisc,'culture',p.event,'heritage',p.other,'air',p.other,p.place]];
-  const radius=['*',scale,['case',small,BIKE_FAR_RADIUS_PX,isBike,BIKE_DISC_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]];
+  const color=['case',isRail,p.stopFill,spent,p.bikeSpent,small,p.bike,['match',['get','category'],'bikes',p.bikeDisc,'culture',p.event,'heritage',p.other,'air',p.other,p.place]];
+  // The rail bead is the stops' own (overlays.ts LAYERS.stops off the wall): it grows with the zoom as a stop does
+  // and is the one mark here that follows the camera.
+  const railRadius=['interpolate',['linear'],['zoom'],STOP_ZOOM,1.5*scale,14,2.6*scale,16,4.5*scale];
+  const railAlpha=['step',['zoom'],0,STOP_ZOOM,['interpolate',['linear'],['zoom'],STOP_ZOOM,0.5,14,1]];
+  const radius=['case',isRail,railRadius,['*',scale,['case',small,BIKE_FAR_RADIUS_PX,isBike,BIKE_DISC_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]]];
   return [
     {id:'city-path-lines',type:'line',source:CITY_PATHS,paint:{'line-color':p.bike,'line-width':2*scale,'line-dasharray':[2,2]}},
     {id:'city-place-dots',type:'circle',source:CITY_POINTS,paint:{
-      'circle-radius':radius,'circle-color':color,'circle-stroke-color':p.halo,'circle-stroke-width':['case',small,1,2]}},
+      'circle-radius':radius,'circle-color':color,'circle-stroke-color':['case',isRail,p.stopStroke,p.halo],
+      'circle-stroke-width':['case',isRail,['interpolate',['linear'],['zoom'],STOP_ZOOM,0.8,16,1.6],small,1,2],
+      'circle-opacity':['case',isRail,railAlpha,1],'circle-stroke-opacity':['case',isRail,railAlpha,1]}},
     // A count is never dropped by a collision (text-allow-overlap takes no
     // per-feature value, so it holds for every badge): each disc keeps its number.
     {id:'city-place-badges',type:'symbol',source:CITY_POINTS,layout:{
@@ -85,9 +101,9 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
     // says them below it. Every venue name moves before it yields to a
     // passing pill (overlays.ts decision 17).
     {id:'city-place-labels',type:'symbol',source:CITY_POINTS,
-      ...(mode==='venues'?{filter:['!',notVenue]}:{}),layout:{
+      ...(mode==='venues'?{filter:['!',notVenueOrRail]}:{}),layout:{
       visibility:mode==='none'?'none':'visible',
-      'text-field':mode==='venues'?['get','title']:['step',['zoom'],['case',notVenue,'',['get','title']],PLACE_NAMES_ZOOM,['get','title']],
+      'text-field':mode==='venues'?['get','title']:['step',['zoom'],['case',notVenueOrRail,'',['get','title']],PLACE_NAMES_ZOOM,['case',isRail,'',['get','title']],STOP_LABEL_ZOOM,['get','title']],
       'text-font':[MAP_FONTS.medium],'text-size':12*scale,
       'text-variable-anchor-offset':nameAnchorOffsets(1.5),'text-justify':'auto',
       'text-max-width':12,'text-optional':true,'symbol-sort-key':['get','priority']},
