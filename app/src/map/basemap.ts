@@ -441,6 +441,11 @@ export interface OverlayPalette {
   selection: string;
   selectionHalo: string;
   screenStop: string;
+  /** The own-place marker's disc (overlays.ts screenStop / screenStopOver): paper in both faces, ringed in the face's
+   *  screenStop blue, so "here" is the one white disc on the map by day and by night and never the colour of a tram pill
+   *  standing on it (owner, 5 Oct 2026: the dark face's halo read as a black circle, and a blue disc on a blue pill as a
+   *  hollow ring). */
+  hereFill: string;
 }
 
 /* The mode colours repeat the interface roles value for value: a tram and
@@ -480,6 +485,7 @@ export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   selection: '#142334',
   selectionHalo: '#fbfcfe',
   screenStop: '#0751bf',
+  hereFill: '#fbfcfe',
 });
 
 export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
@@ -505,6 +511,7 @@ export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
   selection: '#f1f4f7',
   selectionHalo: '#111922',
   screenStop: '#84b5ff',
+  hereFill: '#fbfcfe',
 });
 
 export function overlayPalette(theme: MapTheme): Readonly<OverlayPalette> {

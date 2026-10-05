@@ -333,18 +333,19 @@ describe('the kiosk overlay set (prozor)', () => {
     expect(by(LAYERS.stopLabelsHeld).filter).toEqual(NEVER);
     // The own ring and its name are the screen-stop layers, untouched.
     for (const id of [LAYERS.screenStop, LAYERS.screenStopLabel]) expect(by(id), id).toEqual(loud.find((l) => l.id === id));
-    // Owner, 5 Oct 2026: on the public screen the own-place marker (a 3 x s halo) lies over the pills, so a tram
+    // Owner, 5 Oct 2026: on the public screen the own-place marker (a paper disc in a blue ring) lies over the pills, so a tram
     // standing at the stop never hides where "here" is; on a phone the own disc keeps its place under them. The
     // pharmacy's ring stays under the marks with every other name (decision 17).
     const order = (layers: typeof loud, id: string): number => layers.findIndex((l) => l.id === id);
     expect(order(loud, LAYERS.screenStopOver)).toBeGreaterThan(order(loud, LAYERS.vehicles));
     expect(order(loud, LAYERS.screenStop)).toBeLessThan(order(loud, LAYERS.vehicleBodies));
     expect(order(loud, LAYERS.placePharmacy)).toBeLessThan(order(loud, LAYERS.vehicles));
-    expect(by(LAYERS.screenStopOver)!.paint).toMatchObject({ 'circle-radius': 9, 'circle-stroke-width': 3 });
+    expect(by(LAYERS.screenStopOver)!.paint).toMatchObject({ 'circle-radius': 8, 'circle-stroke-width': 2, 'circle-color': OVERLAY_DARK.hereFill, 'circle-stroke-color': OVERLAY_DARK.screenStop });
+    expect(OVERLAY_DARK.hereFill).toBe('#fbfcfe'); // a paper disc at night too: the dark face's halo read as a black circle, a blue disc on a blue pill as a hollow ring (owner, 5 Oct 2026)
     expect(by(LAYERS.screenStopOver)!.filter).toBeUndefined();
     expect(by(LAYERS.screenStop)!.filter).toEqual(['literal', false]);
     const phone = overlayLayers(OVERLAY_DARK, { screenStopId: '106_1' });
-    expect(phone.find((l) => l.id === LAYERS.screenStop)!.paint).toMatchObject({ 'circle-radius': 7, 'circle-stroke-width': 2 });
+    expect(phone.find((l) => l.id === LAYERS.screenStop)!.paint).toMatchObject({ 'circle-radius': 7, 'circle-stroke-width': 2, 'circle-color': OVERLAY_DARK.hereFill, 'circle-stroke-color': OVERLAY_DARK.screenStop });
     expect(phone.find((l) => l.id === LAYERS.screenStop)!.filter).toBeUndefined();
     expect(phone.find((l) => l.id === LAYERS.screenStopOver)!.filter).toEqual(['literal', false]);
     // Left out, the option changes nothing: every other surface keeps its beads and names.
@@ -510,10 +511,13 @@ describe('the kiosk overlay set (prozor)', () => {
       // The screen's stop: the biggest ring and the biggest name on the map,
       // always drawn under the pills (decision 19), and every other name
       // yields to it.
-      // Since 5 Oct 2026 the wall's marker is the over-the-pills layer (a 3 x s halo); the under one draws nothing there.
+      // Since 5 Oct 2026 the wall's marker is the over-the-pills layer: an 8 x s paper disc in a 2 x s ring of the
+      // face's blue, the disc the same in both faces; the under one draws nothing there.
       const screenStop = by(LAYERS.screenStopOver);
-      expect(screenStop.paint!['circle-radius']).toBe(18);
-      expect(screenStop.paint!['circle-stroke-width']).toBe(6);
+      expect(screenStop.paint!['circle-radius']).toBe(16);
+      expect(screenStop.paint!['circle-stroke-width']).toBe(4);
+      expect(screenStop.paint!['circle-color']).toBe('#fbfcfe');
+      expect(screenStop.paint!['circle-stroke-color']).toBe(p.screenStop);
       expect(by(LAYERS.screenStop).filter).toEqual(['literal', false]);
       const screenStopLabel = by(LAYERS.screenStopLabel);
       expect(screenStopLabel.layout!['text-size']).toBe(30);

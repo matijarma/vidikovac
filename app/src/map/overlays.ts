@@ -1083,7 +1083,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     // public screen this layer draws nothing and the own-place marker is laid over the pills instead (below,
     // LAYERS.screenStopOver): the anchor the whole picture is about was hidden under every tram standing at
     // the stop (owner, 5 Oct 2026). Both layers are always in the list, so setProzor stays one styleDiff.
-    circle(LAYERS.screenStop, SOURCES.screenStop, { 'circle-radius': 7 * s, 'circle-color': p.screenStop, 'circle-stroke-color': p.halo, 'circle-stroke-width': 2 }, prozor ? { filter: NEVER } : {}),
+    circle(LAYERS.screenStop, SOURCES.screenStop, { 'circle-radius': 7 * s, 'circle-color': p.hereFill, 'circle-stroke-color': p.screenStop, 'circle-stroke-width': 2 }, prozor ? { filter: NEVER } : {}),
     // The bodies: over the rails and the stop rings, under every dot, nose and
     // pill. Flat-ended, because a vehicle ends flat and a round cap would add
     // a width to the length; the pill inks, so a body is its pill's colour
@@ -1191,9 +1191,11 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     noseLayer(p, LAYERS.vehicleTwoWayFore, pillsYield ? NEVER : twoWayFilter, pillZoom, undefined, NOSE_ROTATE, s, alpha, blocks),
     noseLayer(p, LAYERS.vehicleTwoWayAft, pillsYield ? NEVER : twoWayFilter, pillZoom, undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
     pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), pillZoom, s, p, inks, mark, blocks, pillsYield),
-    // The screen's own place on the public screen: the largest ring on the map (R-KP4: 9 x s, now a 3 x s
-    // halo), over the pills, so a tram standing at the stop never hides where "here" is (owner, 5 Oct 2026).
-    circle(LAYERS.screenStopOver, SOURCES.screenStop, { 'circle-radius': 9 * s, 'circle-color': p.screenStop, 'circle-stroke-color': p.halo, 'circle-stroke-width': 3 * s }, prozor ? {} : { filter: NEVER }),
+    // The screen's own place on the public screen: a paper disc (8 x s, p.hereFill, the same in both faces) ringed in
+    // the face's blue (2 x s), over the pills, so a tram standing at the stop never hides where "here" is. The first
+    // cut's blue disc with a 3 x s halo in the face's halo colour was a black ring at night and, on a pill of its own
+    // colour, a hollow ring (owner, 5 Oct 2026).
+    circle(LAYERS.screenStopOver, SOURCES.screenStop, { 'circle-radius': 8 * s, 'circle-color': p.hereFill, 'circle-stroke-color': p.screenStop, 'circle-stroke-width': 2 * s }, prozor ? {} : { filter: NEVER }),
     // On a strip (pillsYield) the own name must not lie under a hub pill standing on the place: an unseen
     // copy of it, above the pills, is placed before them, and a pill that would cover it yields. Everywhere
     // else it places nothing, and decision 19's name under the pills is the only one.
