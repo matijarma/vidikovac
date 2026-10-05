@@ -5,6 +5,7 @@ import { expect, test, type APIRequestContext, type Browser, type BrowserContext
 import { existsSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { CreateBeaconRequest, CreateBeaconResponse } from '../worker/protocol';
+import type { Frame } from '../shared/city/frame';
 import { CODE_RE, CODE_SHOWN_RE, kioskUrl, parseDevVars, rebaseUrl } from './lib';
 import { localNetworkHeaders } from '../scripts/local-network.mjs';
 import { e2ePorts, localOrigin } from '../scripts/e2e-ports.mjs';
@@ -65,7 +66,7 @@ export async function provisionKiosk(
    *  box-scoped lagano board proofs were written against the stopless screen and keep it -- a stop-bearing screen opens
    *  the phone's U pokretu sheet on a route of that stop, which is the phone's own behaviour to settle
    *  (task-WB-report.md, concerns), and the stopless board lists the box, which those specs' teaser stubs feed. */
-  options: { stopId?: string } = {},
+  options: { stopId?: string; frame?: Frame } = {},
 ): Promise<{ kioskUrl: string; beaconId: string }> {
   const preset = process.env.E2E_KIOSK_URL;
   if (preset) {
@@ -77,7 +78,7 @@ export async function provisionKiosk(
       'No E2E_KIOSK_URL and no E2E_ADMIN_BYPASS (env or .dev.vars): cannot provision a test screen. See docs/kiosk.md, section "Testni zaslon".',
     );
   }
-  const body: CreateBeaconRequest = { venueType: 'kafic', area: 'Donji grad', operatorLabel: 'E2E testni zaslon', ...(options.stopId ? { stopId: options.stopId } : {}) };
+  const body: CreateBeaconRequest = { venueType: 'kafic', area: 'Donji grad', operatorLabel: 'E2E testni zaslon', ...(options.stopId ? { stopId: options.stopId } : {}), ...(options.frame !== undefined ? { frame: options.frame } : {}) };
   const res = await request.post(`${base}/api/admin/beacons`, { headers: { 'x-e2e-admin-bypass': token }, data: body });
   expect([200, 201], `POST /api/admin/beacons answered ${res.status()}: ${await res.text()}`).toContain(res.status());
   const json = (await res.json()) as CreateBeaconResponse;

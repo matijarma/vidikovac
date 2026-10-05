@@ -496,11 +496,11 @@ describe('the integrated companion sentence', () => {
     k.handle.destroy();
   });
 
-  it('highlights a sentence reference without moving the map, then removes only vehicles on outage', async () => {
+  it('turns the sentence without moving the map, then removes only vehicles on outage', async () => {
     let now = NOW;
     let modules = MODULES;
     const handle = { update: vi.fn(), pause: vi.fn(), resume: vi.fn(), resize: vi.fn(), destroy: vi.fn(),
-      setView: vi.fn(), setHighlight: vi.fn(), setFeedState: vi.fn(), setModes: vi.fn() };
+      setView: vi.fn(), setFeedState: vi.fn(), setModes: vi.fn() };
     const factory = vi.fn((_options: unknown) => handle);
     const k = mount({ stored: STORED, now: () => now, mapFactory: factory as never, fetchTeaser: async () => ({ modules }) });
     await flush();
@@ -509,7 +509,8 @@ describe('the integrated companion sentence', () => {
     now += 20_000;
     k.tick(CODE_TICK_MS);
     expect(q(k.root, '[data-testid=kiosk-sentence]')!.dataset.kicker).toBe('radovi');
-    expect(handle.setHighlight).toHaveBeenLastCalledWith(expect.objectContaining({ geometry: { type: 'LineString', coordinates: [[15.9705, 45.813], [15.972, 45.8131]] } }));
+    // No ring on the map follows the sentence (owner, 5 Oct 2026: an unexplained circle); the words carry it.
+    expect('setHighlight' in handle).toBe(false);
     expect(handle.setView).not.toHaveBeenCalled();
     modules = MODULES.map(module => module.module === 'zet-rt' ? { ...module, status: 'down' as const } : module);
     k.poll();
@@ -547,8 +548,8 @@ describe('the integrated companion sentence', () => {
     expect(text(q(k.root, '[data-testid=nearby-head]'))).toBe(nearbyHead(createDefaultI18n('hr'), radius));
     expect(q(k.root, '[data-testid=kiosk-map-host]')!.dataset.frame).toBe('6');
     expect(factory).toHaveBeenCalledTimes(1);
-    if (chosen) expect(map.setView).toHaveBeenLastCalledWith(expect.objectContaining(frameView(place, radius, FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide)));
-    else expect(map.setView).not.toHaveBeenCalled();
+    // Chosen or the read-path default, the wall frames its place at the measured Kadar (5 Oct 2026).
+    expect(map.setView).toHaveBeenLastCalledWith(expect.objectContaining(frameView(place, radius, FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide)));
     k.handle.destroy();
   });
 });
@@ -832,7 +833,7 @@ describe('start: one field, one line, Pokreni', () => {
     expect(text(field.closest('label'))).toBe('Adresa ili stajalište');
     expect(field.value).toBe('');
     expect(k.root.querySelector<HTMLElement>('[data-testid=setup-suggestions]')!.hidden).toBe(true);
-    expect(text(q(k.root, '[data-testid=setup-preview]'))).toBe('Na zaslonu: cijeli grad.');
+    expect(text(q(k.root, '[data-testid=setup-preview]'))).toBe('Na zaslonu: Trg bana J. Jelačića i 4 stajališta uokolo');
     expect(text(q(k.root, '[data-testid=setup-create]'))).toBe('Pokreni');
     // One optional field and nothing else to decide: no district, no stop list, no paragraphs around it.
     expect(q(k.root, '[data-testid=kiosk-setup] select')).toBeNull();
@@ -1044,7 +1045,7 @@ describe('start: the field turns what is typed into the screen’s place', () =>
     expect(text(h.host.querySelector<HTMLElement>('[data-testid=setup-create]'))).toBe('Pokreni');
     h.type('');
     expect(h.host.querySelector<HTMLElement>('[data-testid=setup-error]')!.hidden).toBe(true);
-    expect(h.preview()).toBe('Na zaslonu: cijeli grad.');
+    expect(h.preview()).toBe('Na zaslonu: Trg bana J. Jelačića i 4 stajališta uokolo');
     h.submit();
     await flush();
     expect(h.createScreen).toHaveBeenCalledTimes(1);
@@ -1426,12 +1427,12 @@ describe('settings: the panel on the screen itself', () => {
     await flush();
     open(k);
     toggle(k, 'frame').click(); // 6
-    toggle(k, 'frame').click(); // 2
+    toggle(k, 'frame').click(); // the whole city
     toggle(k, 'place').click();
-    q(panel(k)!, '[data-testid=settings-place-city]')!.click(); // the whole city
+    q(panel(k)!, '[data-testid=settings-place-city]')!.click(); // no place of its own either
     expect(text(q(panel(k)!, '[data-testid=settings-place]'))).toBe('Cijeli grad');
     k.tick(SETTINGS_SEND_DELAY_MS);
-    expect(k.beacon.setScreen.mock.calls).toEqual([[{ place: null, frame: 2 }]]);
+    expect(k.beacon.setScreen.mock.calls).toEqual([[{ place: null, frame: 'city' }]]);
   });
 
   it('a second change inside five seconds waits for the window', async () => {
@@ -1442,12 +1443,12 @@ describe('settings: the panel on the screen itself', () => {
     k.tick(SETTINGS_SEND_DELAY_MS);
     answer(k, TRG_PLACE, 6);
     toggle(k, 'frame').click();
-    expect(text(toggle(k, 'frame'))).toBe('Kadar: 2 stajališta odavde');
+    expect(text(toggle(k, 'frame'))).toBe('Kadar: cijeli grad');
     k.tick(SETTINGS_SEND_DELAY_MS);
     expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
     k.tick(SCREEN_SET_MIN_MS);
     expect(k.beacon.setScreen).toHaveBeenCalledTimes(2);
-    expect(k.beacon.setScreen).toHaveBeenLastCalledWith({ place: { kind: 'stop', stopId: '106_1' }, frame: 2 });
+    expect(k.beacon.setScreen).toHaveBeenLastCalledWith({ place: { kind: 'stop', stopId: '106_1' }, frame: 'city' });
   });
 
   it('a refusal repaints the toggle from the DO’s truth, and a repeat inside the DO’s window says so', async () => {
@@ -2936,28 +2937,40 @@ describe('the field, the column and the one map', () => {
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.frame).toBe('6');
   });
 
-  it('opens on the whole city for a screen set up with an empty field, and for one that names no place at all', async () => {
+  it('frames the read-path default place at its Kadar for an empty field and for a record naming no place, and opens on the whole city only for Kadar “cijeli grad”', async () => {
     const window = cityWindowView(FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide);
     const trg = { kind: 'tram' as const, name: STOP.name, lon: STOP.lon, lat: STOP.lat, stopId: STOP.id };
-    // An empty field is Trg bana J. Jelačića for the header, the list and the departures, and the whole city on the map [O-65].
+    const framed = frameView({ lon: STOP.lon, lat: STOP.lat }, FRAME_RADIUS_M[4], FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide);
+    // An empty field is Trg bana J. Jelačića for the header, the list and the departures, and since 5 Oct 2026 for the
+    // map too: Kadar 4 around it, not the whole-city window (owner: Kadar never moved the map on such a screen).
     const empty = spyMap();
     const e = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...CITY_SCREEN, place: trg, placeSet: false, frame: 4 } }), mapFactory: empty.factory as never });
     await flush();
-    expect(empty.factory.mock.calls[0]![0]).toMatchObject({ center: window.center, zoom: window.zoom, outline: null });
+    expect(empty.factory.mock.calls[0]![0]).toMatchObject({ center: framed.center, zoom: framed.zoom, outline: null });
     expect(text(q(e.root, '[data-testid=kiosk-context]'))).toBe('Trg bana J. Jelačića');
     expect(q(e.root, '[data-testid=kiosk]')!.dataset.placeKind).toBe('city');
+    expect(q(e.root, '[data-testid=kiosk]')!.dataset.frame).toBe('4');
     e.handle.destroy();
-    // 'zagreb' is the whole city, not a quarter; and a record from before place-v2 with no stop names the city until the DO answers.
+    // Kadar "cijeli grad" is the whole-city window, the place still named.
     const city = spyMap();
-    const k = mount({ stored: STORED_CITY, mapFactory: city.factory as never });
+    const c = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...CITY_SCREEN, place: trg, placeSet: false, frame: 'city' } }), mapFactory: city.factory as never });
     await flush();
     expect(city.factory.mock.calls[0]![0]).toMatchObject({ center: window.center, zoom: window.zoom, outline: null });
+    expect(text(q(c.root, '[data-testid=kiosk-context]'))).toBe('Trg bana J. Jelačića');
+    expect(q(c.root, '[data-testid=kiosk]')!.dataset.frame).toBe('city');
+    c.handle.destroy();
+    // 'zagreb' is the whole city, not a quarter, and a record from before place-v2 with no stop names the city until the
+    // DO answers; its map frames the default place at the default Kadar meanwhile.
+    const stored = spyMap();
+    const k = mount({ stored: STORED_CITY, mapFactory: stored.factory as never });
+    await flush();
+    expect(stored.factory.mock.calls[0]![0]).toMatchObject({ center: framed.center, zoom: framed.zoom, outline: null });
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zagreb');
     k.handle.destroy();
     const none = spyMap();
     const n = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: null, area: 'trnje' } }), mapFactory: none.factory as never });
     await flush();
-    expect(none.factory.mock.calls[0]![0]).toMatchObject({ center: window.center, zoom: window.zoom, outline: null });
+    expect(none.factory.mock.calls[0]![0]).toMatchObject({ center: framed.center, zoom: framed.zoom, outline: null });
     expect(text(q(n.root, '[data-testid=kiosk-context]'))).toBe('Zagreb');
   });
 

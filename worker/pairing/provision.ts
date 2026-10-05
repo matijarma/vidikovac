@@ -1,4 +1,4 @@
-import { DEFAULT_FRAME_STOPS, type FrameStops } from '../../shared/city/frame';
+import { DEFAULT_FRAME, type Frame } from '../../shared/city/frame';
 import { placeFromStop, type ScreenPlace } from '../../shared/city/place';
 import { beaconStub, type BeaconCreateInput } from '../do/beacon-do';
 import { indexStub } from '../do/index-do';
@@ -21,8 +21,8 @@ export interface ProvisionInput {
    * route and the legacy `{ stopId }` body).
    */
   place?: ScreenPlace | null;
-  /** Kadar 2 / 4 / 6, DEFAULT_FRAME_STOPS when omitted. */
-  frame?: FrameStops;
+  /** Kadar 2 / 4 / 6 or the whole city, DEFAULT_FRAME when omitted. */
+  frame?: Frame;
 }
 
 /** Same beacon, authentication and redemption path for temporary and venue screens. */
@@ -33,7 +33,7 @@ export async function provisionScreen(env: Env, input: ProvisionInput, origin: s
   // admin route checks only its shape) leaves the place absent, the pre-place-v2 shape, since
   // a stored null may not carry a stop id; both read as Trg with placeSet false.
   const place = input.place !== undefined ? input.place : stop ? placeFromStop(stop, isTramRoute) : input.stopId === null ? null : undefined;
-  const frame = input.frame ?? DEFAULT_FRAME_STOPS;
+  const frame = input.frame ?? DEFAULT_FRAME;
   // The same enrichment BeaconDO.screenMetadata() applies on every read, so the create
   // response, the scan grant and the room's 'joined' frame carry one and the same screen.
   const screen: ScreenMetadata = { kind: input.kind, expiresAt: input.expiresAt ?? null, stop, area: input.area, ...enrichPlace(place, stop), frame };

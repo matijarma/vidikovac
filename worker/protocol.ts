@@ -1,11 +1,11 @@
 // Wire contract between the Worker, the Durable Objects and the browser code.
 // Shared by worker/ and app/src/ (imported by relative path from both), so it
 // must stay free of runtime dependencies.
-import type { FrameStops } from '../shared/city/frame';
+import type { Frame } from '../shared/city/frame';
 import type { ScreenPlace, ScreenPlaceInput } from '../shared/city/place';
 import type { PresentationCommand, PresentationResult, PresentationState, ScreenPresentation } from './presentation';
 
-export type { FrameStops } from '../shared/city/frame';
+export type { Frame, FrameStops } from '../shared/city/frame';
 export type { ScreenPlace, ScreenPlaceInput } from '../shared/city/place';
 
 /** Crockford base32: 0-9 and A-Z without I, L, O, U. 32 symbols, `byte % 32` is unbiased. */
@@ -55,8 +55,8 @@ export interface ScreenMetadata {
    * the map keeps the whole-city window. True when the operator chose the place.
    */
   placeSet?: boolean;
-  /** How many tram stops around the place the wall frames (Kadar 2 / 4 / 6; shared/city/frame.ts). */
-  frame?: FrameStops;
+  /** The wall's Kadar: 2 / 4 / 6 tram stops around the place, or the whole city (shared/city/frame.ts). */
+  frame?: Frame;
   /**
    * A DEV screen (worker/routes/dev.ts): opened with ?DEV, never paired with a code, counted
    * nowhere. Absent on every other screen, so their records and frames keep their shape.
@@ -135,7 +135,7 @@ export interface CreateBeaconRequest {
   stopId?: string;
   /** The screen's place (place-v2); the server resolves a stop's name and point from its own table. */
   place?: ScreenPlaceInput;
-  frame?: FrameStops;
+  frame?: Frame;
 }
 
 export interface CreateBeaconResponse {
@@ -162,7 +162,7 @@ export type BeaconClientMessage =
   // back as Trg bana Jelačića with placeSet false) and the frame. A stop place
   // carries only its id; the DO fills name and point from its own table.
   // Errors 'bad-place', 'bad-frame', 'screen-set-rate'.
-  | { t: 'screen-set'; version: 2; place: ScreenPlaceInput | null; frame: FrameStops }
+  | { t: 'screen-set'; version: 2; place: ScreenPlaceInput | null; frame: Frame }
   | { t: 'more' } // request the next code batch
   | { t: 'ping' } // keepalive, answered by the DO's auto-response without waking it
   | { t: 'pong' };

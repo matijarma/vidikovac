@@ -87,7 +87,7 @@ describe('docs/kiosk.md', () => {
       '**Adresa ili stajalište**',
       '**Pokreni**',
       '„Na zaslonu: Kvaternikov trg i 4 stajališta uokolo”',
-      '„Na zaslonu: cijeli grad.”',
+      '„Na zaslonu: Trg bana J. Jelačića i 4 stajališta uokolo”',
       '„Poslužitelj nije prihvatio mjesto. Odaberi ponovno.”',
     ]) expect(kiosk, text).toContain(text);
     for (const re of [/Dugi\s+pritisak\s+\(0,8\s+s\)/, /unutar\s+400\s+m/, /unutar\s+300\s+m/, /`screen-set`\s+verzije\s+2/, /`bad-place`/, /`bad-frame`/]) {

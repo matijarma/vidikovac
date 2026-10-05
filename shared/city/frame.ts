@@ -26,6 +26,9 @@
 // caps give 700 / 1000 / 1300 m; Kvaternikov trg 643 / 1000 / 1300 m;
 // Črnomerec 700 / 1000 / 1300 m. Most tram platforms sit at a step's upper
 // cap; only a dense junction frames tighter.
+//
+// A fourth step, the whole city (FRAME_CITY), closes the cycle: it is the
+// window every wall without a chosen place used to keep, now chosen on purpose.
 import { distanceM, normalName } from './geo';
 
 /** Kadar 2 / 4 / 6: how many tram stops around the place the frame reaches. */
@@ -35,6 +38,29 @@ export const DEFAULT_FRAME_STOPS: FrameStops = 4;
 
 export function isFrameStops(x: unknown): x is FrameStops {
   return (FRAME_STOPS as readonly unknown[]).includes(x);
+}
+
+/**
+ * The fourth Kadar: the whole-city window, no frame around the place. Until 5 Oct 2026 the
+ * window was what a screen without a chosen place showed whatever its Kadar said [O-65], and
+ * Kadar moved the "U blizini" pill and never the map (owner: "kiosk zoom for Kadar doesn't
+ * work at all"). Now a Kadar of 2, 4 or 6 frames the wall around its place, the chosen one or
+ * the read-path default, and the whole city is this step of the same cycle.
+ */
+export const FRAME_CITY = 'city' as const;
+/** What a screen's record stores and Postavke cycles: a Kadar in stops, or the whole city. */
+export type Frame = FrameStops | typeof FRAME_CITY;
+/** Postavke's order: tighter to wider, then the whole city. */
+export const FRAME_CYCLE = [2, 4, 6, FRAME_CITY] as const;
+export const DEFAULT_FRAME: Frame = DEFAULT_FRAME_STOPS;
+
+export function isFrame(x: unknown): x is Frame {
+  return x === FRAME_CITY || isFrameStops(x);
+}
+
+/** The stops a Kadar counts for the list and the pill: its own number; the default's for the whole city or no Kadar. */
+export function frameStopsOf(frame: Frame | undefined): FrameStops {
+  return frame === undefined || frame === FRAME_CITY ? DEFAULT_FRAME_STOPS : frame;
 }
 
 /**

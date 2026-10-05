@@ -677,7 +677,8 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     // press held anywhere on the map met an unseen stop and opened no Postavke, and a tap opened its board.
     it('on the whole-city window only the own ring answers: a press beside an unseen stop opens Postavke, a tap there no board', async () => {
       const place = { kind: 'tram' as const, name: STOP.name, lon: STOP.lon, lat: STOP.lat, stopId: STOP.id };
-      const k = mount({ screen: { ...SCREEN, stop: null, place, placeSet: false } as ScreenMetadata });
+      // Kadar "cijeli grad" (5 Oct 2026): without it a screen with no chosen place frames the default place at Kadar 4.
+      const k = mount({ screen: { ...SCREEN, stop: null, place, placeSet: false, frame: 'city' } as ScreenMetadata });
       await flush();
       const map = k.q('[data-testid=kiosk-map]')!;
       expect((k.map.factory.mock.calls[0]![0] as { prozor?: { stopMarks?: boolean } }).prozor?.stopMarks).toBe(false);

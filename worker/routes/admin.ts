@@ -14,6 +14,7 @@ import { verifyAccess } from '../pairing/access';
 import { SCREEN_AREAS, isVenueType, type AreaSlug } from '../pairing/areas';
 import type { CreateBeaconRequest } from '../protocol';
 import { readCappedBody } from './pairing';
+import { parseFrame } from '../pairing/place';
 import { provisionScreen } from '../pairing/provision';
 
 /** The kiosk URL is minted for production; e2e rebases the fragment onto its own origin. */
@@ -62,8 +63,11 @@ async function createBeacon(request: Request, env: Env): Promise<Response> {
   if (operatorLabel.length === 0 || operatorLabel.length > OPERATOR_LABEL_MAX) return badRequest('operatorLabel');
   const stopId = body.stopId === undefined || body.stopId === '' ? null : String(body.stopId);
   if (stopId !== null && !STOP_ID_SHAPE.test(stopId)) return badRequest('stopId');
+  // The Kadar, when the caller names one (the e2e's whole-city wall asks for 'city'); omitted, the default.
+  const frame = body.frame === undefined ? undefined : parseFrame(body.frame);
+  if (frame === null) return badRequest('frame');
 
-  const response = await provisionScreen(env, { venueType, area, operatorLabel, stopId, kind: 'venue' }, PROVISION_ORIGIN);
+  const response = await provisionScreen(env, { venueType, area, operatorLabel, stopId, kind: 'venue', ...(frame === undefined ? {} : { frame }) }, PROVISION_ORIGIN);
   logInfo('beacon-created', { beaconId: response.beaconId, venueType, area });
   return json(response, 201, { 'cache-control': 'no-store' });
 }

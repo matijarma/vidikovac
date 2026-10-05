@@ -10,8 +10,8 @@
 // error ends in a sentence and a button a person presses, and typed text that
 // matches nothing is said to be so rather than quietly becoming the whole city.
 import type { CreateBeaconResponse, ScreenStop } from '../../../worker/protocol';
-import { DEFAULT_FRAME_STOPS, type FrameStops } from '../../../shared/city/frame';
-import { PLACE_ADDRESS_MAX, PLACE_NAME_MAX, type ScreenPlace, type ScreenPlaceInput } from '../../../shared/city/place';
+import { DEFAULT_FRAME, DEFAULT_FRAME_STOPS, type Frame } from '../../../shared/city/frame';
+import { DEFAULT_PLACE_NAME, PLACE_ADDRESS_MAX, PLACE_NAME_MAX, type ScreenPlace, type ScreenPlaceInput } from '../../../shared/city/place';
 import { loadStops as loadStopsImpl, ScreenError, type CreateScreenInput } from '../core/screens';
 import { escapeHtml } from '../ui/dom/escape';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
@@ -22,7 +22,7 @@ import { routeType } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 
 /** What Pokreni posts: `{}` for an empty field, `{ place, frame }` for a picked place. */
-export type StartScreenInput = CreateScreenInput & { place?: ScreenPlaceInput; frame?: FrameStops };
+export type StartScreenInput = CreateScreenInput & { place?: ScreenPlaceInput; frame?: Frame };
 
 export interface StartDeps {
   strings: KioskStrings;
@@ -72,10 +72,12 @@ function setupErrorText(s: KioskStrings, c: { kind: SetupErrorKind; field: strin
         : c.kind === 'failed' ? s.setup.errorFailed : s.setup.errorNetwork;
 }
 
-/** The line under the field: what the screen will show once Pokreni is pressed. */
+/** The line under the field: what the screen will show once Pokreni is pressed. An empty field is Trg bana
+ *  J. Jelačića at the default Kadar (5 Oct 2026: the frame follows the Kadar for the default place too, so the
+ *  line says that and no longer "cijeli grad"). */
 export function previewText(s: KioskStrings, locale: string, place: ScreenPlace | null, unresolved: string): string {
   if (place) return fill(plural(locale, s.setup.preview, DEFAULT_FRAME_STOPS), { place: vetExternal('name', place.name, 'row') ?? '' });
-  return unresolved ? '' : s.setup.previewCity;
+  return unresolved ? '' : fill(plural(locale, s.setup.preview, DEFAULT_FRAME_STOPS), { place: DEFAULT_PLACE_NAME });
 }
 
 /** The place as the Worker accepts it: a typed address past the protocol's cap is dropped, a name past its cap cut. */
@@ -191,7 +193,7 @@ export function mountStart(host: HTMLElement, deps: StartDeps): StartHandle {
         fieldError = true;
         return;
       }
-      const response = await deps.createScreen(place ? { place: postable(place), frame: DEFAULT_FRAME_STOPS } : {});
+      const response = await deps.createScreen(place ? { place: postable(place), frame: DEFAULT_FRAME } : {});
       if (destroyed) return;
       deps.onCreated(response);
     } catch (error) {

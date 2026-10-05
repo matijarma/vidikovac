@@ -152,13 +152,16 @@ describe('Postavke: one click-toggle per row', () => {
     expect(p.q('[data-testid=settings-place-city]').hidden).toBe(true);
   });
 
-  it('cycles Kadar 4 → 6 → 2 → 4 on the button itself, the text changing at once', () => {
+  it('cycles Kadar 4 → 6 → cijeli grad → 2 → 4 on the button itself, the text changing at once', () => {
     const p = panel();
     p.handle.open();
     const frame = p.q('[data-testid=toggle-frame]');
     p.click('toggle-frame');
     expect(frame.dataset.value).toBe('6');
     expect(text(frame)).toBe('Kadar: 6 stajališta odavde');
+    p.click('toggle-frame');
+    expect(frame.dataset.value).toBe('city');
+    expect(text(frame)).toBe('Kadar: cijeli grad');
     p.click('toggle-frame');
     expect(text(frame)).toBe('Kadar: 2 stajališta odavde');
     p.click('toggle-frame');
@@ -220,21 +223,22 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.handle.open();
     p.click('toggle-frame'); // 6
     p.time.advance(300);
-    p.click('toggle-frame'); // 2
+    p.click('toggle-frame'); // the whole city
     p.time.advance(300);
     p.click('toggle-place');
-    p.click('settings-place-city'); // the whole city, frame 2
+    p.click('settings-place-city'); // no place of its own either
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Cijeli grad');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent).toEqual([{ place: null, frame: 2 }]);
+    expect(p.sent).toEqual([{ place: null, frame: 'city' }]);
     p.answer();
     p.time.advance(SCREEN_SET_MIN_MS + SAVE_TIMEOUT_MS);
     expect(p.sent).toHaveLength(1);
   });
 
-  it('three clicks that come back to where the DO already is send nothing', () => {
+  it('four clicks that come back to where the DO already is send nothing', () => {
     const p = panel();
     p.handle.open();
+    p.click('toggle-frame');
     p.click('toggle-frame');
     p.click('toggle-frame');
     p.click('toggle-frame');
@@ -250,14 +254,14 @@ describe('Postavke: the send queue and the DO’s window', () => {
     expect(p.sent).toHaveLength(1);
     p.time.advance(200);
     p.answer();
-    p.click('toggle-frame'); // 2
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 2 stajališta odavde');
+    p.click('toggle-frame'); // the whole city
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: cijeli grad');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     expect(p.sent).toHaveLength(1);
     p.time.advance(SCREEN_SET_MIN_MS - SETTINGS_SEND_DELAY_MS - 1);
     expect(p.sent).toHaveLength(1);
     p.time.advance(1);
-    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '236_2' }, frame: 6 }, { place: { kind: 'stop', stopId: '236_2' }, frame: 2 }]);
+    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '236_2' }, frame: 6 }, { place: { kind: 'stop', stopId: '236_2' }, frame: 'city' }]);
   });
 
   it('keeps one frame in flight: a change made before the answer goes after it, the latest state winning', () => {
@@ -265,6 +269,7 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.handle.open();
     p.click('toggle-frame'); // 6
     p.time.advance(SETTINGS_SEND_DELAY_MS);
+    p.click('toggle-frame'); // the whole city
     p.click('toggle-frame'); // 2
     p.click('toggle-frame'); // 4
     p.click('toggle-frame'); // 6 again: the frame in flight already carries it
@@ -273,9 +278,9 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.answer();
     p.time.advance(SCREEN_SET_MIN_MS);
     expect(p.sent).toHaveLength(1);
-    p.click('toggle-frame'); // 2
+    p.click('toggle-frame'); // the whole city
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent.map((f) => f.frame)).toEqual([6, 2]);
+    expect(p.sent.map((f) => f.frame)).toEqual([6, 'city']);
   });
 
   it('a refusal repaints the toggles from the DO’s truth with one sentence, and nothing is re-sent', () => {
@@ -950,8 +955,12 @@ describe('what the wall reads from the screen record', () => {
     expect(wallSpanM({ handheld: false, wall: { ...wall, frame: 2 }, stops, isTram })).toBe(2 * FRAME_RADIUS_M[2]);
     expect(wallSpanM({ handheld: false, wall, stops: null, isTram })).toBe(2 * FRAME_RADIUS_M[4]);
     expect(wallSpanM({ handheld: true, wall, stops, isTram })).toBe(HANDHELD_SPAN_M);
-    expect(wallSpanM({ handheld: false, wall: { ...wall, placeSet: false }, stops, isTram })).toBe(FIELD_SPAN_M);
+    // The read-path default place frames too (5 Oct 2026): the span is its circle, measured, or handed in by the caller.
+    expect(wallSpanM({ handheld: false, wall: { ...wall, placeSet: false }, stops, isTram })).toBe(measured);
+    expect(wallSpanM({ handheld: false, wall: { place: null, placeSet: false, frame: 4 }, place, stops, isTram })).toBe(measured);
+    // Nothing to frame, or Kadar "cijeli grad": the whole-city field.
     expect(wallSpanM({ handheld: false, wall: { place: null, placeSet: false, frame: 4 }, stops, isTram })).toBe(FIELD_SPAN_M);
+    expect(wallSpanM({ handheld: false, wall: { ...wall, frame: 'city' }, stops, isTram })).toBe(FIELD_SPAN_M);
   });
   it('names a place in the Mjesto row by what the operator typed', () => {
     const s = kioskStrings('hr');

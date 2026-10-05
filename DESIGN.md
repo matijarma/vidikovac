@@ -95,8 +95,8 @@ or Space while the wall has focus.
 
 The map has a legend of three plain items (tram route, BAJS bike count,
 culture tonight), never a caveat, and no legend stands where no map is drawn
-(lagano). A screen with a place (a stop or an address) opens on a frame of N
-stops around it (Kadar: 2, 4 or 6 "stajališta odavde", default 4), its radius
+(lagano). A screen opens on a frame of N stops around its place, chosen or the
+default (Kadar: 2, 4 or 6 "stajališta odavde", default 4), its radius
 measured per place and the same number the "U blizini" circle and its pill
 use. The frame is a neighbourhood: buses at every hour, every BAJS station a
 disc carrying its count (a station with no bike a small teal dot without a
@@ -230,7 +230,7 @@ highlight and the separate weather, exceptions and events cards) are history;
 
 The normal `/kiosk/` surface is a live city window, not a locked dashboard and
 not an ambient decoration. Pairing acknowledges access without replacing it.
-The map takes the whole left column. A screen set to the whole city opens on
+The map takes the whole left column. A screen at Kadar "cijeli grad" opens on
 the whole city, with the live transit picture on it: the tram network as a
 thin neutral ground, tram plates, the place's own ring and name and no other
 stop mark, the bike-share stations that have a bike as small dots without a
@@ -244,8 +244,9 @@ own arrangements.
 
 The map is a meaningful geographic view, not a background beneath a route
 board. The screen's place and frame (Kadar: 2, 4 or 6 stops around it,
-measured per place), and public selections, determine framing; without a
-chosen place the whole-city window stays. Do not force every vehicle number to
+measured per place, or the whole city), and public selections, determine
+framing; the Kadar frames the default place too, and only Kadar "cijeli grad"
+keeps the whole-city window (5 October 2026). Do not force every vehicle number to
 overlap at terminals: retain dots and collision-aware labels. Stop rings keep
 a hit tolerance sized for a finger on a wall. A window onto the whole city is
 four times the ground the wall's field was sized for, so below the thinning
@@ -257,7 +258,9 @@ place. Route count is not a measure of importance and is not
 used for this. From the thinning zoom up every name is back, exactly as
 derived. A framed screen names by being framed, not by zoom: whatever its
 Kadar, it names the place and the tram interchanges inside its radius and no
-street, so Kadar 2, 4 or 6 never changes the naming grammar; the
+street, so Kadar 2, 4 or 6 never changes the naming grammar; the own place is
+the one mark over the vehicles, a paper disc in a blue ring in both faces, and
+no ring follows the header sentence; the
 thinning rule belongs to the whole-city window alone. Preserve the map
 instance across polling and composition changes.
 

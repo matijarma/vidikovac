@@ -42,7 +42,7 @@ import type { CityState } from '../../../shared/city/types';
 import { discover,dynamicPlaces,type CityGroup } from '../city/discovery';
 import { matchStreet } from '../../../shared/city/geo';
 import { CURATED_WALL, curatedCityPoints, programmeItems, type CuratedOptions } from '../city/curated';
-import { DEFAULT_FRAME_STOPS, FRAME_RADIUS_M, frameSpanM, type FrameStops } from '../../../shared/city/frame';
+import { FRAME_CITY, FRAME_RADIUS_M, frameSpanM, frameStopsOf, type Frame } from '../../../shared/city/frame';
 import type { ScreenPlace } from '../../../shared/city/place';
 import type { MapSelection } from '../map/city-map';
 import { publicItemKey, type FeedSnapshots, type PublicSelection, type ScreenStop } from '../core/contracts';
@@ -463,20 +463,6 @@ export function assemblyPoints(geo: ModuleSnapshot | undefined, stop: ScreenStop
   return rows.slice(0, ASSEMBLY_CAP).map((r) => r.point);
 }
 
-/** Within this distance of the kiosk's own place the sentence's or a reveal's highlight ring is not drawn
- *  (owner, 5 Oct 2026): the departures sentence names the wall's own stop, and a 72 px hollow ring around the
- *  own-place marker, on and off with the sentence, read as a second, unexplained mark on "here". The ring
- *  stays for every other subject: a closure, a venue, the pharmacy down the street. */
-export const OWN_PLACE_HIGHLIGHT_M = 60;
-
-/** `highlight` unless it is a point on the kiosk's own place (OWN_PLACE_HIGHLIGHT_M), then null. */
-export function highlightAwayFromPlace<T extends { geometry: { type: string; coordinates: unknown } }>(highlight: T | null, place: { lon: number; lat: number } | null): T | null {
-  if (!highlight || !place || highlight.geometry.type !== 'Point') return highlight;
-  const [lon, lat] = highlight.geometry.coordinates as [number, number];
-  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return highlight;
-  return stopDistanceM({ lon, lat }, place) <= OWN_PLACE_HIGHLIGHT_M ? null : highlight;
-}
-
 /** Within this distance of the screen's stop the pharmacy's address label is
  *  dropped (R-KP18): at Trg bana Jelačića the address "Trg bana Josipa
  *  Jelačića 3" sat on the stop's own name, the biggest label on the picture.
@@ -652,33 +638,37 @@ export interface FieldInput {
   place?: Pick<ScreenPlace, 'lon' | 'lat'> | null;
   /** ScreenMetadata.placeSet. True: somebody chose the place, and a wall frames it. False: the
    *  place is the read-path default (an empty field or "Cijeli grad" reads back as Trg bana
-   *  Jelačića): the list uses it, the map keeps the whole-city window [O-65]. Absent (a caller
+   *  Jelačića): the list uses it and, since 5 Oct 2026, the map frames it too [O-65 superseded]. Absent (a caller
    *  from before place-v2): a stop keeps its centred street-level camera, as it always had. */
   placeSet?: boolean;
   /** The frame's measured radius, metres (shared/city/frame.ts frameRadiusM, computed once by the
    *  caller for the camera, the "U blizini" circle and the pill); absent, FRAME_RADIUS_M[frame]. */
   radiusM?: number;
-  /** Kadar 2 / 4 / 6; absent, DEFAULT_FRAME_STOPS. Read only for the fallback radius. */
-  frame?: FrameStops;
+  /** Kadar 2 / 4 / 6, or `city` for the whole-city window; absent, the default Kadar. */
+  frame?: Frame;
   /** A phone's band keeps its glance at the stop (spanM) instead of the frame. */
   handheld?: boolean;
 }
 
-/** Where the field's camera stands: the place, else the stop; null for the read-path default
- *  place, whose map keeps the whole-city window (or its configured quarter). */
+/** Where a chosen place stands: the place, else the stop; null for the read-path default place
+ *  (placeSet false), which the whole-city rules and a configured quarter read as "no place of its own". */
 export function fieldAnchor(input: Pick<FieldInput, 'stop' | 'place' | 'placeSet'>): { lon: number; lat: number } | null {
   return input.placeSet === false ? null : input.place ?? input.stop ?? null;
 }
 
-/** The point a wall frames: a place somebody chose (placeSet true), else null. Framed is
- *  placeSet, never Boolean(place): the read-path default place is always present. */
-export function framedPlace(input: Pick<FieldInput, 'stop' | 'place' | 'placeSet'>): { lon: number; lat: number } | null {
-  return input.placeSet === true ? fieldAnchor(input) : null;
+/** The point a wall frames at its Kadar: the place, chosen or the read-path default, else the stop.
+ *  Null for Kadar `city` (the whole-city window), for a quarter screen that chose no place (its
+ *  outline is its frame), and when there is nothing to frame. Since 5 Oct 2026 the frame no longer
+ *  waits for placeSet: a wall at Kadar 4 frames Trg bana J. Jelačića even when nobody chose it. */
+export function framedPlace(input: Pick<FieldInput, 'stop' | 'place' | 'placeSet' | 'frame'> & { district?: string | null }): { lon: number; lat: number } | null {
+  if (input.frame === FRAME_CITY) return null;
+  if (input.placeSet === false && districtBySlug(input.district)) return null;
+  return input.place ?? input.stop ?? null;
 }
 
 /** The frame's radius for this input: the measured one, or the Kadar's fallback. */
 export function frameRadiusOf(input: Pick<FieldInput, 'radiusM' | 'frame'>): number {
-  return input.radiusM ?? FRAME_RADIUS_M[input.frame ?? DEFAULT_FRAME_STOPS];
+  return input.radiusM ?? FRAME_RADIUS_M[frameStopsOf(input.frame)];
 }
 
 /** The whole-city window a screen opens on when nobody has configured it:
@@ -716,23 +706,24 @@ export function outlineView(outline: MapOutline, widthPx: number, heightPx: numb
 
 /** The invitation's window (R-KP1, R-KP2, R-KP11): the kiosk's points lit,
  *  the quarter drawn, no selection, no follow, no padding -- on the frame the
- *  screen's own configuration asks for. A chosen place (placeSet) on a wall is
- *  framed: N stops around it, the square of side 2R on the field's shorter
- *  side (map/frame.ts frameView, R measured per place by shared/city/frame.ts).
- *  A phone's band, and a stop from a caller before place-v2, keep the centred
- *  camera at the derived zoom. A configured gradska cetvrt sits on its seat
- *  until its outline lands (requestKioskMap re-frames on the real rings); a
- *  screen with neither, or with the read-path default place, opens on the
+ *  screen's own configuration asks for. A wall at Kadar 2 / 4 / 6 is framed on
+ *  its place, chosen or the read-path default: N stops around it, the square
+ *  of side 2R on the field's shorter side (map/frame.ts frameView, R measured
+ *  per place by shared/city/frame.ts). A phone's band keeps the centred camera
+ *  at the derived zoom. A configured gradska cetvrt that chose no place sits
+ *  on its seat until its outline lands (requestKioskMap re-frames on the real
+ *  rings); Kadar `city`, and a screen with nothing to frame, open on the
  *  whole city. */
 export function fieldView(input: FieldInput): KioskView {
   const view: KioskView = { zoom: FIELD_MIN_ZOOM, emphasis: KIOSK_EMPHASIS, outline: true };
   const district = districtBySlug(input.district);
+  const framed = input.handheld ? null : framedPlace(input);
   const place = fieldAnchor(input);
-  if (place && framedPlace(input) && !input.handheld) {
-    const frame = frameView(place, frameRadiusOf(input), input.widthPx, input.heightPx, CITY_WINDOW_PADDING_PX, WALL_FIT_MIN_ZOOM, FIELD_MAX_ZOOM);
+  if (framed) {
+    const frame = frameView(framed, frameRadiusOf(input), input.widthPx, input.heightPx, CITY_WINDOW_PADDING_PX, WALL_FIT_MIN_ZOOM, FIELD_MAX_ZOOM);
     view.zoom = frame.zoom;
     view.center = frame.center;
-  } else if (place) {
+  } else if (place && input.handheld) {
     view.zoom = fieldZoom(input.widthPx, place.lat, input.spanM);
     view.center = [place.lon, place.lat];
   } else if (district) {
@@ -910,14 +901,13 @@ export interface KioskMapInput {
   stops?: readonly ScreenStop[];
   /** The place the screen is about (shared/city/place.ts): what the invitation frames. Absent, the stop is the place. */
   place?: ScreenPlace | null;
-  /** ScreenMetadata.placeSet: true frames the wall on the place (kiosk.ts passes
-   *  `credentials.screen?.placeSet ?? Boolean(stop)`, a v1 screen's stop being one somebody
-   *  chose); false is the read-path default place (Trg bana Jelačića for an empty field), whose
-   *  list and departures use it while the map keeps the whole-city window [O-65]. Framed is
-   *  this, never Boolean(place). Absent: a stop keeps today's centred camera. */
+  /** ScreenMetadata.placeSet: true when the operator chose the place; false is the read-path
+   *  default place (Trg bana Jelačića for an empty field). Both are framed at the Kadar since
+   *  5 Oct 2026; placeSet still decides the whole-city rules on a quarter screen (framedPlace)
+   *  and what the header calls its own. */
   placeSet?: boolean;
-  /** Kadar 2 / 4 / 6 (credentials.screen?.frame ?? DEFAULT_FRAME_STOPS). */
-  frame?: FrameStops;
+  /** The screen's Kadar: 2 / 4 / 6 stops, or `city` for the whole-city window (credentials.screen?.frame). */
+  frame?: Frame;
   /** The measured frame radius, metres: shared/city/frame.ts frameRadiusM for the place, computed
    *  once by the caller so the camera, the "U blizini" circle and the pill read one number. Absent,
    *  FRAME_RADIUS_M[frame]. */
@@ -967,14 +957,15 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   /** The wall framed on its place: N stops around it (Kadar 2 / 4 / 6), a
    *  neighbourhood with its buses, its counted BAJS discs, tonight's venues
    *  named, the ranked stop names with the interchanges and the street names.
-   *  Keyed on the chosen place (placeSet), never on a place being present: the
-   *  read-path default keeps the whole-city window. A phone's band, a person
-   *  exploring and a paired presentation are not the frame. */
+   *  Keyed on the Kadar (framedPlace): the read-path default place frames too;
+   *  Kadar `city` is the window. A phone's band, a person exploring and a
+   *  paired presentation are not the frame. */
   const framed = framedPlace(input) !== null && input.handheld !== true && cityWindow;
-  /** The wall's whole-city window (fieldView's own branch: no place of its own,
-   *  no quarter): owner, 24 Sep, the place's own ring and name (decision 19)
-   *  and the pills, and no other stop's bead or name (wholeCityStop). */
-  const wholeCity = cityWindow && input.handheld !== true && fieldAnchor(input) === null && !districtBySlug(input.district);
+  /** The wall's whole-city window (fieldView's own branch: Kadar `city`, or
+   *  nothing to frame, and no quarter): owner, 24 Sep, the place's own ring and
+   *  name (decision 19) and the pills, and no other stop's bead or name
+   *  (wholeCityStop). */
+  const wholeCity = cityWindow && input.handheld !== true && framedPlace(input) === null && !districtBySlug(input.district);
   const radiusM = frameRadiusOf(input);
   /** The frame is a neighbourhood, not the whole city: the details that only
    *  make sense close up (the pharmacy's street address) are worth their room. */
@@ -1042,7 +1033,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const outline = selectedPlace?.polygons?{id:selectedPlace.id,polygons:selectedPlace.polygons}:kvartOutline(district);
   // A configured quarter frames its own rings once they land; until then
   // fieldView's seat camera holds the frame.
-  if (input.phase !== 'paired' && !fieldAnchor(input) && district && outline?.id === district) {
+  if (input.phase !== 'paired' && !framedPlace(input) && district && outline?.id === district) {
     const fit = outlineView(outline, input.widthPx, input.heightPx);
     view.center = fit.center;
     view.zoom = fit.zoom;
@@ -1051,7 +1042,10 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const buses = framed || busesVisible(input.cameraZoom ?? view.zoom);
   const extras: KioskMapExtras = {
     renderer: input.renderer ?? 'map',
-    stop: wholeNetwork && input.renderer === 'schema' ? null : input.stop ?? (wholeCity ? wholeCityStop(input.place, input.stops) : null),
+    // The own-place marker and name: the screen's stop, else the place's own stop from the table or the place itself
+    // (wholeCityStop), on the frame as on the whole-city window (5 Oct 2026: a framed wall with no stop record, the DEV
+    // screen among them, drew no "here").
+    stop: wholeNetwork && input.renderer === 'schema' ? null : input.stop ?? (wholeCity || framed ? wholeCityStop(input.place, input.stops) : null),
     // The whole network has no stop to crop round, but the wall still names
     // its own place (Trg bana J. Jelačića by default [O-65], or the chosen
     // one): the schema's collision pass places that name first, at the same

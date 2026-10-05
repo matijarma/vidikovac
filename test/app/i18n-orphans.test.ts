@@ -168,6 +168,9 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // The same pass, the map lane +1 kiosk.legend.pharmacy (the wall legend's night ring, kiosk/mapview.ts): 1,145 hr,
     // 1,117 en; the weather lane +6 weather.hourChance, hourWet, radar, radarAlt, radarCaption, radarRainNear (the
     // rebuilt Vrijeme page, layers/zrak-i-nebo.ts): 1,151 hr, 1,123 en.
+    // The fix pass of the same evening +1 kiosk.settings.frameCity (Kadar "cijeli grad", kiosk/settings.ts) -1
+    // kiosk.setup.previewCity (an empty field now previews the default place at the default Kadar, kiosk/start.ts):
+    // 1,151 hr, 1,123 en.
     // A new leaf changes this number on purpose, with its reader.
     expect(leaves.length).toBe(1151);
     expect(leafKeys(en).length).toBe(1123);

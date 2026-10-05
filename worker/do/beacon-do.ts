@@ -8,12 +8,12 @@ import { codeRotateSeconds, sessionMinutes, type NetworkCheck } from '../config'
 import type { Env } from '../env';
 import { logError } from '../log';
 import { metricScope, recordMetric, zagrebDayHour } from '../metrics';
-import { DEFAULT_FRAME_STOPS, type FrameStops } from '../../shared/city/frame';
+import { DEFAULT_FRAME, type Frame } from '../../shared/city/frame';
 import { placeFromStop, type ScreenPlace } from '../../shared/city/place';
 import { districtOf } from '../feed/geo/districts';
 import { areaName, CITY_AREA, isAreaSlug, isVenueType, type AreaSlug } from '../pairing/areas';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
-import { canonicalPlace, enrichPlace, isTramRoute, parseFrame, parsePlaceInput, resolvePlace, storedPlaceOf } from '../pairing/place';
+import { canonicalPlace, enrichPlace, isTramRoute, parseFrame, parsePlaceInput, parseStoredFrame, resolvePlace, storedPlaceOf } from '../pairing/place';
 import { screenStop, withDistrict } from '../pairing/stops';
 import { base64UrlDecode, base64UrlEncode, constantTimeEqual, hmacSha256, randomBytes, randomId, signDataToken } from '../pairing/tokens';
 import { parsePresentationCommand, type PresentationCommand, type PresentationResult, type PresentationState, type PresentationTarget } from '../presentation';
@@ -96,8 +96,8 @@ export interface BeaconCreateInput {
    * 'place' meta and screenMetadata() derives the place from the stop on read.
    */
   place?: ScreenPlace | null;
-  /** Kadar 2 / 4 / 6; omitted, or a legacy 8 stored before 5 Oct 2026, reads back as DEFAULT_FRAME_STOPS. */
-  frame?: FrameStops;
+  /** Kadar 2 / 4 / 6 or the whole city; omitted, or a legacy 8 stored before 5 Oct 2026, reads back as DEFAULT_FRAME. */
+  frame?: Frame;
   /** A DEV screen (worker/routes/dev.ts): sessions without a code, no caps, no counts. */
   dev?: true;
 }
@@ -118,7 +118,7 @@ type ScreenSetFrame =
   | { t: 'screen-set'; version: 2; place: unknown; frame: unknown };
 type ClientFrame = Exclude<BeaconClientMessage, { t: 'screen-set' }> | ScreenSetFrame;
 /** What a valid 'screen-set' writes: the area, the stop, the place and (version 2 only) the frame. */
-type ScreenTarget = { area: AreaSlug; stop: ScreenStop | null; place: ScreenPlace | null; frame?: FrameStops };
+type ScreenTarget = { area: AreaSlug; stop: ScreenStop | null; place: ScreenPlace | null; frame?: Frame };
 
 type MetaRow = { key: string; value: string };
 type CodeRow = { code: string; slot_start: number; slot_end: number; used: number };
@@ -231,7 +231,7 @@ export class BeaconDO extends DurableObject<Env> {
    * room's 'joined' frame. `place`, `placeSet` and `frame` are always present, enriched on read
    * (worker/pairing/place.ts enrichPlace): a record from before place-v2 derives its place from
    * the stored stop; a stored null (an empty field, "Cijeli grad") reads as Trg bana Jelačića
-   * with placeSet false; a missing frame, or a legacy 8, reads as DEFAULT_FRAME_STOPS. Nothing is migrated.
+   * with placeSet false; a missing frame, or a legacy 8, reads as DEFAULT_FRAME. Nothing is migrated.
    */
   screenMetadata(): ScreenMetadata {
     const expiry = Number(this.meta('screenExpiresAt') ?? '0');
@@ -247,7 +247,7 @@ export class BeaconDO extends DurableObject<Env> {
       ...(area ? { area } : {}),
       place,
       placeSet,
-      frame: parseFrame(Number(this.meta('frame'))) ?? DEFAULT_FRAME_STOPS,
+      frame: parseStoredFrame(this.meta('frame')) ?? DEFAULT_FRAME,
       ...(this.isDev() ? { dev: true as const } : {}),
     };
   }

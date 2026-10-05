@@ -15,12 +15,14 @@ upute o pretraživanju dodirom. Ukratko:
   zaslonu ostaje barem jedan ritam, osim kad činjenica te rečenice prestane
   vrijediti.
 - Karta prikazuje mjesto i 4 stajališta uokolo (postavka Kadar: 2, 4 ili 6
-  stajališta odavde); polumjer kadra mjeri se za svako mjesto posebno, unutar
-  čvrstih granica svakog koraka (na Trgu bana Jelačića 0,7 / 1 / 1,3 km). Zaslon
-  postavljen na cijeli grad drži prozor cijeloga grada. Karta ističe ono o
-  čemu govori rečenica u zaglavlju, bez pomicanja kamere; obuhvat baštine nije
-  ulaz. Nema automatskih obilazaka ni kontrola istraživanja na zaslonu;
-  osobno istraživanje dostupno je na telefonu.
+  stajališta odavde, ili cijeli grad); polumjer kadra mjeri se za svako mjesto
+  posebno, unutar čvrstih granica svakog koraka (na Trgu bana Jelačića 0,7 / 1 /
+  1,3 km). Kadar kadrira kartu i kad mjesto nitko nije odabrao (tada oko Trga
+  bana Jelačića); prozor cijeloga grada je četvrti korak Kadra. Vlastito mjesto
+  zaslona jedina je oznaka na karti povrh vozila: bijeli krug s plavim rubom, u
+  obje teme. Karta ne ističe ono o čemu govori rečenica u zaglavlju: rečenica to
+  kaže riječima. Obuhvat baštine nije ulaz. Nema automatskih obilazaka ni
+  kontrola istraživanja na zaslonu; osobno istraživanje dostupno je na telefonu.
 - Uz kartu stoji popis „U blizini · 1 km · ~8 min” (naslov ispisuje
   izmjereni polumjer kruga i vrijeme hoda; primjer vrijedi za krug od 1 km):
   prvi je redak polazaka, s najviše tri polaska jedan do drugoga, svaki s
@@ -115,7 +117,8 @@ zaokruženi i sažeti kao u skupu za Grad.
    stajalište unutar 400 m, inače najbliže autobusno stajalište unutar
    300 m, inače sama adresa. Redak ispod polja kaže što će zaslon prikazati:
    za odabrano mjesto „Na zaslonu: Kvaternikov trg i 4 stajališta uokolo”,
-   a za prazno polje „Na zaslonu: cijeli grad.” Upisani tekst koji nije
+   a za prazno polje „Na zaslonu: Trg bana J. Jelačića i 4 stajališta uokolo”
+   (zadano mjesto u zadanom kadru). Upisani tekst koji nije
    odabran među prijedlozima vrijedi samo kad je točno ime stajališta ili
    jedne ulice; inače se ispod polja pojavljuje rečenica da takvog
    stajališta ni ulice nema, a zaslon se ne stvara. Zatim pritisnuti
@@ -142,7 +145,8 @@ zaokruženi i sažeti kao u skupu za Grad.
 
    Retci su *Mjesto* (**Promijeni** otvara isto polje
    „Adresa ili stajalište” i gumb **Cijeli grad** za povratak na prozor
-   cijeloga grada), *Kadar* („Kadar: 4 stajališta odavde”, redom 2, 4 i 6),
+   cijeloga grada), *Kadar* („Kadar: 4 stajališta odavde”, redom 2, 4, 6 i
+   „Kadar: cijeli grad”),
    *Prikaz* („Prikaz: karta” ili „Prikaz: shema”), *Tema*, *Ritam*
    („Ritam: 20 s”, redom 20, 30 i 60 s) i *Zaslon* (do kada vrijedi i
    „Zaboravi zaslon” s potvrdom). Kadar, Prikaz, Tema i Ritam imaju po jedan

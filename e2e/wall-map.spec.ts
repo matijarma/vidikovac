@@ -206,10 +206,12 @@ test('the whole-city window: the BAJS stations with a bike are far dots, deliber
   await installCityFixture(page, Date.now(), WALL_BIKES);
   await installWallFixture(page);
   await page.route('**/maps/zagreb-v1/**', (route) => route.fulfill({ status: 404, body: '' }));
-  const { kioskUrl } = await provisionKiosk(request, APP_URL);
+  // Kadar "cijeli grad" (5 Oct 2026): without it a screen with no chosen place frames the default place at Kadar 4.
+  const { kioskUrl } = await provisionKiosk(request, APP_URL, { frame: 'city' });
   await page.goto(kioskUrl);
   const map = page.getByTestId('kiosk-map');
   await expect(map).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
+  await expect(page.getByTestId('kiosk-map-host')).toHaveAttribute('data-frame', 'city');
   const withBikes = WALL_BIKES.filter((b) => (b.bikes ?? 0) > 0 && b.renting && b.installed).length;
   await expect.poll(() => map.getAttribute('data-bajs'), { timeout: 30_000, message: 'data-bajs' }).toBe(`counted:0;zero:0;blank:0;far:${withBikes}`);
   await expect(map).toHaveAttribute('data-markers', String(withBikes));

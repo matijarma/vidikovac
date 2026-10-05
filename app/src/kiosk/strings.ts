@@ -319,8 +319,6 @@ export interface KioskStrings {
     place: string;
     /** "Na zaslonu: {place} i {count} stajališta uokolo": what a screen with a place shows, {count} its Kadar. */
     preview: PluralForms;
-    /** "Na zaslonu: cijeli grad.": the line under an empty field. */
-    previewCity: string;
     /** Typed text that is neither a stop nor a street, said instead of creating anything. */
     noMatch: string;
     /** A stretch of a long street, named by the stop on it: "{street} · stajalište {stop}". */
@@ -357,6 +355,7 @@ export interface KioskStrings {
     /** Kadar: the row's label, and the toggle's text "Kadar: {count} stajališta odavde" (2, 4 or 6; "stajališta" is right for all three). */
     frame: string;
     frameValue: string;
+    frameCity: string;
     /** Prikaz: the row's label and the toggle's two texts, the map or the schematic network. */
     view: string;
     viewMap: string;
@@ -497,7 +496,7 @@ function build(code: SupportedLocale): KioskStrings {
         'title', 'routesAt', 'create', 'creating',
         'errorAccess', 'errorQuota', 'errorNetwork', 'errorInvalid', 'errorFailed',
         'retry', 'retryIn',
-        'place', 'previewCity', 'noMatch', 'streetNear', 'loadingPlaces', 'errorPlaces', 'ambiguous',
+        'place', 'noMatch', 'streetNear', 'loadingPlaces', 'errorPlaces', 'ambiguous',
       ]),
       preview: forms('setup', 'preview'),
     },
@@ -505,7 +504,7 @@ function build(code: SupportedLocale): KioskStrings {
       'open', 'title', 'hint', 'close', 'saveOffline', 'saveRefused', 'saveBusy',
       'areaWhole',
       'theme', 'screen', 'expiry', 'expiryNone', 'forget', 'forgetAsk', 'forgetYes', 'forgetNo',
-      'place', 'placeChange', 'frame', 'frameValue', 'view', 'viewMap', 'viewSchema', 'rhythm', 'rhythmValue',
+      'place', 'placeChange', 'frame', 'frameValue', 'frameCity', 'view', 'viewMap', 'viewSchema', 'rhythm', 'rhythmValue',
     ]),
   };
 }
