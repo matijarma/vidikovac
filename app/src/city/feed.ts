@@ -131,6 +131,27 @@ function heldBoards(ctx: LayerContext, stop: ScreenStop | null): DepartureBoard[
 /** How many HŽ stations inside the circle the list reads (docs/history/upgrade-2026-10-plan/U3.md S3). */
 export const RAIL_STATIONS = 2;
 
+/** An HŽ short name a badge can carry ("R1", "2007"); anything longer reads as "Vlak" (arrivals.train). */
+export const RAIL_SHORT_NAME = /^[A-Za-z0-9]{1,6}$/u;
+
+/** A Zagreb station or destination as the city reads it: "Zagreb Glavni kolodvor" is "Glavni kolodvor". */
+export function railPlaceName(name: string): string {
+  const rest = name.replace(/^Zagreb\s+/u, '');
+  return rest === '' ? name : rest;
+}
+
+/**
+ * The nearest HŽ station inside the place's circle and the board the page holds for it (undefined while it is on
+ * its way), for the departures block's train toggle (city/next-departures.ts); null without a station in reach.
+ * askNearby asks for the board; this only reads.
+ */
+export function railNearest(ctx: LayerContext, placeContext: PlaceContext = feedPlace(ctx)): { station: Place & { lon: number; lat: number }; board: DepartureBoard | undefined } | null {
+  const place = nearbyPlace(placeContext);
+  const station = railStationsNear(ctx.city?.places ?? [], place, feedRadiusM(ctx, place))[0];
+  if (!station) return null;
+  return { station, board: ctx.boards?.get('hz', station.sourceRecord) };
+}
+
 /** The HŽ stations (the catalogue's rail places) inside the circle, the nearest first, RAIL_STATIONS at most: the wall
  *  (kiosk.ts) and the phone ask for the same boards. */
 export function railStationsNear(places: readonly Place[], place: { lon: number; lat: number }, radiusM: number): (Place & { lon: number; lat: number })[] {
@@ -200,6 +221,8 @@ export function nearbyInput(ctx: LayerContext, placeContext: PlaceContext = feed
     ...(ctx.stops ? { stops: ctx.stops } : {}),
     ...(policy ? { policy } : {}),
     ...(railBoards.length > 0 ? { railBoards } : {}),
+    // The phone's trains stand behind the departures block's toggle (next-departures.ts), not in the list.
+    railInList: false,
     // A public holiday (shared/city/holidays.ts): OSM's hours do not say holiday hours, so no place is open.
     openPlaces: openPlacesNear(index, place, radiusM, now, isPublicHoliday(zagrebDayKey(now))),
     venuePoint: venuePointFor(city.places, ctx.snapshots, index),

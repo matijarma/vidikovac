@@ -61,7 +61,8 @@ import { kioskStrings } from '../kiosk/strings';
 import type { MapHighlight } from '../map/city-map';
 import { dataNumber, dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
-import { cancelledTrips } from './feed';
+import { cancelledTrips, railPlaceName, RAIL_SHORT_NAME } from './feed';
+export { railPlaceName };
 import { ct } from './strings';
 
 export type NearbyKind = 'departure' | 'notice' | 'closure' | 'event' | 'solar' | 'last' | 'first' | 'opening' | 'always' | 'pharmacy'
@@ -198,6 +199,12 @@ export interface NearbyInput {
   departedDepartures?: readonly { id: string; leftAt: number }[];
   /** The HŽ boards of the rail stations inside the circle, the two nearest (city/feed.ts railStationsNear). */
   railBoards?: readonly DepartureBoard[];
+  /**
+   * Whether the trains take a row of the list (railRows). The wall lists them; the phone keeps them behind the
+   * departures block's train toggle instead (city/next-departures.ts, owner 5 Oct 2026: a train row all day on a
+   * phone's timeline said nothing a person around town needed), so city/feed.ts nearbyInput passes false. Omitted: listed.
+   */
+  railInList?: boolean;
   /** The places open now inside the circle, closing 30 minutes or more from now (shared/city/osm-hours.ts openPlacesNear). */
   openPlaces?: readonly OpenPlace[];
   /** Where an event with neither a verified venue nor a point of its own takes place (the venue gazetteer), or null. */
@@ -268,7 +275,6 @@ export const CUT_NUMBERS_MAX_CHARS = 24;
 /** Two announcements of one event (the same title and start) this close together are one row. */
 export const EVENT_SAME_M = 150;
 /** An HŽ route name the badge prints as it stands (the sentence's route slot); any other reads arrivals.train. */
-const RAIL_SHORT_NAME = /^[A-Za-z0-9]{1,6}$/u;
 /** The worker's Croatian rain words (dhmz-hourly `weather`) and HAK's road states, to their catalogue keys. */
 const RAIN_WORDS: Readonly<Record<string, RainWord>> = { 'slaba kiša': 'slaba', 'kiša': 'kisa', 'jaka kiša': 'jaka' };
 const ROAD_STATES: Readonly<Record<string, RoadState>> = {
@@ -309,7 +315,7 @@ export function selectNearby(input: NearbyInput): NearbyRow[] {
     ...firstTramRows(input),
     ...openingRows(input, events),
   ];
-  const rail = railRows(input);
+  const rail = input.railInList === false ? [] : railRows(input);
   const breadth = [...rainRows(input), ...cutRows(input), ...roadRows(input)];
   const timeless = timelessRows(input);
   const open = openRows(input, timeless);
@@ -1158,12 +1164,6 @@ function rangeSpans(ranges: string): { open: number; close: number }[] | undefin
 }
 
 // --- (i) the facts-breadth rows, one of each (U3.md S2, S3) ------------------------
-
-/** A Zagreb station or destination as the city reads it: "Zagreb Glavni kolodvor" is "Glavni kolodvor". */
-export function railPlaceName(name: string): string {
-  const rest = name.replace(/^Zagreb\s+/u, '');
-  return rest === '' ? name : rest;
-}
 
 /**
  * The trains from the nearest HŽ station inside the circle (the caller passes the two nearest stations' boards), as

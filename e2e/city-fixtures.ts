@@ -31,6 +31,17 @@ export interface CityFixtureOptions{
   lastRun?:(stopId:string)=>LastRunFile|null;
   /** The live BAJS stations /api/city/live answers; CITY_BIKE alone when omitted. */
   bikes?:readonly FixtureBike[];
+  /** True adds the HŽ catalogue (CITY_RAIL, Glavni kolodvor inside Trg's circle) and answers its board with CITY_TRAINS; omitted, no station. */
+  rail?:boolean;
+}
+/** The HŽ station the phone's departures block puts behind its train toggle (city/next-departures.ts). */
+export const CITY_RAIL:Place={id:'rail-browser',category:'rail',name:'Zagreb Glavni kolodvor',lon:15.9784,lat:45.8046,sourceId:'hz-schedule',sourceRecord:'HZ-GK'};
+/** The station's next trains, minutes after `now`: the first three are the toggle's rows. */
+export const CITY_TRAINS:readonly {routeName:string;headsign:string;minutes:number}[]=[
+  {routeName:'R1',headsign:'Savski Marof',minutes:20},{routeName:'Regionalni vlak',headsign:'Dugo Selo',minutes:28},{routeName:'R1',headsign:'Harmica',minutes:41},{routeName:'R1',headsign:'Savski Marof',minutes:55},
+];
+export function trainsBoard(stopId:string,now:number):DepartureBoard{
+  return {operator:'hz',stopId,stopName:CITY_RAIL.name,status:'live',generatedAt:new Date(now).toISOString(),departures:CITY_TRAINS.map((t,i)=>({operator:'hz',tripId:`hz-${i}`,routeId:t.routeName,routeName:t.routeName,headsign:t.headsign,at:new Date(now+t.minutes*60_000).toISOString()}))};
 }
 /**
  * The city API at `now`: the catalogue, one venue, the live BAJS stations
@@ -42,13 +53,14 @@ export async function installCityFixture(page:Page,now=FIXTURE_NOW.getTime(),opt
   const options:CityFixtureOptions=Array.isArray(optionsOrBikes)?{bikes:optionsOrBikes as readonly FixtureBike[]}:optionsOrBikes as CityFixtureOptions;
   const bikes=options.bikes??[CITY_BIKE];
   const source={id:'culture',name:'Gradski registar',url:'https://data.zagreb.hr',licence:'Otvorena dozvola',status:'live' as const,count:1,fetchedAt:new Date(now).toISOString()};
-  const hashes={culture:'a'.repeat(64),streets:'b'.repeat(64),heritage:'c'.repeat(64),settlements:'d'.repeat(64)};
+  const hashes={culture:'a'.repeat(64),streets:'b'.repeat(64),heritage:'c'.repeat(64),settlements:'d'.repeat(64),...(options.rail?{'hz-schedule':'e'.repeat(64)}:{})};
   const manifest:CatalogueManifest={schema:1,version:'city-browser',generatedAt:new Date(now).toISOString(),sources:Object.entries(hashes).map(([id,hash])=>({...source,id,kind:id==='streets'?'streets':id==='settlements'?'settlements':'places',chunks:[{hash,bytes:500}]}))};
   const data={
     culture:{...emptyCatalogue(),places:[CITY_VENUE]},
     streets:{...emptyCatalogue(),streets:[{id:'street-browser',name:'Ilica',settlement:'Zagreb',settlementId:'1',description:'Opis imena iz izvornog registra.'}]},
     heritage:{...emptyCatalogue(),places:[{id:'heritage-browser',category:'heritage',name:'Povijesna zgrada',lon:15.976,lat:45.814,sourceId:'heritage',sourceRecord:'Z-test',description:'Izvorni opis kulturnog dobra.',polygons:[[[[15.975,45.813],[15.977,45.813],[15.977,45.815],[15.975,45.815],[15.975,45.813]]]]}]},
     settlements:{...emptyCatalogue(),settlements:[{id:'1',name:'Zagreb',polygons:[[[[15.7,45.7],[16.2,45.7],[16.2,46],[15.7,46],[15.7,45.7]]]]}]},
+    'hz-schedule':{...emptyCatalogue(),places:[CITY_RAIL]},
   };
   const live:CityLive={schema:1,generatedAt:new Date(now).toISOString(),sources:[{...source,id:'bajs'}],bikes:bikes.map(bike=>({...bike,observedAt:new Date(now).toISOString()})),air:[],consultations:[]};
   await page.route('**/api/city/**',async route=>{
@@ -57,6 +69,8 @@ export async function installCityFixture(page:Page,now=FIXTURE_NOW.getTime(),opt
     if(url.pathname.endsWith('/live'))return route.fulfill({json:live});
     const entry=Object.entries(hashes).find(([,hash])=>url.pathname.includes(hash));
     if(entry)return route.fulfill({json:{schema:1,source:{...source,id:entry[0]},data:data[entry[0] as keyof typeof data]}});
+    // The station's trains answer first: a spec's own `departures` factory knows ZET's platforms, not HŽ's station.
+    if(url.pathname.endsWith('/departures')&&options.rail&&url.searchParams.get('operator')==='hz')return route.fulfill({json:trainsBoard(url.searchParams.get('stop')??CITY_RAIL.sourceRecord,now)});
     if(url.pathname.endsWith('/departures')&&options.departures)return route.fulfill({json:options.departures(url.searchParams.get('stop')??'',url.searchParams.get('operator')??'zet')});
     if(url.pathname.endsWith('/departures'))return route.fulfill({json:{operator:'zet',stopId:url.searchParams.get('stop'),stopName:'Trg',status:'live',generatedAt:new Date(now).toISOString(),departures:[{operator:'zet',tripId:'t',routeId:'6',routeName:'6',headsign:'Sopot',at:new Date(now+600000).toISOString()}]}});
     return route.fulfill({status:404,json:{error:'not-found'}});

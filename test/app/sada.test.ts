@@ -412,29 +412,93 @@ describe('third-party text on Sada (WP4 review)', () => {
   });
 });
 
-describe('the trains on Sada (docs/history/upgrade-2026-10-plan/U3.md S3)', () => {
-  it('lists the next train from the HŽ station inside the circle as a timetable row, never live, and asks for its board', () => {
-    const station: Place = { id: 'rail-hz-gk', category: 'rail', name: 'Zagreb Glavni kolodvor', lon: 15.9784, lat: 45.8046, sourceId: 'hz-schedule', sourceRecord: 'HZ-GK' };
-    const hz: DepartureBoard = {
-      operator: 'hz', stopId: 'HZ-GK', stopName: 'Zagreb Glavni kolodvor', status: 'live', generatedAt: iso(NOW - 60_000),
-      departures: [{ operator: 'hz', tripId: '2201', routeId: 'R1', routeName: 'R1', headsign: 'Savski Marof', at: iso(NOW + 20 * 60_000) }],
-    };
+describe('the trains on Sada (U3.md S3; owner 5 Oct 2026: behind the departures block\'s toggle, not a row)', () => {
+  const station: Place = { id: 'rail-hz-gk', category: 'rail', name: 'Zagreb Glavni kolodvor', lon: 15.9784, lat: 45.8046, sourceId: 'hz-schedule', sourceRecord: 'HZ-GK' };
+  const hz: DepartureBoard = {
+    operator: 'hz', stopId: 'HZ-GK', stopName: 'Zagreb Glavni kolodvor', status: 'live', generatedAt: iso(NOW - 60_000),
+    departures: [
+      { operator: 'hz', tripId: '2201', routeId: 'R1', routeName: 'R1', headsign: 'Savski Marof', at: iso(NOW + 20 * 60_000) },
+      { operator: 'hz', tripId: '2203', routeId: 'R2', routeName: 'Regionalni vlak', headsign: 'Dugo Selo', at: iso(NOW + 28 * 60_000) },
+      { operator: 'hz', tripId: '2205', routeId: 'R1', routeName: 'R1', headsign: 'Harmica', at: iso(NOW + 41 * 60_000) },
+      { operator: 'hz', tripId: '2207', routeId: 'R1', routeName: 'R1', headsign: 'Savski Marof', at: iso(NOW + 55 * 60_000) },
+    ],
+  };
+  const city = { ...emptyCity(), places: [station] };
+  const view = (filters: Record<string, string>): LayerContext['view'] => ({ layer: 'grad-sada', selection: null, filters });
+  it('lists no train row: the list asks for the station\'s board, the block carries the train toggle, and the three trams stay', () => {
     const cache = boards([board(TRG, [3, 9, 16, 24]), board(TRG_2, [6]), hz]);
-    const section = renderGradSada(ctx({ boards: cache, city: { ...emptyCity(), places: [station] } }));
-    const rows = section.querySelectorAll('[data-testid=nearby] li.nearby-row[data-kind=rail][data-source=hz]');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.hasAttribute('data-live')).toBe(false);
-    expect(text(rows[0]!.querySelector('.nearby-title'))).toBe('R1 Savski Marof');
-    expect(text(rows[0]!.querySelector('.nearby-sub'))).toBe('Zagreb Glavni kolodvor');
+    const section = renderGradSada(ctx({ boards: cache, city }));
+    expect(section.querySelectorAll('[data-testid=nearby] li.nearby-row[data-kind=rail]')).toHaveLength(0);
     expect(cache.ensure).toHaveBeenCalledWith('hz', ['HZ-GK'], undefined);
-    // The departures block keeps its three trams.
+    const toggle = section.querySelector<HTMLButtonElement>('[data-testid=departures-trains]')!;
+    expect(toggle).not.toBeNull();
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.dataset.action).toBe('filter');
+    expect(toggle.dataset.filterKey).toBe('departures');
+    expect(toggle.dataset.filterValue).toBe('hz');
+    expect(toggle.getAttribute('aria-label')).toBe('Prikaži vlakove, Glavni kolodvor');
+    expect(text(toggle)).toBe('Vlakovi');
+    expect(toggle.querySelector('svg use')?.getAttribute('href')).toBe('#icon-train-front');
+    expect(toggle.hasAttribute('data-hint'), 'ZET is live: no dot').toBe(false);
     expect(section.querySelectorAll('[data-testid=day-departures] > li.sada-departure')).toHaveLength(3);
+    expect(section.querySelector('[data-testid=day-departures]')?.hasAttribute('data-mode')).toBe(false);
+    // No trains shown: no HŽ credit yet.
+    expect(section.querySelector('.provenance li[data-key="hz-schedule"]')).toBeNull();
+  });
+  it('with the toggle on, the block shows the station\'s next three trains as timetable rows that open the station on Karta, and credits HŽ', () => {
+    const cache = boards([board(TRG, [3, 9, 16, 24]), board(TRG_2, [6]), hz]);
+    const section = renderGradSada(ctx({ boards: cache, city, view: view({ departures: 'hz' }) }));
+    const list = section.querySelector<HTMLElement>('[data-testid=day-departures]')!;
+    expect(list.dataset.mode).toBe('hz');
+    expect(text(section.querySelector('.sada-departures-title'))).toBe('Vlakovi · Glavni kolodvor');
+    expect(section.querySelector('section.sada-departures')?.getAttribute('aria-label')).toBe('Vlakovi · Glavni kolodvor');
+    const rows = [...list.querySelectorAll<HTMLElement>('li.sada-departure')];
+    expect(rows).toHaveLength(3);
+    expect(rows.every((row) => row.dataset.live === 'false' && row.dataset.kind === 'timetable')).toBe(true);
+    expect(rows.map((row) => text(row.querySelector('.sada-dest')))).toEqual(['Savski Marof', 'Dugo Selo', 'Harmica']);
+    // The badge is the HŽ short name; a long one reads as "Vlak".
+    expect(rows.map((row) => text(row.querySelector('.line')))).toEqual(['R1', 'Vlak', 'R1']);
+    const link = rows[0]!.querySelector<HTMLAnchorElement>('a.sada-departure-link')!;
+    expect(link.dataset.action).toBe('nav');
+    expect(link.dataset.layer).toBe('u-pokretu');
+    expect(JSON.parse(link.dataset.selection!)).toEqual({ kind: 'place', id: 'rail-hz-gk' });
+    expect(link.getAttribute('href')).toContain('#layer=u-pokretu');
+    const toggle = section.querySelector<HTMLButtonElement>('[data-testid=departures-trains]')!;
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle.dataset.filterValue).toBe('zet');
+    expect(toggle.getAttribute('aria-label')).toBe('Prikaži tramvaje i autobuse');
     const source = REFERENCE_SOURCES.find((entry) => entry.id === 'hz-schedule')!;
     const credit = section.querySelector('.provenance li[data-key="hz-schedule"]');
     expect(credit).not.toBeNull();
     expect(text(credit)).toContain(source.name);
     expect(text(credit)).toContain(source.licence);
     expect(credit!.querySelector('a')?.getAttribute('href')).toBe(source.catalogue);
-    expect(renderGradSada(ctx()).querySelector('.provenance li[data-key="hz-schedule"]')).toBeNull();
+  });
+  it('without a station in the circle there is no toggle, and a toggle left on shows the trams again', () => {
+    const none = renderGradSada(ctx({ view: view({ departures: 'hz' }) }));
+    expect(none.querySelector('[data-testid=departures-trains]')).toBeNull();
+    expect(none.querySelector('[data-testid=day-departures]')?.hasAttribute('data-mode')).toBe(false);
+    expect(none.querySelectorAll('[data-testid=day-departures] > li.sada-departure')).toHaveLength(3);
+    expect(none.querySelector('.provenance li[data-key="hz-schedule"]')).toBeNull();
+  });
+  it('while the station\'s board is on its way the trains hold one busy row; with no train left the row says so', () => {
+    const waiting = renderGradSada(ctx({ city, view: view({ departures: 'hz' }) }));
+    const list = waiting.querySelector<HTMLElement>('[data-testid=day-departures]')!;
+    expect(list.getAttribute('aria-busy')).toBe('true');
+    expect(list.querySelectorAll('li.sada-departure-empty')).toHaveLength(1);
+    const spent: DepartureBoard = { ...hz, departures: [] };
+    const done = renderGradSada(ctx({ boards: boards([board(TRG, [3, 9]), spent]), city, view: view({ departures: 'hz' }) }));
+    expect(text(done.querySelector('[data-testid=day-departures] li.sada-departure-empty'))).toBe('Danas više nema vlakova.');
+  });
+  it('marks the toggle with a dot while ZET sends no positions (the wall\'s rail policy), without switching by itself', () => {
+    resetServiceStateMemory();
+    const base = SNAPSHOTS['zet-rt']!;
+    const zet: ModuleSnapshot = { ...base, sourceUpdatedAt: iso(NOW - 10_000), sources: { zet: { status: 'live', itemCount: 2, sourceUpdatedAt: iso(NOW - 10_000),
+      service: { state: 'silent', since: iso(NOW - 3_600_000), expected: 460, seen: 2, ratio: 0, confidence: 1, baseline: 'declared', byMode: { tram: [0, 150], bus: [2, 310] } } as ZetService } } };
+    const section = renderGradSada(ctx({ boards: boards([board(TRG, [3, 9]), hz]), city, snapshots: { ...SNAPSHOTS, 'zet-rt': zet } }));
+    const toggle = section.querySelector<HTMLButtonElement>('[data-testid=departures-trains]')!;
+    expect(toggle.dataset.hint).toBe('1');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(section.querySelector('[data-testid=day-departures]')?.hasAttribute('data-mode')).toBe(false);
   });
 });

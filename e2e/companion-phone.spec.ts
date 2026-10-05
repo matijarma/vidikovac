@@ -83,8 +83,8 @@ const AXE_BLOCKING: readonly string[] = ['serious', 'critical'];
 /** Pixel 7: touch, mobile layout and its device scale; the browser type stays the project's own. */
 const { defaultBrowserType: _browser, ...PIXEL_7 } = devices['Pixel 7'];
 
-/** The fixture session on /d/ with its city API, boards and 404 tiles, joined and live. */
-async function openSession(page: Page): Promise<FixtureSession> {
+/** The fixture session on /d/ with its city API, boards and 404 tiles, joined and live; `rail` adds the HŽ station. */
+async function openSession(page: Page, options: { rail?: boolean } = {}): Promise<FixtureSession> {
   const snapshots = await experienceSnapshots();
   const fixture = await installExperienceFixture(page, snapshots);
   const vehicles = snapshots['zet-rt']?.items ?? [];
@@ -93,6 +93,7 @@ async function openSession(page: Page): Promise<FixtureSession> {
   await installCityFixture(page, FIXTURE_NOW.getTime(), {
     departures: (stopId) => departuresBoard({ now: fixture.now(), stopId, vehicles }),
     lastRun: (stopId) => lastRunSnapshot(stopId, days),
+    ...(options.rail ? { rail: true } : {}),
   });
   await page.route('**/maps/zagreb-v1/**', (route) => route.fulfill({ status: 404, body: '' }));
   await page.goto(FIXTURE_DASHBOARD);
@@ -321,6 +322,25 @@ test.describe(`phone (Pixel 7 at ${PHONE.width}×${PHONE.height})`, () => {
     await expect(share).toHaveText(SHARE_CITY_LABEL);
     await share.click();
     await expect(page.locator(PHONE_PROBES.shareCode), 'one tap shows the share code').toHaveText(CODE_RE, { timeout: PAINT_MS });
+  });
+
+  test('trains: no train row in the list; the departures block carries a train toggle, one tap to the station\'s next three trains, a tap on a train opens the station on Karta', async ({ page }) => {
+    await openSession(page, { rail: true });
+    const toggle = page.getByTestId('departures-trains');
+    await expect(toggle, 'the toggle stands at the head of the departures once the HŽ catalogue is in hand').toBeVisible({ timeout: PAINT_MS });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('[data-testid=nearby] li.nearby-row[data-kind=rail]'), 'the trains take no row of the list').toHaveCount(0);
+    await expect(page.locator(PHONE_PROBES.sadaDepartures)).toHaveCount(PHONE_DEPARTURES);
+    await toggle.click();
+    const trains = page.locator('[data-testid=day-departures][data-mode=hz]');
+    await expect(trains).toBeVisible({ timeout: PAINT_MS });
+    await expect(trains.locator('li.sada-departure')).toHaveCount(PHONE_DEPARTURES);
+    await expect(trains).toContainText('Savski Marof');
+    await expect(page.locator('.sada-departures-title')).toHaveText('Vlakovi · Glavni kolodvor');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await trains.locator('li.sada-departure a').first().click();
+    await expect(page.locator('#layer-u-pokretu')).toBeVisible({ timeout: MAP_MS });
+    await expect(page.locator('[data-testid=transport-workspace] .t-sheet-body'), 'the station\'s sheet opens with its timetable').toContainText('Glavni kolodvor', { timeout: PAINT_MS });
   });
 
   test(`Karta cold open: vehicle pills within ${KARTA_PILLS_WITHIN_MS} ms of the map drawing, tiles answering 404 and no tap; no disclosure, no "Alati karte" or "Što tražiš?"`, async ({ page }) => {

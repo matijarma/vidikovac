@@ -1298,6 +1298,11 @@
   },
   "sada": {
     "departuresAt": "Sljedeći polasci, {stop}",
+    "trains": "Vlakovi",
+    "trainsAt": "Vlakovi · {station}",
+    "trainsShow": "Prikaži vlakove, {station}",
+    "transitShow": "Prikaži tramvaje i autobuse",
+    "noTrains": "Danas više nema vlakova.",
     "mapBand": "Karta oko mjesta {place}. Otvori Kartu.",
     "viewSchema": "Shema",
     "viewMap": "Karta"

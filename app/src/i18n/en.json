@@ -1270,6 +1270,11 @@
   },
   "sada": {
     "departuresAt": "Next departures, {stop}",
+    "trains": "Trains",
+    "trainsAt": "Trains · {station}",
+    "trainsShow": "Show trains, {station}",
+    "transitShow": "Show trams and buses",
+    "noTrains": "No more trains today.",
     "mapBand": "Map around {place}. Open the map.",
     "viewSchema": "Diagram",
     "viewMap": "Map"

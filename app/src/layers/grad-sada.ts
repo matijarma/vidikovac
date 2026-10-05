@@ -20,7 +20,7 @@ import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { CURATED_WALL, curatedCityPoints, programmeItems } from '../city/curated';
 import { askNearby, feedPlace, feedRadiusM, nearbyHeld, nearbyInput, nearbyPlace, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS, sadaFeed } from '../city/feed';
 import { OSM_HOURS_CREDIT } from '../core/open-hours';
-import { departuresBlock } from '../city/next-departures';
+import { departuresBlock, trainsShown } from '../city/next-departures';
 import type { PlaceContext } from '../city/place';
 import { provenanceBlock, SADA_CREDITS } from '../experience/status';
 import type { CityMapHandle } from '../map/city-map';
@@ -167,9 +167,10 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
     : feed === 'loading' ? nearbyBusy(ctx, cap) : '';
   // Static inputs have no module snapshot: credit them while their rows are actually shown.
   const shown = typeof feed === 'object' ? feed.nearbyShownRows(listed, cap, now) : [];
+  // The trains stand behind the departures block's toggle (city/next-departures.ts): HŽ is credited while they show.
   const credits = [
     ...(shown.some((row) => row.kind === 'open') ? [{ key: 'osm-hours', ...OSM_HOURS_CREDIT }] : []),
-    ...(shown.some((row) => row.kind === 'rail') ? [RAIL_TIMETABLE_CREDIT] : []),
+    ...(trainsShown(ctx, place) ? [RAIL_TIMETABLE_CREDIT] : []),
   ];
   // The band's box stands from the first draw (112 px, its link to Karta); the map inside it once Sada has settled
   // (the list's chunk in hand and its hold over).
