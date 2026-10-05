@@ -921,6 +921,8 @@ describe('the basemap and the overlays on it', () => {
     expect(ids.indexOf('vehicles')).toBeGreaterThan(ids.indexOf('places_locality'));
     expect(ids[ids.length - 1]).toBe('ambient-highlight-point');
     expect(ids.indexOf('selection-ring')).toBeGreaterThan(ids.indexOf('vehicles'));
+    // On a phone the own stop's disc stays under the pills (on the wall it is laid over them, overlays.test.ts).
+    expect(ids.indexOf('screen-stop')).toBeLessThan(ids.indexOf('vehicles'));
     expect([...map.images.keys()]).toEqual(OVERLAY_IMAGE_IDS);
     // The pill and the plate carry their stretch metadata over the SDF defaults; the fixed marks only the defaults.
     const [pill, plate] = overlays.overlayImages(1);

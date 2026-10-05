@@ -63,6 +63,8 @@ export interface KioskStrings {
     /** Beside a small dot on the whole-city window: a station, its count not drawn there. */
     bikesFar: string;
     culture: string;
+    /** Beside the hollow ring the map draws at night: the on-duty pharmacy (mapview.ts pharmacyHours). */
+    pharmacy: string;
   };
   weather: {
     humidity: string;
@@ -413,7 +415,7 @@ function build(code: SupportedLocale): KioskStrings {
     },
     status: group('status', ['offline', 'reconnecting', 'dataDown']),
     invitation: group('invite', ['lead', 'typeCode', 'qrLabel', 'qrWaiting', 'progressLabel']),
-    legend: group('legend', ['tram', 'bikes', 'bikesEmpty', 'bikesFar', 'culture']),
+    legend: group('legend', ['tram', 'bikes', 'bikesEmpty', 'bikesFar', 'culture', 'pharmacy']),
     weather: {
       ...group('weather', ['humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'noReading']),
       compass: record(COMPASS, (point) => `motion.compass.${point}`),

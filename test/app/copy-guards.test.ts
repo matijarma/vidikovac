@@ -274,8 +274,9 @@ describe('the wall legend kiosk.legend.* (WP2)', () => {
   it('names the three items in both languages', () => {
     // Round 2, F9 (owner, 24 Sep): the legend describes what is drawn: a numbered disc is the free bikes, a dot an
     // empty station, and on the whole-city window a dot is a station.
-    expect(hr.kiosk.legend).toEqual({ tram: 'Tramvajska linija', bikes: 'BAJS: slobodni bicikli', bikesEmpty: 'BAJS: prazna stanica', bikesFar: 'BAJS stanica', culture: 'Kultura večeras' });
-    expect(en.kiosk.legend).toEqual({ tram: 'Tram route', bikes: 'BAJS: bikes available', bikesEmpty: 'BAJS: empty station', bikesFar: 'BAJS station', culture: 'Culture tonight' });
+    // Since 5 Oct 2026 the night frame's pharmacy ring is named too (owner: a ring nobody could place).
+    expect(hr.kiosk.legend).toEqual({ tram: 'Tramvajska linija', bikes: 'BAJS: slobodni bicikli', bikesEmpty: 'BAJS: prazna stanica', bikesFar: 'BAJS stanica', culture: 'Kultura večeras', pharmacy: 'Dežurna ljekarna' });
+    expect(en.kiosk.legend).toEqual({ tram: 'Tram route', bikes: 'BAJS: bikes available', bikesEmpty: 'BAJS: empty station', bikesFar: 'BAJS station', culture: 'Culture tonight', pharmacy: 'Duty pharmacy' });
   });
   it.each([['hr', hr], ['en', en]] as const)('%s: no question mark, no caveat, no ellipsis, never "zid"', (name, catalogue) => {
     for (const [key, value] of Object.entries(catalogue.kiosk.legend)) {

@@ -783,7 +783,8 @@
       "bikes": "BAJS: slobodni bicikli",
       "bikesEmpty": "BAJS: prazna stanica",
       "bikesFar": "BAJS stanica",
-      "culture": "Kultura večeras"
+      "culture": "Kultura večeras",
+      "pharmacy": "Dežurna ljekarna"
     },
     "weather": {
       "humidity": "vlaga {value} %",

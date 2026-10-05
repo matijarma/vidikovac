@@ -19,7 +19,7 @@ import { RAIN_AHEAD_MS } from '../../app/src/city/nearby';
 import { nearestHourlySteps, radarInsetShown, radarNow, RADAR_WET_AHEAD_MS } from '../../app/src/kiosk/local';
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, pharmaciesByDistance, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
-import { busesVisible, CITY_DETAIL_ZOOM, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap, majorStreetNames, placeTitles, STOP_LABEL_MIN_RANK, THIN_NAMES_ZOOM, stopLabelTramInterchanges } from '../../app/src/kiosk/mapview';
+import { busesVisible, CITY_DETAIL_ZOOM, cityPoints, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, highlightAwayFromPlace, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, OWN_PLACE_HIGHLIGHT_M, PAIRED_ZOOM, pharmacyHours, pharmacyPoint, requestKioskMap, majorStreetNames, placeTitles, STOP_LABEL_MIN_RANK, THIN_NAMES_ZOOM, stopLabelTramInterchanges } from '../../app/src/kiosk/mapview';
 import { emptyCity, type CityState } from '../../shared/city/types';
 import { CURATED_WALL, curatedCityPoints } from '../../app/src/city/curated';
 import { cityLabelsOf } from '../../app/src/map/city-map';
@@ -33,6 +33,8 @@ import { CITY_WINDOW as CITY_WINDOW_BOX, kioskCityLabels, WALL_FIT_MIN_ZOOM } fr
 import { frameView } from '../../app/src/map/frame';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
+/** 23:00 in Zagreb: the hours the pharmacy's ring is on the map (mapview.ts pharmacyHours). */
+const NIGHT = Date.parse('2026-09-11T21:00:00Z');
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '12', '13', '14', '17', '31', '32', '34'] };
 const attr = { text: 'Izvor: test', url: 'https://example.test/', licence: 'Otvorena dozvola (NN 67/17)' };
 const i18n = createDefaultI18n('hr');
@@ -935,8 +937,8 @@ describe('the kiosk\u2019s whole-city window', () => {
     // The names are the layer's to leave off (CityLabels 'none'), not the points'.
     expect(cityLabelsOf(options.cityLabels as never)).toBe('none');
     expect(lastLabels(calls.setCityLabels)).toBe('none');
-    // The one on-duty pharmacy keeps its ring and loses its address: a street number is not a fact anyone reads a city window for.
-    expect((options.points as { place?: string; title: string; props?: Record<string, unknown> }[]).find((p) => p.place === 'pharmacy')).toMatchObject({ title: '' });
+    // By day the on-duty pharmacy's ring is not on the map at all (owner, 5 Oct 2026; mapview.ts pharmacyHours).
+    expect((options.points as { place?: string }[]).some((p) => p.place === 'pharmacy')).toBe(false);
     // The same call, exploring: discover() answers the question with the few places it is about, named.
     requestKioskMap(maps, { ...base, exploring: true }, adapter);
     const drawn = calls.update.mock.calls.at(-1)![0] as { id: string; title: string; place?: string }[];
@@ -1010,6 +1012,25 @@ describe('the on-duty pharmacy on the map (R-KP18)', () => {
     const address = 'Trg bana Josipa Jelačića 3, Zagreb';
     const [onTheStop] = pharmacyPoint(stopAt(80));
     expect(onTheStop).toEqual({ id: 'pharmacy:Trg bana J. Jelačića 3', lon: ring.lon, lat: ring.lat, title: '', place: 'pharmacy', props: { address } });
+    // The ring is on the map at night only, the hours the list gives the pharmacy its timeless row (owner,
+    // 5 Oct 2026: by day it was a second ring beside the own place, under the pills, that nobody could read).
+    const at = (iso: string): number => Date.parse(iso);
+    expect([at('2026-10-05T19:59:00Z'), at('2026-10-05T20:00:00Z'), at('2026-10-06T03:59:00Z'), at('2026-10-06T04:00:00Z'), at('2026-10-05T10:00:00Z')].map(pharmacyHours)).toEqual([false, true, true, false, false]);
+    const snapshots = {} as Parameters<typeof cityPoints>[0];
+    expect(cityPoints(snapshots, stopAt(400), at('2026-10-05T10:00:00Z'), 'hr').some((p) => p.place === 'pharmacy')).toBe(false);
+    expect(cityPoints(snapshots, stopAt(400), at('2026-10-05T21:00:00Z'), 'hr').some((p) => p.place === 'pharmacy')).toBe(true);
+    // The sentence's or a reveal's ring is never drawn on the wall's own place (kiosk.ts wallHighlight): the
+    // own-place marker already says "here"; everything further than OWN_PLACE_HIGHLIGHT_M keeps its ring.
+    const place = { lon: 15.97726, lat: 45.81286 };
+    const point = (lon: number, lat: number) => ({ id: 'x', geometry: { type: 'Point' as const, coordinates: [lon, lat] as [number, number] } });
+    expect(OWN_PLACE_HIGHLIGHT_M).toBe(60);
+    expect(highlightAwayFromPlace(point(place.lon, place.lat), place)).toBeNull();
+    expect(highlightAwayFromPlace(point(place.lon + 0.0005, place.lat), place)).toBeNull(); // about 39 m east
+    expect(highlightAwayFromPlace(point(place.lon + 0.0012, place.lat), place)).not.toBeNull(); // about 93 m east
+    const line = { id: 'w', geometry: { type: 'LineString' as const, coordinates: [[place.lon, place.lat], [place.lon + 0.001, place.lat]] } };
+    expect(highlightAwayFromPlace(line, place)).toBe(line);
+    expect(highlightAwayFromPlace(null, place)).toBeNull();
+    expect(highlightAwayFromPlace(point(place.lon, place.lat), null)).not.toBeNull();
     const [downTheStreet] = pharmacyPoint(stopAt(400));
     // What the mark says is what the place is called; the address stays in the detail the props carry.
     expect(downTheStreet).toMatchObject({ id: 'pharmacy:Trg bana J. Jelačića 3', title: 'Gradska ljekarna Zagreb', props: { address } });
@@ -1051,15 +1072,20 @@ describe('the kiosk\u2019s framed wall', () => {
     expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
     // The pharmacy point carries its name on a neighbourhood's picture, below the detail zoom too (a stop 400 m
     // south of Trg bana J. Jelačića 3 frames at z13.4); decision 58's placeTitles false keeps the layer from drawing it.
+    // At night, when the ring is on the map (pharmacyHours; by day it is not drawn, owner 5 Oct 2026).
     const south = { ...STOP, lon: 15.9776, lat: 45.8131 - 400 / 111_320 };
     const near = stub();
-    requestKioskMap(near.maps, { ...base, stop: south }, near.adapter);
+    requestKioskMap(near.maps, { ...base, stop: south, now: NIGHT }, near.adapter);
     expect(first(near).zoom).toBeLessThan(CITY_DETAIL_ZOOM);
     expect((first(near).points as { place?: string; title: string }[]).find((p) => p.place === 'pharmacy')!.title).toBe('Gradska ljekarna Zagreb');
     // The same stop as the read-path default place keeps the whole-city window, where an address is a detail.
     const far = stub();
-    requestKioskMap(far.maps, { ...base, stop: south, placeSet: false }, far.adapter);
+    requestKioskMap(far.maps, { ...base, stop: south, placeSet: false, now: NIGHT }, far.adapter);
     expect((first(far).points as { place?: string; title: string }[]).find((p) => p.place === 'pharmacy')!.title).toBe('');
+    // By day: no ring, on the frame or on the whole-city window.
+    const day = stub();
+    requestKioskMap(day.maps, { ...base, stop: south }, day.adapter);
+    expect((first(day).points as { place?: string }[]).some((p) => p.place === 'pharmacy')).toBe(false);
     // Section B's CityLabels: the venues named, the BAJS discs counted and unnamed.
     expect(labelsOf(options.cityLabels)).toBe('venues');
     expect(labelsOf(s.calls.setCityLabels.mock.calls.at(-1)![0])).toBe('venues');
@@ -1087,7 +1113,10 @@ describe('the kiosk\u2019s framed wall', () => {
     requestKioskMap(s.maps, { ...base, frame: 6, city }, s.adapter);
     const points = first(s).points as { id: string; place?: string }[];
     expect(points.filter((p) => p.place === 'city').map((p) => p.id)).toEqual(['bajs-near']);
-    expect(points.some((p) => p.place === 'pharmacy')).toBe(true);
+    expect(points.some((p) => p.place === 'pharmacy')).toBe(false); // 14:32: the ring is a night mark (pharmacyHours)
+    const night = stub();
+    requestKioskMap(night.maps, { ...base, frame: 6, city, now: NIGHT }, night.adapter);
+    expect((first(night).points as { place?: string }[]).some((p) => p.place === 'pharmacy')).toBe(true);
     // The whole-city window keeps its own rule (far dots across the city).
     const w = stub();
     requestKioskMap(w.maps, { ...base, frame: 6, city, placeSet: false }, w.adapter);

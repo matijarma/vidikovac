@@ -769,7 +769,8 @@
       "bikes": "BAJS: bikes available",
       "bikesEmpty": "BAJS: empty station",
       "bikesFar": "BAJS station",
-      "culture": "Culture tonight"
+      "culture": "Culture tonight",
+      "pharmacy": "Duty pharmacy"
     },
     "weather": {
       "humidity": "humidity {value} %",
