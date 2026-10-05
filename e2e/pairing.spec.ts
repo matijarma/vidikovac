@@ -129,7 +129,7 @@ test.describe('expiry with SESSION_MINUTES=0.2', () => {
       // 12 seconds rounds to 1 minute: Math.max(1, Math.round((expiresAt - now) / 60_000)) per confirmLabel.
       await unlockOnPhone(phone, scanUrl, '1 minuta');
       await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
-      await phone.getByTestId('screen-control').click();
+      await phone.getByTestId('share-city').click();
       await phone.getByTestId('present-view').click();
       await expect(kiosk.getByTestId('session-label')).toBeVisible({ timeout: 10_000 });
 

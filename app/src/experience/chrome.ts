@@ -14,9 +14,8 @@ import type { SessionPhase } from '../session';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { ring } from '../ui/graphics';
 import { iconMarkup, type IconName } from '../ui/icons';
-import { weatherStatusMarkup, type WeatherStatus } from './weather-status';
+import type { WeatherStatus } from './weather-status';
 import type { PresentationState } from '../../../worker/presentation';
-import { presentationButton } from './presentation';
 
 export type Surface = 'phone' | 'desktop';
 /** A phone tab: a domain, a shell surface and never a LayerId (D9). */
@@ -48,10 +47,16 @@ export interface ShellState {
   secondsLeft: number;
   totalSeconds: number | null;
   expiresAt: number | null;
-  countdownHidden: boolean;
+  /** Whether the pill prints the remaining time: the last COUNTDOWN_SHOWN_S, or the Još switch "uvijek" (owner,
+   *  5 Oct 2026: the constant countdown crowded the phone's header); otherwise it says "Sesija". */
+  countdownShown: boolean;
   paused: boolean;
   loading: boolean;
   canShare: boolean;
+  /** A scanner's live session with a public screen: the share sheet carries the "Na javnom zaslonu" part. */
+  canScreen: boolean;
+  /** The header's weather chip (weather-status.ts); null without an observation, and the chip is left out. */
+  weather: WeatherStatus | null;
   label: string | null;
   role: Role | null;
   participants: number;
@@ -80,6 +85,9 @@ export function remainingText(seconds: number): string {
   return countdown(seconds);
 }
 
+/** The pill prints the remaining time from five minutes before the end; before that it says "Sesija". */
+export const COUNTDOWN_SHOWN_S = 300;
+
 /** The frozen view's date, said the same way everywhere: "podaci od 13:57" (LayerContext.frozenAt). */
 export function snapshotLine(i18n: I18n, frozenAt: number): string {
   return i18n.t('session.snapshotAt', { time: zagrebTime(frozenAt) });
@@ -103,24 +111,40 @@ function frozenAttrs(s: ShellState): string {
 /**
  * The status line: ONE builder paints keyed children by surface, so the DOM is
  * honest for axe and the target rule (CSS orders and sizes, never hides a
- * control that exists). Phone: wordmark · Zaslon · Podijeli grad · session ·
- * safety. Desktop: wordmark · spacer · Zaslon · Podijeli grad · session ·
- * Još · safety, one row with no clock and no domain bar (the desk is the
- * phone, wider [O-56]: Karta stands beside Sada on the page itself, so the
- * header needs no way into it). Zaslon stands while a scanner's session has a
- * screen, the share button while the session can share [O-61].
+ * control that exists). Phone: wordmark · weather · Podijeli grad · session ·
+ * safety. Desktop: wordmark · weather · spacer · Podijeli grad · session · Još ·
+ * safety, one row with no clock and no domain bar (the desk is the phone, wider
+ * [O-56]: Karta stands beside Sada on the page itself, so the header needs no
+ * way into it). The weather chip stands while there is an observation (it
+ * opens Vrijeme); the share button while the session can share or has a
+ * public screen to show on (owner, 5 Oct 2026: one button, one sheet, in
+ * place of the Zaslon box and the inline panel) [O-61].
  */
 export function statusLineMarkup(i18n: I18n, s: ShellState): string {
   // Frozen: a plain `#layer=` link would replace the fragment and lose `room=`, so the wordmark
   // becomes the way home instead (the session is over), as on the empty page. In DEV the mark
   // follows it, so the header reads "Kaj ima?dev" (core/dev-mode.ts).
   const wordmark = wordmarkMarkup(i18n, s.frozen ? { href: '/' } : { href: '#layer=grad-sada', layer: 'grad-sada' }) + devMarkSlot();
+  const weather = weatherChipMarkup(i18n, s);
   const session = sessionMarkup(i18n, s);
   const safety = safetyMarkup(i18n, s);
-  const display = s.hasScreen && s.role === 'scanner' ? presentationButton(i18n, Boolean(s.presentationOpen), s.presentation) : '';
   const share = shareButtonMarkup(i18n, s);
-  if (s.surface === 'phone') return `${wordmark}${display}${share}${session}${safety}`;
-  return `${wordmark}<div class="ki-status-space" data-key="space"></div>${display}${share}${session}${moreButtonMarkup(i18n, s)}${safety}`;
+  if (s.surface === 'phone') return `${wordmark}${weather}${share}${session}${safety}`;
+  return `${wordmark}${weather}<div class="ki-status-space" data-key="space"></div>${share}${session}${moreButtonMarkup(i18n, s)}${safety}`;
+}
+
+/**
+ * The weather chip (owner, 5 Oct 2026): the sky's glyph and the temperature beside the wordmark, the one way into
+ * Vrijeme from the header. Built from the shared weather group (weather-status.ts), so the words are the kiosk's;
+ * '' without an observation: never a dash. Frozen it leaves the Tab order like the tabs and keeps its handler, so
+ * the fragment (and `room=` in it) is never replaced by a bare hash navigation.
+ */
+export function weatherChipMarkup(i18n: I18n, s: ShellState): string {
+  const w = s.weather;
+  if (!w) return '';
+  const current = s.layer === 'zrak-i-nebo' && !s.directory;
+  const glyph = w.icon ? iconMarkup(w.icon, undefined, 'icon icon-sm') : '';
+  return `<a class="ki-weather" data-key="weather" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo" data-testid="status-weather" aria-label="${escapeAttribute(i18n.t('shell.weatherLabel', { weather: w.aria }))}" aria-current="${current ? 'page' : 'false'}"${w.stale ? ' data-stale="true"' : ''}${frozenAttrs(s)}>${glyph}<span class="tb-temp">${escapeHtml(w.temp)}</span></a>`;
 }
 
 /**
@@ -131,7 +155,7 @@ export function statusLineMarkup(i18n: I18n, s: ShellState): string {
  * aria-label keeps the name. '' when the session cannot share.
  */
 export function shareButtonMarkup(i18n: I18n, s: ShellState): string {
-  if (!s.canShare) return '';
+  if (!s.canShare && !s.canScreen) return '';
   const label = escapeAttribute(i18n.t('session.share'));
   return `<button type="button" class="ki-share" data-key="share" data-action="share-city" data-testid="share-city" aria-haspopup="dialog" aria-label="${label}" title="${label}">${iconMarkup('share-2')}<span>${escapeHtml(i18n.t('session.share'))}</span></button>`;
 }
@@ -154,20 +178,6 @@ export function wordmarkMarkup(i18n: I18n, home: { href: string; layer?: LayerId
 export function moreButtonMarkup(i18n: I18n, s: ShellState): string {
   const current = s.directory;
   return `<button type="button" class="ki-more" data-key="more" data-action="directory" data-testid="status-more" aria-expanded="${s.directory ? 'true' : 'false'}" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup('ellipsis')}<span>${escapeHtml(i18n.t('nav.more'))}</span></button>`;
-}
-
-/**
- * Unused since the desk header lost its clock [O-56] (WP5 deletes it with its CSS).
- * Desktop: the clock, wrapping the shared weather group (weather-status.ts) in
- * the link into Vrijeme. Without an observation the time stands alone: never a
- * dash (D11). The aria says time, condition, temperature, sunset, then the way.
- * Frozen it leaves the Tab order like the tabs and keeps its handler, so the
- * fragment (and `room=` in it) is never replaced by a bare hash navigation.
- */
-export function clockMarkup(i18n: I18n, s: ShellState, now: number, weather: WeatherStatus | null): string {
-  const time = zagrebTime(now);
-  const label = weather ? i18n.t('shell.clockLabel', { time, weather: weather.aria }) : i18n.t('shell.clockOnly', { time });
-  return `<a class="ki-clock tabular" data-key="clock" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo" data-testid="status-clock" aria-label="${escapeAttribute(label)}"${frozenAttrs(s)}><time datetime="${new Date(now).toISOString()}">${escapeHtml(time)}</time>${weather ? `<span class="ki-weather">${weatherStatusMarkup(weather)}</span>` : ''}</a>`;
 }
 
 /** One-tap safety, icon-only on both surfaces: the word lives in the aria-label and the title. Frozen keeps /hitno open. */
@@ -198,8 +208,9 @@ export function tabbarMarkup(i18n: I18n, s: ShellState): string {
 
 /**
  * The one session element, keyed into the status line on both surfaces: a
- * compact pill with the ring and the remaining time. It carries the same
- * expiry the screen shows (data-expires-at) and opens the session sheet.
+ * compact pill that says "Sesija" and, from five minutes before the end (or
+ * always, by the Još switch), the remaining time. It carries the same expiry
+ * the screen shows (data-expires-at) and opens the session sheet.
  */
 export function sessionMarkup(i18n: I18n, s: ShellState): string {
   const time = remainingText(s.secondsLeft);
@@ -215,7 +226,7 @@ export function sessionMarkup(i18n: I18n, s: ShellState): string {
       : s.reconnecting
         ? i18n.t('session.disconnected')
         : i18n.t('session.connecting');
-  const timeText = s.frozen ? i18n.t('session.frozenBadge') : s.countdownHidden ? i18n.t('shell.session') : s.phase === 'live' ? time : '';
+  const timeText = s.frozen ? i18n.t('session.frozenBadge') : s.phase !== 'live' ? '' : s.countdownShown ? time : i18n.t('shell.session');
   const state = s.frozen ? 'frozen' : s.reconnecting ? 'reconnecting' : s.phase;
   const expires = s.expiresAt !== null ? ` data-expires-at="${s.expiresAt}"` : '';
   // Amber at the last minute, rose at the last twenty seconds: the CSS recolours the pill and its ring.

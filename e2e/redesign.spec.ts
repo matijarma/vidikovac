@@ -181,7 +181,7 @@ test('real kiosk + two scanners: acknowledged subjects, removal/recovery, confir
     await a.getByTestId('transport-search').fill('6');
     await a.locator('[data-action=select-route][data-id="6"]').first().click();
     await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
-    await a.getByTestId('screen-control').click();
+    await a.getByTestId('share-city').click();
     await a.getByTestId('present-view').click();
     await expect(a.getByTestId('presentation-feedback')).toContainText('Prikazano', { timeout: 25_000 });
     await expect(kiosk.locator('.k-present-board .k-select-main')).toContainText('Črnomerec');
@@ -195,7 +195,7 @@ test('real kiosk + two scanners: acknowledged subjects, removal/recovery, confir
     await b.getByTestId('dir-kultura').click();
     const eventTitle = (await b.locator('[data-testid=event-row] .row-title').first().innerText()).trim();
     await b.locator('[data-testid=event-row] [data-action=select]').first().click();
-    await b.getByTestId('screen-control').click();
+    await b.getByTestId('share-city').click();
     await expect(b.getByTestId('presentation-panel')).toContainText('Druga osoba');
     await b.getByTestId('present-view').click();
     await expect(b.locator('.present-confirm')).toBeVisible();
@@ -205,7 +205,6 @@ test('real kiosk + two scanners: acknowledged subjects, removal/recovery, confir
     await expect(kiosk.getByTestId('kiosk-layer')).toHaveAttribute('data-layer', 'kultura');
     await expect(kiosk.locator('.k-select-main')).toHaveText(eventTitle);
     await kiosk.screenshot({ path: 'test-results/redesign/presented-event.png' });
-    await expect(a.getByTestId('screen-control')).toHaveAttribute('data-active', 'false');
     await expect(a.getByTestId('route-title')).toContainText('Črnomerec');
     const events = kioskSources.dogadanja;
     kioskSources.dogadanja = { ...events, items: [] };
@@ -217,16 +216,14 @@ test('real kiosk + two scanners: acknowledged subjects, removal/recovery, confir
     await kiosk.reload();
     await expect(kiosk.getByTestId('kiosk-layer')).toHaveAttribute('data-layer', 'kultura');
     await expect(kiosk.locator('.k-select-main')).toHaveText(eventTitle);
-    await b.locator('[data-action=presentation-close]').click();
-    await b.getByTestId('screen-control').click();
     await b.getByTestId('stop-presentation').click();
     await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
     await expect(b.getByTestId('session-label')).toHaveAttribute('data-state', 'live');
-    await b.locator('[data-action=presentation-close]').click();
+    await b.locator('[data-testid=share-dialog] [data-dialog-close]').click();
     await b.locator('.ki-tab[data-layer="u-pokretu"]').click();
     await b.getByTestId('transport-search').fill('Gavella');
     await b.locator('[data-action=select-place]').first().click();
-    await b.getByTestId('screen-control').click();
+    await b.getByTestId('share-city').click();
     await b.getByTestId('present-view').click();
     await expect(b.getByTestId('presentation-feedback')).toContainText('Prikazano');
     await expect(kiosk.getByTestId('city-detail')).toContainText('Gavella');

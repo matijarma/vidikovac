@@ -203,11 +203,11 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
   // Karta's cycle paths: drawn while a BAJS station is selected, or always when this switch is on.
   const lanesAlways = ctx.bikeLanes?.snapshot() === 'always';
   const bikeLanesRow = ctx.bikeLanes ? switchRow({ key: 'bike-lanes', action: 'bike-lanes-toggle', testid: 'dir-bike-lanes', icon: 'bike', title: i18n.t('directory.bikeLanes'), sub: i18n.t(lanesAlways ? 'directory.bikeLanesAlways' : 'directory.bikeLanesBajs') }, lanesAlways) : '';
-  // Refreshing and the header's countdown, this page's own two switches, while the session lasts.
+  // Refreshing and the header's countdown (off: the pill says "Sesija" until the last five minutes; on: the time always), this page's own two switches, while the session lasts.
   const settings = ctx.settings;
   const running = settings && !live?.frozen;
   const refreshRow = running ? switchRow({ key: 'refresh', action: 'refresh-toggle', testid: 'dir-refresh', icon: 'refresh-cw', title: i18n.t('directory.refresh'), sub: i18n.t(settings.paused ? 'directory.refreshOff' : 'directory.refreshOn') }, !settings.paused) : '';
-  const countdownRow = running ? switchRow({ key: 'countdown', action: 'countdown-toggle', testid: 'dir-countdown', icon: 'eye', title: i18n.t('directory.countdown'), sub: i18n.t(settings.countdownHidden ? 'directory.countdownOff' : 'directory.countdownOn') }, !settings.countdownHidden) : '';
+  const countdownRow = running ? switchRow({ key: 'countdown', action: 'countdown-toggle', testid: 'dir-countdown', icon: 'eye', title: i18n.t('directory.countdown'), sub: i18n.t(settings.countdownAlways ? 'directory.countdownOn' : 'directory.countdownOff') }, settings.countdownAlways) : '';
   const pages: [string, string][] = [
     ['/hitno', i18n.t('common.links.hitno')], ['/izvori/', i18n.t('common.links.izvori')],
     ['/privatnost/', i18n.t('common.links.privatnost')], ['/pristupacnost/', i18n.t('common.links.pristupacnost')],

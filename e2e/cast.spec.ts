@@ -17,7 +17,9 @@ test('phone: navigation is private; one explicit request waits for acknowledgeme
   await page.locator('.ki-tabs [data-layer=grad-sada]').click();
   expect(frames(fixture)).toEqual([]);
   await expect(page.getByTestId('cast-fab')).toHaveCount(0);
-  await page.getByTestId('screen-control').click();
+  await expect(page.getByTestId('screen-control'), 'no Zaslon box: the screen is a part of the share sheet (5 Oct 2026)').toHaveCount(0);
+  await page.getByTestId('share-city').click();
+  await expect(page.getByTestId('presentation-panel')).toBeVisible();
   expect(frames(fixture)).toEqual([]);
   await page.getByTestId('present-view').click();
   await expect.poll(() => frames(fixture).length).toBe(1);
@@ -40,17 +42,25 @@ test('desktop: the visible transport selection is the public target, with no com
   await page.getByTestId('transport-search').fill('6');
   await page.locator('[data-action=select-route][data-id="6"]').first().click();
   expect(frames(fixture)).toEqual([]);
-  await page.getByTestId('screen-control').click();
+  await page.getByTestId('share-city').click();
   await page.getByTestId('present-view').click();
   await expect.poll(() => frames(fixture).length).toBe(1);
   expect(frames(fixture)[0]).toMatchObject({ command: { target: { layer: 'u-pokretu', selection: { kind: 'route', id: '6' } } } });
 });
 
-for (const options of [{ role: 'phone' } as FixtureOptions, { screen: false } as FixtureOptions]) {
-  test(`no public-screen control for ${options.role ?? 'a screenless session'}`, async ({ page }) => {
-    const fixture = await open(page, false, options);
-    await expect(page.getByTestId('screen-control')).toHaveCount(0);
-    await expect(page.getByTestId('cast-fab')).toHaveCount(0);
-    expect(frames(fixture)).toEqual([]);
-  });
-}
+test('no public-screen part for a peer: no share button at all', async ({ page }) => {
+  const fixture = await open(page, false, { role: 'phone' });
+  await expect(page.getByTestId('screen-control')).toHaveCount(0);
+  await expect(page.getByTestId('share-city')).toHaveCount(0);
+  await expect(page.getByTestId('cast-fab')).toHaveCount(0);
+  expect(frames(fixture)).toEqual([]);
+});
+
+test('no public-screen part for a screenless session: the share sheet carries the phone part alone', async ({ page }) => {
+  const fixture = await open(page, false, { screen: false });
+  await page.getByTestId('share-city').click();
+  await expect(page.getByTestId('share-dialog')).toBeVisible();
+  await expect(page.getByTestId('presentation-panel')).toHaveCount(0);
+  await expect(page.getByTestId('present-view')).toHaveCount(0);
+  expect(frames(fixture)).toEqual([]);
+});

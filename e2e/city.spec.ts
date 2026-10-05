@@ -49,7 +49,7 @@ test('a saved city selection survives refresh and is presented only explicitly',
   await page.clock.fastForward(65_000);
   await expect(page.getByTestId('city-detail')).toContainText('Gavella');
   expect(session.events.filter(e=>e.t==='present')).toEqual([]);
-  await page.getByTestId('screen-control').click();await page.getByTestId('present-view').click();
+  await page.getByTestId('share-city').click();await page.getByTestId('present-view').click();
   await expect.poll(()=>session.events.filter(e=>e.t==='present').length).toBe(1);
   expect(session.events.find(e=>e.t==='present')).toMatchObject({command:{target:{layer:'u-pokretu',selection:{kind:'place',id:CITY_VENUE.id}}}});
   session.acknowledgePresentation();await expect(page.getByTestId('presentation-feedback')).toContainText('Prikazano');

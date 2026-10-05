@@ -152,7 +152,7 @@ try {
   await capture(phone, 'phone-promet');
   await phone.getByTestId('transport-search').fill('6');
   await phone.locator('[data-action=select-route][data-id="6"]').first().click();
-  await phone.getByTestId('screen-control').click();
+  await phone.getByTestId('share-city').click();
   await capture(phone, 'phone-presentation');
   await phone.getByTestId('present-view').click();
   await kiosk.getByTestId('kiosk-layer').waitFor();
@@ -161,7 +161,7 @@ try {
   await capture(phone, 'phone-confirmed');
   await phone.getByTestId('stop-presentation').click();
   await kiosk.getByTestId('kiosk-invitation').waitFor();
-  await phone.locator('[data-action=presentation-close]').click();
+  await phone.locator('[data-testid=share-dialog] [data-dialog-close]').click();
   const desk = await pageFor({ width: 1440, height: 900 }, 'desktop');
   await desk.goto(`${base}${fixtures.FIXTURE_DASHBOARD}`);
   await desk.getByTestId('tb').waitFor();

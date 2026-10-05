@@ -22,6 +22,10 @@ export const LAYER_RENDERERS: Record<LayerId, LayerRenderer> = {
   kultura: renderKultura,
 };
 
+/** Read on every layer besides the layer's own: the header's weather chip (experience/chrome.ts) needs DHMZ's observation
+ *  wherever the person is, Karta included. */
+export const SHELL_MODULES: readonly ModuleId[] = ['dhmz-now'];
+
 export const LAYER_MODULES: Record<LayerId, ModuleId[]> = {
   // The overview composes five domains: weather, safety, transit, the next
   // dated events and the gazette issue.

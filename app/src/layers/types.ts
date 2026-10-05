@@ -79,7 +79,7 @@ export interface LayerContext extends ExperienceActions {
   session?: { expiresAt: number | null; frozen: boolean; live?: boolean; role?: Role | null; label?: string | null };
   /** The page's settings Još lists under "Osobne postavke" (experience/directory.ts): the theme preference while the page
    *  has a theme controller, whether refreshing is paused and whether the header hides the countdown. Absent on the kiosk. */
-  settings?: { theme: ThemePreference | null; paused: boolean; countdownHidden: boolean };
+  settings?: { theme: ThemePreference | null; paused: boolean; countdownAlways: boolean };
 }
 
 export type LayerRenderer = (ctx: LayerContext) => HTMLElement;

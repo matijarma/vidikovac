@@ -78,20 +78,21 @@ for (const window of WINDOWS) for (const zoom of ZOOMS) {
 test.describe('desk 1440×900 keyboard', () => {
   test.use({ viewport: { width: 1440, height: 900 }, locale: 'hr-HR' });
 
-  test('Escape closes the Zaslon panel and gives the focus back to its control; Jos closes it too (F6)', async ({ page }) => {
+  test('Escape closes the share sheet with its screen part and gives the focus back to the share button (F6, 5 Oct 2026)', async ({ page }) => {
     await open(page);
-    const control = page.getByTestId('screen-control');
+    const control = page.getByTestId('share-city');
     await control.click();
     const panel = page.getByTestId('presentation-panel');
     await expect(panel).toBeVisible();
     await expect(panel).toContainText('Ovaj pogled');
+    await expect(page.getByTestId('share-dialog')).toContainText('Na telefon');
     await page.keyboard.press('Escape');
     await expect(panel).toHaveCount(0);
+    await expect(page.getByTestId('share-dialog')).toHaveCount(0);
     await expect(control).toBeFocused();
-    await expect(control).toHaveAttribute('aria-expanded', 'false');
     await control.click();
     await expect(panel).toBeVisible();
-    await page.getByTestId('status-more').click();
+    await page.locator('[data-testid=share-dialog] [data-dialog-close]').click();
     await expect(panel).toHaveCount(0);
   });
 

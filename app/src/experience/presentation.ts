@@ -66,11 +66,6 @@ export interface PresentationPanelModel {
   message: string;
 }
 
-export function presentationButton(i18n: I18n, open: boolean, state?: PresentationState): string {
-  const active = state?.owner === 'self' && state.target !== null;
-  return `<button class="ki-screen" type="button" data-key="screen" data-action="presentation" data-testid="screen-control" aria-expanded="${open}" aria-controls="presentation-panel" data-active="${active ? 'true' : 'false'}" title="${escapeAttribute(i18n.t(active ? 'presentation.self' : 'presentation.title'))}">${iconMarkup('cast')}<span>${escapeHtml(i18n.t('presentation.control'))}</span></button>`;
-}
-
 export function presentationPanel(i18n: I18n, m: PresentationPanelModel): string {
   if (!m.open) return '';
   const t = (key: string) => escapeHtml(i18n.t(`presentation.${key}`));
@@ -78,8 +73,10 @@ export function presentationPanel(i18n: I18n, m: PresentationPanelModel): string
   const submit = m.confirming
     ? `<div class="present-confirm" role="group" aria-label="${t('takeover')}"><p>${t('confirm')}</p><div class="present-actions"><button type="button" class="btn btn-primary" data-action="present-confirm">${t('takeover')}</button><button type="button" class="btn-quiet" data-action="present-cancel">${t('cancel')}</button></div></div>`
     : `<div class="present-actions"><button type="button" class="btn btn-primary" data-action="present-request" data-testid="present-view"${!m.can || m.pending ? ' disabled' : ''}>${iconMarkup('cast')}<span>${t('present')}</span></button>${m.state?.owner === 'self' ? `<button type="button" class="btn-ghost" data-action="present-stop" data-testid="stop-presentation"${!(m.canStop??m.can) || m.pending ? ' disabled' : ''}>${t('stop')}</button>` : ''}</div>`;
+  // The panel is a part of the share sheet (dashboard.ts openShareSheet): the sheet's own close button closes it, so it
+  // carries none, and its heading ranks under the sheet's title.
   return `<section class="present" id="presentation-panel" data-testid="presentation-panel" aria-labelledby="presentation-title">
-    <header class="present-head"><div><h2 id="presentation-title">${t('title')}</h2><p>${escapeHtml(m.screenLabel)} · ${t(owner)}</p></div><button class="icon-btn btn-quiet" type="button" data-action="presentation-close" aria-label="${t('close')}">${iconMarkup('x')}</button></header>
+    <header class="present-head"><h3 id="presentation-title" class="share-part-title">${t('title')}</h3><p>${escapeHtml(m.screenLabel)} · ${t(owner)}</p></header>
     <div class="present-views"><div><p class="present-label">${t('current')}</p><p class="present-subject">${escapeHtml(m.currentLabel)}</p></div><div><p class="present-label">${t('next')}</p><p class="present-subject">${escapeHtml(m.targetLabel)}</p></div></div>
     ${submit}
     ${m.message ? `<p class="present-feedback" role="status" data-testid="presentation-feedback">${escapeHtml(m.message)}${m.message === i18n.t('presentation.notConfirmed') ? ` <button type="button" class="btn-quiet" data-action="present-retry">${t('retry')}</button>` : ''}</p>` : ''}

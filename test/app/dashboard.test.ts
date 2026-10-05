@@ -6,6 +6,7 @@ import { NEARBY_HOLD_MS } from '../../app/src/city/feed';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { LayerId } from '../../worker/protocol';
+import { closeTopmostDialog } from '../../app/src/ui/dialog';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
@@ -402,8 +403,21 @@ describe('session states', () => {
     const label = root.querySelector<HTMLElement>('[data-testid=session-label]')!;
     expect(label.dataset.expiresAt).toBe(String(EXPIRES));
     expect(text(label)).toContain('Otključano · Kavana Velebit · do 14:42');
-    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('10:00');
+    // Ten minutes out the pill says "Sesija": the time comes in the last five minutes (owner, 5 Oct 2026).
+    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('Sesija');
     expect(document.activeElement).toBe(root.querySelector('[data-testid=dash-title]'));
+  });
+  it('the pill prints the remaining time from five minutes before the end, and the shell says which it shows', () => {
+    let clock = NOW;
+    const { root, tick, session, handle } = mount({ now: () => clock });
+    session.join();
+    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('Sesija');
+    expect(handle.element.dataset.countdown).toBe('hidden');
+    clock = EXPIRES - 299_000;
+    tick();
+    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('4:59');
+    expect(handle.element.dataset.countdown).toBe('shown');
+    expect(root.querySelector<HTMLElement>('[data-testid=session-label]')!.dataset.urgency).toBe('none');
   });
   it('warns at 60 s politely and at 20 s assertively, once each, with the approved sentences', () => {
     const { root, session } = mount();
@@ -442,15 +456,19 @@ describe('session states', () => {
     click(scanner.root, '[data-testid=paused-banner] [data-action=resume]');
     expect(scanner.root.querySelector('[data-testid=paused-banner]')).toBeNull();
     expect(scanner.root.querySelector('[data-testid=dir-refresh]')?.getAttribute('aria-checked')).toBe('true');
-    // The countdown in the header: a switch too; off, the pill says "Sesija" in place of the time.
+    // The countdown in the header: a switch too, off by default (the pill says "Sesija" until the last five minutes); on,
+    // the time stands in the pill the whole session.
     const countdown = scanner.root.querySelector<HTMLElement>('[data-testid=dir-countdown]')!;
     expect(countdown.getAttribute('role')).toBe('switch');
-    expect(text(countdown)).toBe('Odbrojavanje u zaglavlju Prikazano');
-    countdown.click();
     expect(countdown.getAttribute('aria-checked')).toBe('false');
-    expect(text(countdown.querySelector('.row-sub'))).toBe('Skriveno');
+    expect(text(countdown)).toBe('Odbrojavanje uvijek u zaglavlju Zadnjih pet minuta');
     expect(scanner.handle.element.dataset.countdown).toBe('hidden');
     expect(text(scanner.root.querySelector('[data-testid=countdown]'))).toBe('Sesija');
+    countdown.click();
+    expect(countdown.getAttribute('aria-checked')).toBe('true');
+    expect(text(countdown.querySelector('.row-sub'))).toBe('Uvijek');
+    expect(scanner.handle.element.dataset.countdown).toBe('shown');
+    expect(text(scanner.root.querySelector('[data-testid=countdown]'))).toBe('10:00');
     // The language: one row that speaks the language a tap moves to (owner, 30 Sep 2026), so a reader who does not
     // understand the page finds it in their own words; the sub-line says the current one in the page's language.
     const language = scanner.root.querySelector<HTMLElement>('[data-testid=dir-language]')!;
@@ -468,7 +486,7 @@ describe('session states', () => {
     expect(language.getAttribute('lang')).toBe('hr');
     expect(language.querySelector('.row-title')?.getAttribute('lang')).toBe('hr');
     expect(language.querySelector('.row-sub')?.getAttribute('lang')).toBe('en');
-    expect(text(scanner.root.querySelector('[data-testid=dir-countdown]'))).toBe('Countdown in the header Hidden');
+    expect(text(scanner.root.querySelector('[data-testid=dir-countdown]'))).toBe('Countdown always in the header Always');
     click(scanner.root, '[data-testid=session-label]');
     expect(text(sheet.querySelector('.dialog-title'))).toBe('Unlocked until 14:42');
     click(sheet, '.dialog-close');
@@ -502,7 +520,9 @@ describe('session states', () => {
     expect(share.nextElementSibling?.getAttribute('data-testid')).toBe('session-label');
     share.click();
     expect(session.client.share).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('[data-testid=session-sheet]'), 'the header button opens no sheet on the way').toBeNull();
+    expect(document.querySelector('[data-testid=session-sheet]'), 'the header button opens no session sheet on the way').toBeNull();
+    expect(document.querySelector('[data-testid=share-dialog]'), 'the share sheet opens at once, its code on its way').not.toBeNull();
+    expect(document.querySelector('[data-testid=share-dialog] [data-share=phone]')?.getAttribute('aria-busy')).toBe('true');
     // The sheet's own row has its own probe, so one test id never names two controls.
     click(root, '[data-testid=session-label]');
     expect(document.querySelectorAll('[data-testid=share-city]')).toHaveLength(1);
@@ -576,7 +596,7 @@ describe('session states', () => {
     countdown.focus();
     expect(document.activeElement).toBe(countdown);
     countdown.click();
-    expect(text(countdown.querySelector('.row-sub'))).toBe('Skriveno');
+    expect(text(countdown.querySelector('.row-sub'))).toBe('Uvijek');
     expect(root.querySelector('[data-testid=dir-countdown]')).toBe(countdown);
     expect(document.activeElement).toBe(countdown);
     const refresh = root.querySelector<HTMLButtonElement>('[data-testid=dir-refresh]')!;
@@ -751,12 +771,13 @@ describe('polling on the feed store', () => {
     fetchData.mockClear();
     click(root, '[data-testid=dir-kultura]');
     await flush();
-    // Kultura lists the City's programme and the libraries' beside dogadanja (U3).
-    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['dogadanja', 'kultura-zg', 'programi']);
+    // Kultura lists the City's programme and the libraries' beside dogadanja (U3); the shell's own dhmz-now (the
+    // header's weather chip, SHELL_MODULES) rides along on every layer.
+    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['dogadanja', 'kultura-zg', 'programi', 'dhmz-now']);
     fetchData.mockClear();
     tick();
     await flush();
-    expect(fetchData).toHaveBeenCalledTimes(3);
+    expect(fetchData).toHaveBeenCalledTimes(4);
   });
   it('polls transit on its own beat (fallback, source phase or validUntil) and everything else every 30 s, refreshing only the due lane (R-TE4)', async () => {
     const { session, armed, fetchData, ticks } = mount();
@@ -1026,7 +1047,7 @@ describe('the full map view (transport)', () => {
     handle.restore('#room=r1&layer=sigurnost&q=private-text');
     await flush();
     // Sigurnost reads HAK's road states and the planned cuts too (R0).
-    expect(fetchData.mock.calls.map((call) => call[0]).sort()).toEqual(['ckan-geo', 'dhmz-cap', 'emsc', 'hak', 'prekidi', 'prometnice']);
+    expect(fetchData.mock.calls.map((call) => call[0]).sort()).toEqual(['ckan-geo', 'dhmz-cap', 'dhmz-now', 'emsc', 'hak', 'prekidi', 'prometnice']);
     expect(session.sent).toEqual([]);
     fetchData.mockClear();
     session.expire();
@@ -1519,11 +1540,12 @@ describe('the sticky header and notices in flow', () => {
 // in reading order on both surfaces; the CSS orders and sizes them but never
 // hides a control that exists.
 describe('the shell regions', () => {
-  it('is five children in order: the status line, the presentation panel, banners, main and the tab bar, with no rail, no sidebar, no kvart aside and no FAB slot', () => {
+  it('is four children in order: the status line, banners, main and the tab bar, with no presentation band, no rail, no sidebar, no kvart aside and no FAB slot', () => {
     const { root } = mount();
     const shell = root.querySelector<HTMLElement>('.ki')!;
     const order = [...shell.children].filter((el) => !el.matches('h1, p')).map((el) => el.className);
-    expect(order).toEqual(['ki-head ki-status', 'ki-presentation', 'ki-banners', 'ki-main', 'ki-tabbar']);
+    expect(order).toEqual(['ki-head ki-status', 'ki-banners', 'ki-main', 'ki-tabbar']);
+    expect(shell.querySelector('.ki-presentation')).toBeNull();
     expect(shell.querySelector('.ki-rail')).toBeNull();
     expect(shell.querySelector('nav.ki-side')).toBeNull();
     expect(shell.querySelector('.ki-kvart')).toBeNull();
@@ -1585,22 +1607,27 @@ describe('motion: the workspace fades in on a switch, never on a redraw', () => 
 describe('the status line', () => {
   const keys = (root: Root): string[] => [...root.querySelector('[data-testid=status-line]')!.children].map((el) => (el as HTMLElement).dataset.key ?? '');
 
-  it('paints the keyed controls in the documented order from the one builder: Zaslon and Podijeli grad beside the pill on both surfaces, one row at the desk without the clock or a domain bar', () => {
+  it('paints the keyed controls in the documented order from the one builder: the weather chip beside the wordmark once an observation is in, Podijeli grad beside the pill on both surfaces, no Zaslon box, one row at the desk without the clock or a domain bar', async () => {
     const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] };
     const phone = mount();
     expect(keys(phone.root)).toEqual(['wordmark', 'session', 'safety']);
     expect(phone.root.querySelector('[data-testid=tab-more]')).not.toBeNull();
     phone.session.join();
     expect(keys(phone.root)).toEqual(['wordmark', 'share', 'session', 'safety']);
+    await flush();
+    expect(keys(phone.root), 'the chip joins once dhmz-now has landed').toEqual(['wordmark', 'weather', 'share', 'session', 'safety']);
     phone.handle.destroy();
     const scanner = mount();
     scanner.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
-    expect(keys(scanner.root)).toEqual(['wordmark', 'screen', 'share', 'session', 'safety']);
+    expect(keys(scanner.root), 'a screen adds no header control: it is a part of the share sheet').toEqual(['wordmark', 'share', 'session', 'safety']);
+    expect(scanner.root.querySelector('[data-testid=screen-control]')).toBeNull();
     scanner.handle.destroy();
     const desk = mount({ wide: true });
     expect(keys(desk.root)).toEqual(['wordmark', 'space', 'session', 'more', 'safety']);
     desk.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
-    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'screen', 'share', 'session', 'more', 'safety']);
+    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'share', 'session', 'more', 'safety']);
+    await flush();
+    expect(keys(desk.root)).toEqual(['wordmark', 'weather', 'space', 'share', 'session', 'more', 'safety']);
     expect(desk.root.querySelector('[data-testid=desk-karta]'), 'no header link into Karta: it stands beside Sada (chunk E)').toBeNull();
     expect(text(desk.root.querySelector('[data-testid=status-more]'))).toBe('Još');
     expect(desk.root.querySelectorAll('.ki-domains [data-layer]')).toHaveLength(0);
@@ -1629,16 +1656,34 @@ describe('the status line', () => {
     expect(safety.querySelector('.ki-nav-label')).toBeNull();
     expect(text(safety)).toBe('');
   });
-  it('the desk header carries no clock and no weather: the time and the weather are the feed’s, never a second header row [O-56]', async () => {
-    const live = mount({ wide: true });
-    live.session.join();
-    await flush();
-    const status = live.root.querySelector<HTMLElement>('[data-testid=status-line]')!;
-    expect(status.querySelector('[data-testid=status-clock]')).toBeNull();
-    expect(status.querySelector('time')).toBeNull();
-    expect(status.querySelector('.ki-weather')).toBeNull();
-    expect(text(status)).not.toContain('°C');
-    live.handle.destroy();
+  it('the header carries the weather chip and no clock: the sky\'s glyph and the temperature as the one link into Vrijeme, on both surfaces (owner, 5 Oct 2026) [O-56]', async () => {
+    for (const wide of [false, true]) {
+      // The first pass leaves the page on Vrijeme (the layer is remembered in the tab's storage); the second starts over, as a fresh scan would.
+      sessionStorage.clear();
+      localStorage.clear();
+      const live = mount({ wide });
+      live.session.join();
+      await flush();
+      const status = live.root.querySelector<HTMLElement>('[data-testid=status-line]')!;
+      expect(status.querySelector('[data-testid=status-clock]')).toBeNull();
+      expect(status.querySelector('time')).toBeNull();
+      const chip = status.querySelector<HTMLAnchorElement>('[data-testid=status-weather]')!;
+      expect(chip, `surface wide=${wide}`).not.toBeNull();
+      expect(chip.classList.contains('ki-weather')).toBe(true);
+      expect(chip.dataset.key).toBe('weather');
+      expect(chip.getAttribute('href')).toBe('#layer=zrak-i-nebo');
+      expect(chip.dataset.action).toBe('nav');
+      expect(chip.dataset.layer).toBe('zrak-i-nebo');
+      expect(text(chip)).toBe('21 °C');
+      expect(chip.querySelector('svg use')?.getAttribute('href')).toBe('#icon-sun');
+      expect(chip.getAttribute('aria-label')).toBe('vedro, 21 °C, zalazak 19:16. Otvori Vrijeme.');
+      expect(chip.getAttribute('aria-current')).toBe('false');
+      chip.click();
+      expect(live.root.querySelector('#layer-zrak-i-nebo')).not.toBeNull();
+      expect(live.root.querySelector<HTMLElement>('[data-testid=status-weather]')!.getAttribute('aria-current')).toBe('page');
+      expect(live.session.sent).toEqual([]);
+      live.handle.destroy();
+    }
   });
   it('desktop transport navigation exposes the single search field in lightweight mode: Karta is on the page from the first draw', () => {
     const { root, session } = mount({ wide: true, lightweight: true });
@@ -1973,38 +2018,43 @@ describe('explicit casting (D5)', () => {
   const screen = { kind: 'venue' as const, expiresAt: null, stop: STOP };
   const state = (over: Partial<PresentationState> = {}): PresentationState => ({ version: 1, revision: 0, target: null, owner: null, expiresAt: null, status: 'idle', online: true, supported: true, ...over });
 
-  it('keeps a single header control on every workspace and never broadcasts navigation', () => {
+  it('keeps a single header control on every workspace (the share button; its sheet carries the screen part) and never broadcasts navigation', () => {
     const { root, session } = mount();
     session.join('scanner', screen);
     expect(root.querySelector('[data-testid=cast-fab]')).toBeNull();
     for (const layer of ['u-pokretu', 'kultura', 'grad-sada'] as const) {
       openViaMore(root, layer);
-      expect(root.querySelectorAll('[data-testid=screen-control]')).toHaveLength(1);
+      expect(root.querySelectorAll('[data-testid=screen-control]')).toHaveLength(0);
       expect(root.querySelectorAll('[data-testid=share-city]')).toHaveLength(1);
     }
     expect(session.sent).toEqual([]);
     expect(session.presentations).toEqual([]);
-    click(root, '[data-testid=screen-control]');
+    click(root, '[data-testid=share-city]');
+    const dialog = document.querySelector<HTMLElement>('[data-testid=share-dialog]')!;
+    expect(dialog, 'one sheet: the phone part first, the screen part under it').not.toBeNull();
+    expect([...dialog.querySelectorAll('.share-part-title')].map((el) => text(el))).toEqual(['Na telefon', 'Na javnom zaslonu']);
+    expect(dialog.querySelector('[data-share=phone]')?.getAttribute('aria-busy'), 'the code is on its way').toBe('true');
+    expect(session.client.share).toHaveBeenCalledTimes(1);
     expect(session.client.refreshPresentation).toHaveBeenCalled();
     expect(session.presentations).toEqual([]);
-    click(root, '[data-testid=present-view]');
+    click(document, '[data-testid=present-view]');
     expect(session.presentations).toHaveLength(1);
     expect(session.presentations[0]).toMatchObject({ version: 1, action: 'present', expectedRevision: 0, target: { layer: 'grad-sada' } });
-    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toContain('Čekamo potvrdu');
+    expect(text(document.querySelector('[data-testid=presentation-feedback]'))).toContain('Čekamo potvrdu');
     expect(text(root.querySelector('[data-testid=announce-polite]'))).not.toContain('Prikazano');
   });
   it('announces success only when the screen acknowledges the revision', () => {
     const { root, session } = mount();
     session.join('scanner', screen);
-    click(root, '[data-testid=screen-control]');
-    click(root, '[data-testid=present-view]');
+    click(root, '[data-testid=share-city]');
+    click(document, '[data-testid=present-view]');
     const request = session.presentations[0]!;
     session.presentation(state({ revision: 1, target: request.target!, owner: 'self', status: 'pending', expiresAt: EXPIRES }));
-    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).not.toContain('Prikazano');
+    expect(text(document.querySelector('[data-testid=presentation-feedback]'))).not.toContain('Prikazano');
     session.presentation(state({ revision: 1, target: request.target!, owner: 'self', status: 'displayed', expiresAt: EXPIRES }));
-    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toBe('Prikazano na zaslonu.');
+    expect(text(document.querySelector('[data-testid=presentation-feedback]'))).toBe('Prikazano na zaslonu.');
     expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Prikazano na zaslonu.');
-    click(root, '[data-testid=stop-presentation]');
+    click(document, '[data-testid=stop-presentation]');
     expect(session.presentations[1]).toMatchObject({ action: 'stop', expectedRevision: 1 });
     expect(session.presentations[1]).not.toHaveProperty('target');
   });
@@ -2013,12 +2063,12 @@ describe('explicit casting (D5)', () => {
     session.join('scanner', screen);
     const shown = state({ revision: 1, target: { layer: 'kultura' }, owner: 'self', status: 'displayed', expiresAt: EXPIRES });
     session.presentation(shown);
-    click(root, '[data-testid=screen-control]');
+    click(root, '[data-testid=share-city]');
     session.presentation({ ...shown, status: 'unavailable' });
-    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toBe('Odabrani sadržaj više nije dostupan.');
+    expect(text(document.querySelector('[data-testid=presentation-feedback]'))).toBe('Odabrani sadržaj više nije dostupan.');
     expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Odabrani sadržaj više nije dostupan.');
     session.presentation(shown);
-    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toBe('Prikazano na zaslonu.');
+    expect(text(document.querySelector('[data-testid=presentation-feedback]'))).toBe('Prikazano na zaslonu.');
     expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Prikazano na zaslonu.');
     expect(session.presentations).toHaveLength(0);
   });
@@ -2031,93 +2081,97 @@ describe('explicit casting (D5)', () => {
     await flush();
     click(root, '[data-testid=event-row] [data-action=select]');
     expect(session.sent).toEqual([]);
-    click(root, '[data-testid=screen-control]');
-    expect(text(root.querySelector('[data-testid=presentation-panel]'))).toContain('Koncert u parku');
-    click(root, '[data-testid=present-view]');
+    click(root, '[data-testid=share-city]');
+    expect(text(document.querySelector('[data-testid=presentation-panel]'))).toContain('Koncert u parku');
+    click(document, '[data-testid=present-view]');
     expect(session.presentations[0]!.target).toEqual({ layer: 'kultura', selection: { kind: 'item', id: expect.stringMatching(/^[0-9a-f]{16}$/), module: 'dogadanja' } });
   });
-  it('the panel closes on Escape with the focus back on its control, and on a move to Jos or another layer; a selection inside the layer keeps it (round 2, desktop F6)', async () => {
+  it('the sheet closes by its own close button and by the top-layer dismiss, with the focus back on the share button; a move to another layer closes it, a selection inside the layer keeps it (round 2, desktop F6)', async () => {
     const { root, session, handle } = mount({ wide: true });
     session.join('scanner', screen);
     await flush();
-    const panel = () => root.querySelector('[data-testid=presentation-panel]');
-    click(root, '[data-testid=screen-control]');
+    const panel = () => document.querySelector('[data-testid=presentation-panel]');
+    const dialog = () => document.querySelector<HTMLElement>('[data-testid=share-dialog]');
+    click(root, '[data-testid=share-city]');
     expect(panel()).not.toBeNull();
     expect(text(panel())).toContain('Ovaj pogled');
     expect(text(panel())).not.toContain('Želiš');
-    root.querySelector<HTMLElement>('[data-testid=present-view]')!.focus();
-    root.querySelector<HTMLElement>('.ki')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(panel()!.querySelector('[data-action=presentation-close]'), 'the sheet closes it; the panel has no x of its own').toBeNull();
+    click(dialog()!, '[data-dialog-close]');
     expect(panel()).toBeNull();
-    expect(root.querySelector('[data-testid=screen-control]')!.getAttribute('aria-expanded')).toBe('false');
-    expect(document.activeElement).toBe(root.querySelector('[data-testid=screen-control]'));
-    // Escape with the panel shut is left to the rest of the page: Jos opened after it still closes on the next one.
-    click(root, '[data-testid=screen-control]');
-    click(root, '[data-testid=status-more]');
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector('[data-testid=share-city]'));
+    // The platform's dismiss (Escape, Android Back) goes through the top layer: the same end.
+    click(root, '[data-testid=share-city]');
+    expect(panel()).not.toBeNull();
+    expect(closeTopmostDialog()).toBe(true);
     expect(panel()).toBeNull();
     click(root, '[data-testid=status-more]');
-    click(root, '[data-testid=screen-control]');
-    click(root, '[data-testid=status-more]');
-    expect(panel()).toBeNull();
     click(root, '[data-testid=dir-kultura]');
     await flush();
-    click(root, '[data-testid=screen-control]');
+    click(root, '[data-testid=share-city]');
     click(root, '[data-testid=event-row] [data-action=select]');
     expect(text(panel())).toContain('Koncert u parku');
-    // Back to another layer (the browser's Back): the panel offered the view that has gone, so it closes.
+    // Back to another layer (the browser's Back): the panel offered the view that has gone, so the sheet closes.
     handle.restore('#room=r1&layer=grad-sada');
     expect(panel()).toBeNull();
+    expect(dialog()).toBeNull();
   });
-  it('does not offer public-screen controls to a peer or a session without a screen', () => {
+  it('does not offer public-screen controls to a peer or a session without a screen: no screen part in the sheet, no share button at all for the peer', () => {
     const noScreen = mount();
     noScreen.session.join();
-    expect(noScreen.root.querySelector('[data-testid=screen-control]')).toBeNull();
+    click(noScreen.root, '[data-testid=share-city]');
+    const sheet = document.querySelector<HTMLElement>('[data-testid=share-dialog]')!;
+    expect(sheet).not.toBeNull();
+    expect(sheet.querySelector('[data-share=screen]')).toBeNull();
+    expect(sheet.querySelector('[data-testid=presentation-panel]')).toBeNull();
+    expect(noScreen.session.client.refreshPresentation).not.toHaveBeenCalled();
     noScreen.handle.destroy();
     const peer = mount();
     peer.session.join('phone', screen);
+    expect(peer.root.querySelector('[data-testid=share-city]')).toBeNull();
     expect(peer.root.querySelector('[data-testid=screen-control]')).toBeNull();
     expect(peer.session.presentations).toEqual([]);
     peer.handle.destroy();
   });
-  it('the end closes the presentation panel and disables presenting; the content is gone with it', () => {
+  it('the end closes the sheet with its presentation panel and takes the share button with it; the content is gone too', () => {
     const { root, session } = mount();
     session.join('scanner', screen);
-    click(root, '[data-testid=screen-control]');
-    expect(root.querySelector('[data-testid=presentation-panel]')).not.toBeNull();
+    click(root, '[data-testid=share-city]');
+    expect(document.querySelector('[data-testid=presentation-panel]')).not.toBeNull();
     session.expire();
     expect(root.querySelector('#layer-grad-sada')).toBeNull();
     expect(root.querySelector('[data-testid=session-ended]')).not.toBeNull();
-    expect(root.querySelector('[data-testid=presentation-panel]')).toBeNull();
-    // Opened again after the end, the panel says why nothing can be presented.
-    click(root, '[data-testid=screen-control]');
-    expect(root.querySelector<HTMLButtonElement>('[data-testid=present-view]')!.disabled).toBe(true);
-    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toContain('Sesija je završila');
-    click(root, '[data-testid=present-view]');
+    expect(document.querySelector('[data-testid=share-dialog]')).toBeNull();
+    expect(document.querySelector('[data-testid=presentation-panel]')).toBeNull();
+    // After the end there is nothing to share and nothing to show: the button is gone.
+    expect(root.querySelector('[data-testid=share-city]')).toBeNull();
     expect(session.presentations).toEqual([]);
   });
   it('requires confirmation before taking over and binds that confirmation to the observed revision', () => {
     const { root, session } = mount();
     session.join('scanner', screen);
     session.presentation(state({ revision: 4, owner: 'other', target: { layer: 'kultura' }, expiresAt: EXPIRES, status: 'displayed' }));
-    click(root, '[data-testid=screen-control]');
-    click(root, '[data-testid=present-view]');
+    click(root, '[data-testid=share-city]');
+    click(document, '[data-testid=present-view]');
     expect(session.presentations).toEqual([]);
-    expect(text(root.querySelector('.present-confirm'))).toContain('zamijeniti prikaz druge osobe');
+    expect(text(document.querySelector('.present-confirm'))).toContain('zamijeniti prikaz druge osobe');
     session.presentation(state({ revision: 5, owner: 'other', target: { layer: 'sigurnost' }, expiresAt: EXPIRES, status: 'displayed' }));
-    click(root, '[data-action=present-confirm]');
+    click(document, '[data-action=present-confirm]');
     expect(session.presentations[0]).toMatchObject({ takeover: true, expectedRevision: 4 });
     session.result({ requestId: session.presentations[0]!.requestId, state: state({ revision: 5 }), error: 'changed' });
-    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toContain('Prikaz na zaslonu se promijenio');
+    expect(text(document.querySelector('[data-testid=presentation-feedback]'))).toContain('Prikaz na zaslonu se promijenio');
   });
   it('reports an unconfirmed request after eight seconds and retries with the same request id', () => {
     let clock = NOW;
     const { root, session, tick } = mount({ now: () => clock });
     session.join('scanner', screen);
-    click(root, '[data-testid=screen-control]');
-    click(root, '[data-testid=present-view]');
+    click(root, '[data-testid=share-city]');
+    click(document, '[data-testid=present-view]');
     clock += 8100;
     tick();
-    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toContain('Prikaz nije potvrđen');
-    click(root, '[data-action=present-retry]');
+    expect(text(document.querySelector('[data-testid=presentation-feedback]'))).toContain('Prikaz nije potvrđen');
+    click(document, '[data-action=present-retry]');
     expect(session.presentations).toHaveLength(2);
     expect(session.presentations[1]).toEqual(session.presentations[0]);
   });
