@@ -116,7 +116,8 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     expect(onlyHandedOn).toEqual(['panels.cityWorkEmpty', 'panels.eventsEmpty']);
   });
 
-  it('the catalogue holds 1145 Croatian leaves and 1116 English ones', () => {
+    expect(leaves.length).toBe(1151);
+    expect(leafKeys(en).length).toBe(1123);
     // 1,056 flat hr leaves once lane P, A3, A6, A2 and A5 were merged (lane/c-A1 4a57a61; en 1,020).
     // A1: +56 city words moved out of app/src/city/strings.ts, +21 city.fact-* labels moved out
     // of app/src/city/markup.ts, +2 time.at / time.dateAt (the sentence's time label): 1,135; then
@@ -134,7 +135,7 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // kiosk.legend.bikesEmpty and kiosk.legend.bikesFar, the wall legend's BAJS entries by what the map draws
     // (kiosk/invitation.ts): 1,047 hr, 1,019 en; the closure row's sub (kiosk.nearby.closed): 1,048 hr, 1,020 en;
     // U0 step 6 +2 kiosk.nearby.ongoing and panels.ongoing, a rolling closure end (kiosk/timeline.ts, layers/sigurnost.ts):
-    // 1,050 hr, 1,022 en.
+    // 1,151 hr, 1,123 en.
     // upgrade U1 +3 arrivals.cancelledRoute (the phone stop sheet's note), kiosk.nearby.zetSays (the notice row's
     // time cell), kiosk.sentence.notice (its header sentence): 1,053 hr, 1,025 en.
     // upgrade U2 +10 hr / +9 en: the service sentences and their vehicles plural, the silent map note, the paired
@@ -160,12 +161,8 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // The snimka pass S4 +1 landing.actions.snimka, the landing's link to /snimka/ (app/index.html): 1,142 hr, 1,113 en.
     // The pull-ins as ST and SD (shared/city/depot-run.ts) +2: motion.ahead (the card's "dalje: …", transport/detail.ts
     // vehicleAhead) and arrivals.depotVia (the stop sheet's "preko stajališta …", depotVia): 1,144 hr, 1,115 en.
-    // The irritation pass's Vrijeme +6 (layers/zrak-i-nebo.ts): weather.hourChance and weather.hourWet (the hourly
-    // cell's words for a reader of the tree), weather.radar, radarAlt, radarCaption and radarRainNear (the radar inset):
-    // 1,151 hr, 1,122 en.
-    // A new leaf changes this number on purpose, with its reader.
     expect(leaves.length).toBe(1151);
-    expect(leafKeys(en).length).toBe(1122);
+    expect(leafKeys(en).length).toBe(1123);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });

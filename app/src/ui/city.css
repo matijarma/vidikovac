@@ -35,10 +35,6 @@
 .transport .t-sheet-note{display:none}
 .transport[data-city-group=transport] .t-sheet-note{display:block}
 .city-condition{display:grid;gap:var(--sp-3);padding:var(--sp-4) 0;min-width:0}
-.ki-head .ki-screen>span{position:static;width:auto;height:auto;overflow:visible;clip:auto;white-space:normal}
-@media(max-width:59.99rem){.ki-head .ki-screen>.icon{display:none}.ki-head .ki-screen{font-size:var(--type-control)}}
-.ki-session .ki-session-more{display:block;width:12px;height:12px}
-@media(max-width:59.99rem){.ki-head{grid-template-columns:auto minmax(0,1fr) auto auto auto}.ki-screen{gap:4px;padding-inline:4px;font-size:12px}.ki-session{gap:0}.ki-session-time{font-size:12px}}
 :root[data-lagano='1'] .transport[data-sheet='peek'] .t-sheet-body{visibility:visible}
 :root[data-lagano='1'] .transport-map{display:none}
 :root[data-lagano='1'] .transport-body{display:block;height:auto}

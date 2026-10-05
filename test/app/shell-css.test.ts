@@ -77,8 +77,10 @@ function ungatedHovers(css: string): string[] {
 describe('dashboard.css phone shell', () => {
   it('lays the shell out as the status line, banners and main in flow, on a small-viewport height with the 2017 fallback line above it', () => {
     const ki = rule('.ki');
-    expect(ki).toContain("grid-template-areas: 'status' 'presentation' 'banners' 'main'");
-    expect(ki).toContain('grid-template-rows: auto auto auto 1fr');
+    expect(ki).toContain("grid-template-areas: 'status' 'banners' 'main'");
+    expect(ki).toContain('grid-template-rows: auto auto 1fr');
+    expect(CSS, 'the inline presentation band left with the Zaslon box (owner, 5 Oct 2026)').not.toContain('.ki-presentation');
+    expect(CSS).not.toContain('.ki-screen');
     expect(ki).toMatch(/min-height: 100vh;\n\s*min-height: 100svh;/);
     expect(ki).toContain('--ki-top: calc(3.25rem + env(safe-area-inset-top, 0px));');
     expect(ki).toContain('--ki-tabs: calc(3.5rem + env(safe-area-inset-bottom, 0px));');
@@ -92,8 +94,8 @@ describe('dashboard.css phone shell', () => {
     expect(head).toContain('min-block-size: var(--ki-top)');
     expect(head).toContain('padding-block-start: env(safe-area-inset-top, 0px)');
     expect(head).toContain('background: var(--tone-surface-1)');
-    // Up to five keyed controls on the phone: wordmark, then Zaslon, Podijeli grad, session and safety, with a flexible gap pushing them right.
-    expect(head).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;');
+    // Up to five keyed controls on the phone: the wordmark and the weather chip, then a flexible gap pushing Podijeli grad, the session pill and safety right.
+    expect(head).toContain('grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;');
     expect(rule('.ki-head::after')).toContain('block-size: 2px');
     // Lit by the slow-fetch mark alone (dashboard.ts SLOW_FETCH_MS), never by data-loading: a poll that answers in time shows no line.
     expect(rule(".ki[data-slow='true'] .ki-head::after")).toContain('opacity: 1');
@@ -150,7 +152,7 @@ describe('dashboard.css header controls', () => {
     expect(rule('.ki-safety .ki-nav-label')).toBe('');
     expect(CSS).not.toContain('@media (max-width: 22.4375rem)');
   });
-  it('"Podijeli grad" is a labelled 44 px button in the brand tone beside the pill; the phone places it between Zaslon and the session', () => {
+  it('"Podijeli grad" is a labelled 44 px button in the brand tone beside the pill; the phone places the weather chip second and the share button before the session', () => {
     const share = rule('.ki-share');
     expect(share).toContain('min-inline-size: var(--target)');
     expect(share).toContain('min-block-size: var(--target)');
@@ -160,7 +162,7 @@ describe('dashboard.css header controls', () => {
     expect(share).toContain('touch-action: manipulation');
     expect(rule('.ki-share > span')).toContain('position: static');
     const phone = /@media \(max-width: 59\.99rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
-    expect(phone).toContain(".ki-head > [data-key='screen'] { grid-column: 3; }");
+    expect(phone).toContain(".ki-head > [data-key='weather'] { grid-column: 2; }");
     expect(phone).toContain(".ki-head > [data-key='share'] { grid-column: 4; }");
     expect(phone).toContain(".ki-head > [data-key='session'] { grid-column: 5; }");
     expect(phone).toContain(".ki-head > [data-key='safety'] { grid-column: 6; }");
@@ -189,8 +191,8 @@ describe('dashboard.css desktop (60rem and up)', () => {
     const ki = rule('.ki', DESKTOP);
     expect(ki).toContain('--ki-top: 3.5rem');
     expect(ki).toContain('grid-template-columns: minmax(0, 1fr)');
-    expect(ki).toContain('grid-template-rows: auto auto auto 1fr');
-    expect(ki).toContain("grid-template-areas: 'status' 'presentation' 'banners' 'main'");
+    expect(ki).toContain('grid-template-rows: auto auto 1fr');
+    expect(ki).toContain("grid-template-areas: 'status' 'banners' 'main'");
     expect(CSS).not.toContain('.ki-domains');
     expect(rule('.ki-banners', DESKTOP)).toContain('grid-area: banners');
     expect(rule('.ki-main', DESKTOP)).toContain('grid-area: main');
@@ -203,9 +205,9 @@ describe('dashboard.css desktop (60rem and up)', () => {
   it('keeps the status line a real box with seven columns on one row, each control placed by its key; the tab bar leaves; nothing places by a retired area name', () => {
     expect(rule('.ki-head', DESKTOP)).not.toContain('display: contents');
     // Seven: the desk pair stands Karta beside Sada on the page, so the header carries no way into it (WP4 chunk E).
-    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto;');
+    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto;');
     expect(rule('.ki-head', DESKTOP)).not.toContain('grid-template-rows');
-    for (const [key, column] of [['screen', 3], ['share', 4], ['session', 5], ['more', 6], ['safety', 7]] as const) {
+    for (const [key, column] of [['weather', 2], ['space', 3], ['share', 4], ['session', 5], ['more', 6], ['safety', 7]] as const) {
       expect(DESKTOP).toContain(`.ki-head > [data-key='${key}'] { grid-column: ${column}; }`);
     }
     expect(DESKTOP).not.toContain("[data-key='karta']");
@@ -215,21 +217,22 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(DESKTOP).not.toMatch(/grid-area: (?:top|side|session|rail)\b/);
     expect(DESKTOP).not.toContain('display: contents');
   });
-  it('the desktop-only controls are 44 px: Još and the clock link; the search launcher and the bell left with their markup (WP5 A3)', () => {
+  it('the desktop-only control is 44 px: Još; the clock link, the search launcher and the bell left with their markup (WP5 A3, 5 Oct 2026)', () => {
     const more = rule('.ki-more', DESKTOP);
     expect(more).toContain('min-block-size: var(--target)');
     expect(more).toContain('font-size: var(--type-control)');
     expect(rule(".ki-more[aria-current='page']", DESKTOP)).toContain('background: var(--tone-tint-action)');
-    expect(CSS).not.toMatch(/\.ki-(?:search|bell)\b/);
-    const clock = rule('.ki-clock', DESKTOP);
-    expect(clock).toContain('min-block-size: var(--target)');
-    expect(clock).toContain('font-size: var(--type-control)');
-    expect(clock).toContain('white-space: nowrap');
-    // The shared weather group's own classes (weather-status.ts): the sunset glyph is amber inside the clock link.
-    expect(rule('.ki-clock .tb-sun', DESKTOP)).toContain('color: var(--tone-weather)');
-    // Hairlines, not dots, separate the clock from the weather group and the temperature from the sunset (kajimafix 01.9).
-    expect(rule('.ki-weather', DESKTOP)).toContain('border-inline-start: 1px solid var(--tone-stroke)');
-    expect(rule('.ki-clock .tb-sun', DESKTOP)).toContain('border-inline-start: 1px solid var(--tone-stroke)');
+    expect(CSS).not.toMatch(/\.ki-(?:search|bell|clock)\b/);
+  });
+  it('the weather chip is a 44 px link on both surfaces: the glyph in the weather tone, the temperature beside it, tinted while Vrijeme is the page', () => {
+    const chip = rule('.ki-weather');
+    expect(chip).toContain('min-block-size: var(--target)');
+    expect(chip).toContain('font-size: var(--type-control)');
+    expect(chip).toContain('white-space: nowrap');
+    expect(chip).toContain('text-decoration: none');
+    expect(rule('.ki-weather .icon')).toContain('color: var(--tone-weather)');
+    expect(rule(".ki-weather[aria-current='page']")).toContain('background: var(--tone-tint-action)');
+    expect(rule('.ki-weather', DESKTOP)).toContain('padding-inline: var(--sp-3)');
   });
   it('never reintroduces a side rail: no aside width variable stands', () => {
     expect(CSS).not.toContain('--ki-side');
@@ -281,7 +284,8 @@ describe('zoom-compact containers: 390 px at 200% text is 12.2rem, so container 
     // 2.75rem (88 px), or the row (44 + 4 × 88 + gaps + padding = 460 px) widens the 390 px document (WP4, mobile.spec 200 %).
     // The variable goes on the header's children: the query cannot style .ki-head itself (the next test).
     expect(rule('.ki-head > *', header)).toContain('--target: 44px');
-    expect(rule('.ki-screen', header)).toContain('padding-inline: var(--sp-1)');
+    expect(rule('.ki-weather', header)).toContain('padding-inline: var(--sp-1)');
+    expect(rule('.ki-weather > span', header), 'the chip keeps its glyph; the temperature stays in the aria-label').toContain('clip: rect(0 0 0 0)');
     expect(rule('.ki-share', header)).toContain('padding-inline: var(--sp-1)');
     expect(rule('.ki-wordmark-text', header)).toContain('font-size: 0');
     expect(rule('.ki-wordmark-mark', header)).toContain('font-size: var(--type-title)');

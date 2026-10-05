@@ -25,14 +25,14 @@ import { fetchSentences as fetchSentencesImpl, type SentenceFetchOptions } from 
 import { askBoards, loadSadaFeed, NEARBY_HOLD_MS, nearbyInput, sadaFeed, type SadaFeedModule } from './city/feed';
 import { defaultLocation, type LocationContext } from './city/location';
 import { resolvePlace } from './city/place';
-import { bannersMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
+import { bannersMarkup, COUNTDOWN_SHOWN_S, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
 import { directoryModules, nextLocale, nextTheme, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
 import type { SheetAction } from './experience/session-sheet';
 import { createLazySessionSheet, type SessionSheetLoader } from './experience/lazy-session-sheet';
 import { catalogueLocale, storeLocale } from './i18n/create-default-i18n';
 import type { I18n, LocaleCode } from './i18n/i18n';
-import { LAYER_MODULES, renderLayer } from './layers';
+import { LAYER_MODULES, renderLayer, SHELL_MODULES } from './layers';
 import type { ExportKind, LayerContext } from './layers/types';
 import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
@@ -51,6 +51,7 @@ import { createQr } from './ui/qr';
 import type { ThemeController } from './ui/theme';
 import { PRESENTATION_ACK_MS, type PresentationCommand, type PresentationState, type PresentationTarget } from '../../worker/presentation';
 import { presentationPanel, presentationTargetLabel } from './experience/presentation';
+import { weatherStatus } from './experience/weather-status';
 import { createCityStore, type CityStore } from './core/city-store';
 import { dynamicPlaces } from './city/discovery';
 import { ct } from './city/strings';
@@ -265,12 +266,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   /** The moment freeze() ran: every workspace and time line is dated with it. */
   let frozenAt: number | undefined;
   let paused = false;
-  let countdownHidden = false;
+  /** The Još switch: the pill prints the time always, not only in the last COUNTDOWN_SHOWN_S (chrome.ts sessionMarkup). */
+  let countdownAlways = false;
   let directory = false;
   /** Whether this page pushed the Jos entry the browser is on (so closing Jos can step back off it). */
   let josPushed = false;
   const agendaScroll=new Map<LayerId,{top:number;focus:string}>();
-  let presentationOpen = false;
   let presentationState: PresentationState | undefined = session.snapshot().presentation;
   let presentationConfirmRevision: number | null = null;
   let presentationRequest: PresentationCommand | null = null;
@@ -343,7 +344,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 <p class="visually-hidden" role="status" aria-live="polite" data-testid="announce-polite"></p>
 <p class="ki-alert visually-hidden" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
 <header class="ki-head ki-status" data-region="status" data-testid="status-line"></header>
-<div class="ki-presentation" data-region="presentation"></div>
 <div class="ki-banners" data-region="banners" data-testid="banners"></div>
 <main class="ki-main" id="ki-main" data-testid="dash-view" tabindex="-1"></main>
 <nav class="ki-tabbar" data-region="tabs" aria-label="${escapeAttribute(i18n.t('nav.label'))}"></nav>
@@ -354,14 +354,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const polite = element.querySelector<HTMLElement>('[data-testid=announce-polite]')!;
   const assertive = element.querySelector<HTMLElement>('[data-testid=announce-assertive]')!;
   const main = element.querySelector<HTMLElement>('main')!;
-  const regions = { status: region('status'), presentation: region('presentation'), banners: region('banners'), tabs: region('tabs') };
-
-  /** Active modules whose last fetch failed or whose snapshot is down or stale: the shell says it once. A stale
-   *  source is one that stopped answering while its last data stays on the page (status.stale says the same), so
-   *  the quiet line is the page's one stale mark beside the grey clocks (round 3, desktop F23). */
-  function sourcesDown(feed: ReturnType<typeof store.snapshot>): number {
-    return activeModules().filter((m) => feed.errors[m] !== undefined || feed.snapshots[m]?.status === 'down' || feed.snapshots[m]?.status === 'stale').length;
-  }
+  const regions = { status: region('status'), banners: region('banners'), tabs: region('tabs') };
 
   /**
    * Whether "Na zaslon" can fire and why not when it cannot (D5). The client cannot
@@ -373,6 +366,21 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     return { can: reason === null, reason, screenLabel: deps.label ?? null, stopName: s.screen?.stop?.name ?? null };
   }
 
+  /** Whether the session can hand out a peer code: the scanner, live, not refused. */
+  function canShare(): boolean {
+    const s = session.snapshot();
+    return s.role === 'scanner' && !frozen && s.phase === 'live' && !shareDenied;
+  }
+  /** Whether the share sheet carries the "Na javnom zaslonu" part: a scanner's live session with a public screen. */
+  function canScreen(): boolean {
+    const s = session.snapshot();
+    return s.role === 'scanner' && !frozen && s.phase === 'live' && Boolean(s.screen);
+  }
+  /** The pill prints the time in the last five minutes, or always by the Još switch (owner, 5 Oct 2026). */
+  function countdownShown(): boolean {
+    return countdownAlways || (!frozen && session.snapshot().phase === 'live' && session.secondsLeft() <= COUNTDOWN_SHOWN_S);
+  }
+
   function shellState(): ShellState {
     const s = session.snapshot();
     const feed = store.snapshot();
@@ -380,13 +388,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const notify = notifyStore.snapshot();
     return {
       layer: view.snapshot().layer, directory, phase: s.phase, frozen, reconnecting,
-      secondsLeft: frozen ? 0 : session.secondsLeft(), totalSeconds, expiresAt: s.expiresAt, countdownHidden, paused,
-      loading: feed.loading.size > 0, canShare: s.role === 'scanner' && !frozen && s.phase === 'live' && !shareDenied,
+      secondsLeft: frozen ? 0 : session.secondsLeft(), totalSeconds, expiresAt: s.expiresAt, countdownShown: countdownShown(), paused,
+      loading: feed.loading.size > 0, canShare: canShare(), canScreen: canScreen(),
+      weather: weatherStatus(i18n, feed.snapshots, frozenAt ?? now()),
       label: deps.label ?? null, role: s.role, participants: s.participants, error, lastRefresh, mapFull,
-      notice, sourcesDown: sourcesDown(feed),
+      notice,
       surface: surface(), stopName: stop?.name ?? null,
       hasScreen: Boolean(s.screen),
-      presentation: presentationState, presentationOpen,
+      presentation: presentationState,
       notify, notifyActive: activeCount(notify, notifyKeys), notifyKeys,
     };
   }
@@ -419,7 +428,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     };
   }
 
+  /** The "Na javnom zaslonu" part of the share sheet (openShareSheet), repainted on every shell paint while the sheet is open. */
   function paintPresentation(): void {
+    const host = shareDialog?.body.querySelector<HTMLElement>('[data-share=screen]');
+    if (!host) return;
     const target = currentPresentationTarget();
     const cityUnsupported=(target.selection?.kind==='place'||target.selection?.kind==='street')&&!presentationState?.capabilities?.includes('city-v1');
     const waiting = presentationRequest !== null || presentationState?.status === 'pending';
@@ -434,8 +446,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     else if (pending && !message) message = i18n.t('presentation.pending');
     else if (presentationState.status === 'unavailable') message = i18n.t('presentation.unavailable');
     else if (presentationState.status === 'displayed' && presentationState.owner === 'self' && !message) message = i18n.t('presentation.displayed');
-    paintRegion(regions.presentation, presentationPanel(i18n, {
-      open: presentationOpen, state: presentationState, target,
+    paintRegion(host, presentationPanel(i18n, {
+      open: true, state: presentationState, target,
       targetLabel: presentationTargetLabel(i18n, target, store.snapshot().snapshots, stops ?? (s.screen?.stop ? [s.screen.stop] : []),cityStore.snapshot()),
       currentLabel: presentationState?.status === 'pending' ? i18n.t('presentation.pending')
         : presentationState?.status === 'unavailable' ? i18n.t('presentation.unavailable')
@@ -456,10 +468,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const s = shellState();
     element.dataset.surface = surface();
     element.dataset.state = frozen ? 'frozen' : reconnecting ? 'reconnecting' : s.phase;
-    element.dataset.countdown = countdownHidden ? 'hidden' : 'shown';
+    element.dataset.countdown = countdownShown() ? 'shown' : 'hidden';
     element.dataset.loading = String(s.loading);
     markSlowFetch(s.loading);
-    // One status row on both surfaces: no clock, so no weather here; weather is a row of the feed [O-56].
+    // One status row on both surfaces, the weather as a chip beside the wordmark (owner, 5 Oct 2026), no clock [O-56].
     paintRegion(regions.status, statusLineMarkup(i18n, s));
     paintRegion(regions.banners, bannersMarkup(i18n, s, scanUrl));
     paintRegion(regions.tabs, tabbarMarkup(i18n, s));
@@ -514,7 +526,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       maps, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode,
       lineFocus: lightweight ? undefined : lineFocus, bikeLanes: lightweight ? undefined : bikeLanes, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen, live: !frozen && error !== 'no-ticket' && session.snapshot().phase === 'live', role: session.snapshot().role, label: deps.label ?? null },
-      settings: { theme: deps.theme?.getPreference() ?? null, paused, countdownHidden },
+      settings: { theme: deps.theme?.getPreference() ?? null, paused, countdownAlways },
       notify: notifyStore.snapshot(),
       saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, stops: stops ?? undefined, stopsDown, lastRun,
       // The screen's Kadar and the network's lines, so the phone's circle is the wall's measured one (seam S2).
@@ -785,10 +797,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (surface() === 'phone' && typeof globalThis.scrollTo === 'function') globalThis.scrollTo({ top: 0 });
   }
 
+  /** The layer's modules (the desk pair's, Još's) plus the shell's own (SHELL_MODULES: the header's weather chip). */
   function activeModules(): readonly ModuleId[] {
-    if (directory) return directoryModules(surface());
-    if (deskPair()) return [...new Set([...LAYER_MODULES['grad-sada'], ...LAYER_MODULES['u-pokretu']])];
-    return LAYER_MODULES[view.snapshot().layer];
+    const own = directory ? directoryModules(surface())
+      : deskPair() ? [...LAYER_MODULES['grad-sada'], ...LAYER_MODULES['u-pokretu']]
+      : LAYER_MODULES[view.snapshot().layer];
+    return [...new Set([...own, ...SHELL_MODULES])];
   }
 
   function navigate(layer: LayerId, selection: PublicSelection | null, fromUser: boolean): void {
@@ -841,8 +855,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (frozen) return;
     const was = directory;
     directory = open;
-    // Jos is another page: the Zaslon panel, which offers the view under it, closes (round 2, desktop F6).
-    if (open !== was) closePresentation();
     // Jos is one history entry (round 1, desktop F5): opening it pushes, so the browser's Back from Jos returns to the
     // layer under it and never to the scan page. Closing it in the page (its tab, Escape) steps back off the entry this
     // page pushed, so no second copy of the layer's entry is left behind for the next Back to land on unchanged; an
@@ -863,26 +875,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       }
     };
     if (open !== was && !fromHistory) personDraw(draw); else draw();
-  }
-
-  /** Closes the Zaslon panel (its x, Escape, a move to another layer or to Jos: round 2, desktop F6); `focus` returns
-   *  the keyboard to the Zaslon control that opened it. */
-  function closePresentation(focus = false): void {
-    if (!presentationOpen) return;
-    presentationOpen = false;
-    presentationConfirmRevision = null;
-    paintPresentation();
-    paintShell();
-    if (focus) doc.querySelector<HTMLElement>('[data-testid=screen-control]')?.focus();
-  }
-
-  /** Explicit casting (D5): the one place a view frame leaves this device, for the current layer and selection. */
-  function cast(): void {
-    presentationOpen = !presentationOpen;
-    presentationConfirmRevision = null;
-    if (presentationOpen) session.refreshPresentation?.();
-    paintShell();
-    paintPresentation();
   }
 
   function present(action: 'present' | 'stop', confirm = false, target = currentPresentationTarget()): void {
@@ -1060,22 +1052,25 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     notice = { kind: 'expiring60', text, until: null };
   }
 
-  // --- share the city: one hop, the room mints, this only rotates ----------
+  // --- share the city and show on the screen: one sheet (owner, 5 Oct 2026) ----
   let shareDialog: DialogHandle | null = null;
   let shareRotation: Rotation | null = null;
   /** The 1 s tick that moves the rotation bar while the dialog is open. */
   let shareTick: unknown = null;
   let stopShareCount: (() => void) | null = null;
 
+  /** Ends the sheet and everything it ran: the code rotation, its tick, the count listener and a pending takeover question. */
   function closeShare(): void {
     shareRotation?.stop();
     shareRotation = null;
     if (shareTick !== null) { clearTimer(shareTick); shareTick = null; }
     stopShareCount?.();
     stopShareCount = null;
-    shareDialog?.close();
-    shareDialog?.destroy();
+    presentationConfirmRevision = null;
+    const dialog = shareDialog;
     shareDialog = null;
+    dialog?.close();
+    dialog?.destroy();
   }
 
   /** The bare code, as it is typed; the export path's attribution block has no place after a pairing code. */
@@ -1085,12 +1080,21 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     try { await clipboard.writeText(code); return true; } catch { return false; }
   }
 
-  function openShare(batch: CodeSlot[], serverNow: number): void {
-    closeShare();
+  /**
+   * "Podijeli grad": one bottom sheet with two parts. "Na telefon" asks the room for the rotating peer code and
+   * shows it as a QR with the letters once it arrives (fillShareCodes); after a refusal it says why there is none.
+   * "Na javnom zaslonu" is the presentation panel (what the screen shows, this view, the one action), painted by
+   * paintPresentation while the sheet is open, for a scanner's live session with a screen. The one header button
+   * opens it; the sheet's close button, Escape and a tap outside end both parts. `request` false (the codes arrived
+   * without the sheet) opens it without asking the room again.
+   */
+  function openShareSheet(request = true): void {
+    if (shareDialog || (!canShare() && !canScreen())) return;
     // The sentence names the host this page is served from; the QR carries the canonical one.
     const host = doc.location?.host || new URL(CODE_URL_BASE).host;
-    const body = createElementFromHTML(`<div class="share-body">
-<div class="share-qr" data-share="qr"></div>
+    const phone = canShare()
+      ? `<div class="share-body" data-share="phone" aria-busy="true">
+<div class="share-qr" data-share="qr"><span class="skeleton"></span></div>
 <p class="share-code tabular" data-testid="share-code" data-share="code"></p>
 <div class="share-progress" aria-hidden="true"><div class="share-progress-fill" data-share="fill"></div></div>
 <p class="share-rotates tabular" data-share="rotates"></p>
@@ -1098,21 +1102,65 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 <p class="share-read" data-share="read"></p>
 <button type="button" class="btn-ghost share-copy" data-action="copy-share-code">${iconMarkup('copy')}<span>${escapeHtml(i18n.t('session.shareCopy'))}</span></button>
 <div class="share-status" role="status" data-testid="share-status" data-share="status"></div>
+</div>`
+      : `<p class="share-text share-refused" data-share="phone">${escapeHtml(i18n.t('session.shareUnavailable'))}</p>`;
+    const screen = canScreen() ? '<section class="share-part share-screen" data-share="screen"></section>' : '';
+    const body = createElementFromHTML(`<div class="share-parts">
+<section class="share-part" aria-labelledby="share-phone-title"><h3 class="share-part-title" id="share-phone-title">${escapeHtml(i18n.t('session.shareToPhone'))}</h3>${phone}</section>
+${screen}
 </div>`);
+    // The dialog lives in the top layer outside the shell root, so its actions are dispatched from here: the copy
+    // button is its own, the presentation panel's go to the page's one dispatcher.
+    body.addEventListener('click', (event) => {
+      const target = (event.target as Element | null)?.closest<HTMLElement>('[data-action]');
+      if (!target) return;
+      if (target.dataset.action === 'copy-share-code') {
+        const code = shareRotation?.current()?.code;
+        if (!code) return;
+        void copyCode(formatCode(code)).then((ok) => sayShare('copied', i18n.t(ok ? 'session.shareCopied' : 'export.copyFailed')));
+        return;
+      }
+      dispatchAction(target, event);
+    });
+    const dialog = createDialog({ titleId: 'share-title', title: i18n.t('session.shareTitle'), closeLabel: i18n.t('common.close'), body, className: 'dialog-share dialog-sheet' });
+    dialog.element.dataset.testid = 'share-dialog';
+    shareDialog = dialog;
+    // The sheet's own close (its button, Escape, a tap outside) ends the rotation and the panel with it, and the keyboard
+    // returns to the button that opened it (a pointer tap does not always focus a button, so the dialog's opener may be
+    // the page's title).
+    dialog.element.addEventListener('close', () => {
+      if (shareDialog === dialog) closeShare();
+      doc.querySelector<HTMLElement>('[data-testid=share-city]')?.focus();
+    });
+    dialog.open();
+    if (request && canShare()) session.share();
+    if (canScreen()) { session.refreshPresentation?.(); paintPresentation(); }
+  }
+
+  /** One live region in the sheet's phone part, in the tree and empty from the start (a region that appears together
+   *  with its text is not announced); each kind of news gets one line, re-said in place rather than repeated. */
+  function sayShare(kind: 'copied' | 'joined', text: string): void {
+    const status = shareDialog?.body.querySelector<HTMLElement>('[data-share=status]');
+    if (!status) return;
+    let line = status.querySelector<HTMLElement>(`[data-share-line=${kind}]`);
+    if (!line) { line = doc.createElement('p'); line.dataset.shareLine = kind; status.appendChild(line); }
+    line.textContent = text;
+  }
+
+  /** The room's batch of codes lands in the open sheet's phone part: the QR, the letters, the bar and the read-aloud line rotate from here. */
+  function fillShareCodes(batch: CodeSlot[], serverNow: number): void {
+    const body = shareDialog?.body.querySelector<HTMLElement>('.share-body[data-share=phone]');
+    if (!shareDialog || !body) return;
+    shareRotation?.stop();
+    if (shareTick !== null) { clearTimer(shareTick); shareTick = null; }
+    stopShareCount?.();
+    body.removeAttribute('aria-busy');
     const part = (name: string): HTMLElement => body.querySelector<HTMLElement>(`[data-share=${name}]`)!;
     const qrBox = part('qr');
     const codeLine = part('code');
     const fill = part('fill');
     const rotates = part('rotates');
     const read = part('read');
-    const status = part('status');
-    // One live region, in the tree and empty from the start (a region that appears together with its
-    // text is not announced); each kind of news gets one line, re-said in place rather than repeated.
-    const say = (kind: 'copied' | 'joined', text: string): void => {
-      let line = status.querySelector<HTMLElement>(`[data-share-line=${kind}]`);
-      if (!line) { line = doc.createElement('p'); line.dataset.shareLine = kind; status.appendChild(line); }
-      line.textContent = text;
-    };
     // The bar fills over the slot and the sentence counts down to the next code, on the server's clock.
     // A new code puts the bar back to zero in one step, never as a one-second drain: the CSS transition
     // is switched off, the zero is committed by a forced style read, and the transition returns for the
@@ -1126,18 +1174,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       else fill.style.transform = transform;
       rotates.textContent = i18n.t('session.shareRotates', { seconds: Math.max(0, Math.ceil((slot.slotEnd - at) / 1000)) });
     };
-    // The dialog lives in the top layer outside the shell root, so its one action is handled here.
-    body.addEventListener('click', (event) => {
-      if (!(event.target as Element | null)?.closest('[data-action=copy-share-code]')) return;
-      const code = shareRotation?.current()?.code;
-      if (!code) return;
-      void copyCode(formatCode(code)).then((ok) => say('copied', i18n.t(ok ? 'session.shareCopied' : 'export.copyFailed')));
-    });
-    shareDialog = createDialog({ titleId: 'share-title', title: i18n.t('session.shareTitle'), closeLabel: i18n.t('common.close'), body, className: 'dialog-share dialog-sheet' });
-    shareDialog.element.dataset.testid = 'share-dialog';
-    shareDialog.open();
     const participantsAtOpen = session.snapshot().participants;
-    stopShareCount = session.onCount((count) => { if (count > participantsAtOpen) say('joined', i18n.t('session.sharePeerJoined')); });
+    stopShareCount = session.onCount((count) => { if (count > participantsAtOpen) sayShare('joined', i18n.t('session.sharePeerJoined')); });
     shareRotation = createRotation({
       now,
       onSlot: (slot) => {
@@ -1171,8 +1209,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     closeShare();
     sheet.close();
     notifySheet.close();
-    presentationOpen = false;
-    presentationConfirmRevision = null;
     store.pause(true);
     stopPolls();
     if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
@@ -1247,7 +1283,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       }, NEARBY_HOLD_MS + 100);
     }
   });
-  session.onCodes((batch, serverNow) => openShare(batch, serverNow));
+  // The codes come for our own request, so the sheet is open; a batch without it (an older room) opens the sheet without asking again.
+  session.onCodes((batch, serverNow) => { if (!shareDialog) openShareSheet(false); fillShareCodes(batch, serverNow); });
   session.onPresentation?.((state) => {
     if (disposed || (presentationState && state.revision < presentationState.revision)) return;
     const previous = presentationState;
@@ -1290,9 +1327,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   });
 
   // --- delegated interactions: stable roots, no closures on discarded nodes --
-  element.addEventListener('click', (event) => {
-    const target = (event.target as Element | null)?.closest<HTMLElement>('[data-action]');
-    if (!target || !element.contains(target)) return;
+  /** One dispatcher for every data-action: the shell's root listens for the page, the share sheet's body for the top layer. */
+  function dispatchAction(target: HTMLElement, event: Event): void {
     const d = target.dataset;
     switch (d.action) {
       case 'section-jump':
@@ -1324,8 +1360,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         return;
       }
       case 'directory': toggleDirectory(); return;
-      case 'presentation': cast(); return;
-      case 'presentation-close': closePresentation(true); return;
+      case 'presentation': openShareSheet(); return;
       case 'present-request': present('present'); return;
       case 'present-confirm': present('present', true); return;
       case 'present-cancel': presentationConfirmRevision = null; paintPresentation(); return;
@@ -1346,7 +1381,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       case 'lang-next': setLocale(nextLocale(i18n.getLocale())); return;
       case 'theme-next': if (deps.theme) { deps.theme.setPreference(nextTheme(deps.theme.getPreference())); render(); } return;
       case 'refresh-toggle': setPaused(!paused); return;
-      case 'countdown-toggle': if (!frozen) { countdownHidden = !countdownHidden; paintShell(); render(); } return;
+      case 'countdown-toggle': if (!frozen) { countdownAlways = !countdownAlways; paintShell(); render(); } return;
       case 'select':
         if (d.module) navigate(view.snapshot().layer, { kind: 'item', id: publicItemKey(d.module as ModuleId, d.itemId ?? ''), module: d.module as ModuleId }, true);
         return;
@@ -1363,12 +1398,17 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         return;
       }
       case 'session': sheet.open(); return;
-      case 'share-city': session.share(); return;
+      case 'share-city': openShareSheet(); return;
       case 'resume': setPaused(false); return;
       case 'dismiss-notice': notice = null; paintShell(); return;
       case 'map-full': setMapView(!mapFull); return;
       default: return;
     }
+  }
+  element.addEventListener('click', (event) => {
+    const target = (event.target as Element | null)?.closest<HTMLElement>('[data-action]');
+    if (!target || !element.contains(target)) return;
+    dispatchAction(target, event);
   });
   element.addEventListener('input', (event) => {
     const input = event.target;
@@ -1380,8 +1420,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   });
   element.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    // Escape closes the Zaslon panel first (round 2, desktop F6), then leaves the full map, and Jos (round 1, desktop F5).
-    if (presentationOpen) { event.preventDefault(); closePresentation(true); return; }
+    // Escape leaves the full map, then Jos (round 1, desktop F5); the share sheet, a modal dialog, closes on its own.
     if (mapFull) { event.preventDefault(); setMapView(false); return; }
     if (directory) { event.preventDefault(); toggleDirectory(false); focusWorkspace(view.snapshot().layer); }
   });
@@ -1394,12 +1433,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }, true);
 
   // --- subscriptions and start ---------------------------------------------
-  // A move to another layer closes the Zaslon panel (round 2, desktop F6); a selection inside the layer keeps it, since
-  // choosing what to show is what the panel is open for.
+  // A move to another layer (the browser's Back under the sheet) closes the share sheet: its panel offered the view that
+  // has gone (round 2, desktop F6); a selection inside the layer keeps it, since choosing what to show is what it is open for.
   let viewLayer = view.snapshot().layer;
   const stopView = view.subscribe(() => {
     const layer = view.snapshot().layer;
-    if (layer !== viewLayer) { viewLayer = layer; closePresentation(); }
+    if (layer !== viewLayer) { viewLayer = layer; closeShare(); }
     render(); paintShell();
   });
   const stopCity = cityStore.subscribe(() => { if(!disposed&&!frozen)requestRender(true); });
@@ -1465,7 +1504,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (expiredByClock()) { freeze(); return; }
     if (notice && notice.until !== null && now() >= notice.until) notice = null;
     paintShell();
-    if (presentationOpen) paintPresentation();
   }, TICK_MS);
 
   return {

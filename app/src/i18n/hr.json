@@ -79,17 +79,13 @@
     "session": "Sesija",
     "remaining": "Preostalo {time}",
     "paused": "Osvježavanje je zaustavljeno; prikazani su podaci od {time}.",
-    "sourcesDown_one": "{count} izvor ne odgovara.",
-    "sourcesDown_few": "{count} izvora ne odgovaraju.",
-    "sourcesDown_other": "{count} izvora ne odgovara.",
     "wordmarkLabel": "Kaj ima?, početna stranica",
     "wordmarkSada": "Kaj ima?, natrag na Sada",
     "skip": "Prijeđi na sadržaj",
     "detailBack": "Natrag na popis",
     "emptyTitle": "Ovdje se otključava Zagreb",
     "emptyLead": "Skeniraj kod sa zaslona u prostoru ili upiši osam slova; deset minuta grada je na tvom uređaju.",
-    "clockLabel": "{time}, {weather}. Otvori Vrijeme.",
-    "clockOnly": "{time}. Otvori Vrijeme."
+    "weatherLabel": "{weather}. Otvori Vrijeme."
   },
   "time": {
     "justNow": "upravo sada",
@@ -467,9 +463,9 @@
     "refresh": "Osvježavanje podataka",
     "refreshOn": "Uključeno",
     "refreshOff": "Zaustavljeno",
-    "countdown": "Odbrojavanje u zaglavlju",
-    "countdownOn": "Prikazano",
-    "countdownOff": "Skriveno",
+    "countdown": "Odbrojavanje uvijek u zaglavlju",
+    "countdownOn": "Uvijek",
+    "countdownOff": "Zadnjih pet minuta",
     "languageName": "hrvatski",
     "languageAction": "Promijeni jezik u {name}.",
     "languageCurrent": "Trenutno: {name}"
@@ -497,6 +493,7 @@
     "refreshNow": "Osvježi sada",
     "share": "Podijeli grad",
     "shareTitle": "Podijeli grad",
+    "shareToPhone": "Na telefon",
     "shareBody": "Druga osoba skenira ovaj kod ili upiše slova na {host}/s. Dobiva vlastitih pet minuta; tvoje se vrijeme ne mijenja. Kod se mijenja svakih 30 sekundi.",
     "shareUnavailable": "Ova je sesija dobivena od druge osobe i ne može se dalje dijeliti.",
     "shareTooLate": "Za dijeljenje je ostalo premalo vremena.",
@@ -1154,11 +1151,9 @@
     }
   },
   "presentation": {
-    "control": "Zaslon",
     "title": "Na javnom zaslonu",
     "present": "Prikaži ovaj pogled",
     "stop": "Vrati pregled grada",
-    "close": "Zatvori",
     "current": "Trenutačno na zaslonu",
     "next": "Ovaj pogled",
     "overview": "Pregled grada",
@@ -1308,6 +1303,11 @@
   },
   "sada": {
     "departuresAt": "Sljedeći polasci, {stop}",
+    "trains": "Vlakovi",
+    "trainsAt": "Vlakovi · {station}",
+    "trainsShow": "Prikaži vlakove, {station}",
+    "transitShow": "Prikaži tramvaje i autobuse",
+    "noTrains": "Danas više nema vlakova.",
     "mapBand": "Karta oko mjesta {place}. Otvori Kartu.",
     "viewSchema": "Shema",
     "viewMap": "Karta"

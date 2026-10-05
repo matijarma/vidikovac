@@ -11,7 +11,7 @@ export const ICON_NAMES = [
   'ellipsis', 'external-link', 'eye', 'eye-off', 'file-text', 'filter', 'footprints', 'gauge', 'hard-hat', 'home', 'info',
   'landmark', 'languages', 'list', 'map', 'map-pin', 'moon', 'newspaper', 'pause', 'phone', 'pill', 'play',
   'printer', 'qr-code', 'radio', 'refresh-cw', 'route', 'search', 'share-2', 'shield', 'siren', 'star', 'sun', 'sun-moon', 'sunrise',
-  'sunset', 'thermometer', 'ticket', 'sliders-horizontal', 'tram-front', 'trash-2', 'triangle-alert', 'users', 'wind', 'x', 'zap',
+  'sunset', 'thermometer', 'ticket', 'sliders-horizontal', 'train-front', 'tram-front', 'trash-2', 'triangle-alert', 'users', 'wind', 'x', 'zap',
 ] as const;
 export type IconName = (typeof ICON_NAMES)[number];
 
@@ -84,6 +84,7 @@ const SYMBOLS: Record<IconName, string> = {
   thermometer: '<path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/>',
   ticket: '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/>',
   'sliders-horizontal': '<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>',
+  'train-front': '<path d="M8 3.1V7a4 4 0 0 0 8 0V3.1"/><path d="m9 15-1-1"/><path d="m15 15 1-1"/><path d="M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z"/><path d="m8 19-2 3"/><path d="m16 19 2 3"/>',
   'tram-front': '<rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/>',
   'trash-2': '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
   'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',

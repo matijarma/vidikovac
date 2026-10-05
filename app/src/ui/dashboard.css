@@ -1,26 +1,29 @@
 /* Kaj ima? - the /d/ shell. One DOM for both surfaces; the grid places the
-   same regions differently. Phone: a sticky 52 px status line (wordmark,
-   Zaslon, the labelled "Podijeli grad", the session pill, an icon-only safety
-   control), banners in flow, the workspace and a fixed tab bar Sada · Karta ·
-   Još. Desktop (>= 60rem): the same status line as one 56 px row with Još,
-   spanning one full workspace column (plan D4, D10; companion WP4: the
-   six-domain bar and the clock are gone, every other domain is a Još row). */
+   same regions differently. Phone: a sticky 52 px status line (wordmark, the
+   weather chip, the labelled "Podijeli grad", the quiet session pill, an
+   icon-only safety control), banners in flow, the workspace and a fixed tab
+   bar Sada · Karta · Još. Desktop (>= 60rem): the same status line as one
+   56 px row with Još, spanning one full workspace column (plan D4, D10;
+   companion WP4: the six-domain bar and the clock are gone, every other
+   domain is a Još row; the irritation pass of 5 Oct 2026: the Zaslon box and
+   its inline panel are gone, the public screen is a part of the share sheet). */
 .ki {
   --ki-top: calc(3.25rem + env(safe-area-inset-top, 0px));
   --ki-tabs: calc(3.5rem + env(safe-area-inset-bottom, 0px));
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto auto 1fr;
-  grid-template-areas: 'status' 'presentation' 'banners' 'main';
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas: 'status' 'banners' 'main';
   min-height: 100vh;
   min-height: 100svh;
   background: var(--tone-surface-canvas);
 }
-/* The status line never scrolls away: up to five keyed controls on one 44 px line, 3.25rem tall plus the notch. */
+/* The status line never scrolls away: up to five keyed controls on one 44 px line, 3.25rem tall plus the notch:
+   the wordmark and the weather chip at the start, a flexible gap, then "Podijeli grad", the pill and the shield. */
 .ki-head {
   grid-area: status;
   position: sticky; inset-block-start: 0; z-index: var(--z-sticky);
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; align-items: center; column-gap: var(--sp-1);
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto auto; align-items: center; column-gap: var(--sp-1);
   min-block-size: var(--ki-top);
   padding-block-start: env(safe-area-inset-top, 0px);
   padding-inline: max(var(--sp-3), env(safe-area-inset-left, 0px)) max(var(--sp-2), env(safe-area-inset-right, 0px));
@@ -29,28 +32,16 @@
   container-type: inline-size; container-name: header;
 }
 .ki-head > * { min-inline-size: 0; }
-.ki-screen { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); min-width: var(--target); min-height: var(--target); padding: 0 var(--sp-2); border: 1px solid transparent; border-radius: var(--r-md); font: inherit; font-size: var(--type-control); font-weight: var(--weight-bold); background: transparent; color: var(--tone-text-muted); cursor: pointer; }
-.ki-screen[data-active='true'], .ki-screen[aria-expanded='true'] { background: var(--tone-tint-action); color: var(--tone-action-brand); border-color: var(--tone-stroke); }
-.ki-screen > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
-/* "Podijeli grad" [O-61]: the Zaslon box with its word visible in the brand tone, a 44 px target beside the pill. */
+/* The weather chip (experience/chrome.ts weatherChipMarkup): the sky's glyph in the weather tone and the temperature,
+   a 44 px link into Vrijeme beside the wordmark; tinted while Vrijeme is the page. */
+.ki-weather { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-text-primary); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; touch-action: manipulation; }
+.ki-weather .icon { width: 1rem; height: 1rem; color: var(--tone-weather); }
+.ki-weather[aria-current='page'] { background: var(--tone-tint-action); }
+.ki-weather[data-stale='true'] .tb-temp { color: var(--tone-text-muted); }
+/* "Podijeli grad" [O-61]: the word visible in the brand tone, a 44 px target beside the pill; it opens the share sheet. */
 .ki-share { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-inline-size: var(--target); min-block-size: var(--target); padding: 0 var(--sp-2); border: 1px solid transparent; border-radius: var(--r-md); font: inherit; font-size: var(--type-control); font-weight: var(--weight-bold); background: transparent; color: var(--tone-action-brand); white-space: nowrap; cursor: pointer; touch-action: manipulation; }
 .ki-share > span { position: static; }
-@media (hover: hover) { .ki-share:hover { background: var(--tone-surface-2); } }
-.ki-presentation { grid-area: presentation; min-width: 0; background: var(--tone-surface-1); border-bottom: 1px solid var(--tone-stroke); }
-.ki-presentation:empty { display: none; }
-.present { max-width: 68rem; margin: 0 auto; padding: var(--sp-4); display: grid; gap: var(--sp-3); }
-.present-head { display: flex; align-items: start; justify-content: space-between; gap: var(--sp-3); }
-.present-head h2 { font-size: var(--type-head); }
-.present-head p, .present-label { font-size: var(--type-secondary); color: var(--tone-text-muted); }
-.present-views { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
-.present-views > div { min-width: 0; }
-.present-subject { font-size: var(--type-control); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
-.present-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
-.present-actions button { white-space: normal; text-align: start; }
-.present-confirm { display: grid; gap: var(--sp-3); }
-.present-confirm p, .present-feedback { font-size: var(--type-control); }
-.present-feedback { color: var(--tone-action-brand); }
-.present-private { font-size: var(--type-secondary); color: var(--tone-text-muted); max-width: var(--measure-prose); }
+@media (hover: hover) { .ki-share:hover, .ki-weather:hover { background: var(--tone-surface-2); } }
 /* Polling: a 2 px peacock hairline along the header's bottom edge, but only once a fetch has been on its way for
    longer than a poll normally takes (dashboard.ts SLOW_FETCH_MS writes data-slow; owner, 30 Sep: the line blinked on
    every 10 s poll). A fetch that answers inside that never shows; a slow one lights the line and drops it when it lands. */
@@ -84,16 +75,17 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 .ki-wordmark-text { font-size: var(--type-body); font-weight: var(--weight-bold); letter-spacing: -0.04em; white-space: nowrap; }
 .ki-wordmark-mark { color: var(--tone-action-brand); }
 
-/* Session pill: ring and remaining time on a surface-2 pill; the sentence is
-   for readers. Amber for the last minute, rose for the last twenty seconds:
-   the ring strokes with --tone-action-brand, so one override recolours the
-   ring and the tint together. */
+/* Session pill: "Sesija" with a chevron, the remaining time in its place for the
+   last five minutes (or always, by the Još switch); the sentence is for readers.
+   Amber for the last minute, rose for the last twenty seconds: the ring strokes
+   with --tone-action-brand, so one override recolours the ring and the tint
+   together. */
 .ki-session { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); padding: 0 var(--sp-1); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; cursor: pointer; touch-action: manipulation; }
 .ki-session .g-ring { display: none; }
 .ki-session-text { display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
 .ki-session-sentence { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .ki-session-time { font-size: var(--text-sm); font-weight: var(--weight-bold); line-height: 1; }
-.ki-session-more { display: none; }
+.ki-session-more { display: block; width: 12px; height: 12px; }
 .ki-session[data-urgency='warn'] { background: var(--tone-tint-weather); --tone-action-brand: var(--tone-weather); }
 .ki-session[data-urgency='alert'] { background: var(--tone-tint-urgency); --tone-action-brand: var(--tone-urgency); }
 .ki-session[data-state='frozen'] .g-ring, .ki-session[data-state='reconnecting'] .g-ring { opacity: 0.5; }
@@ -109,15 +101,16 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 @container header (max-width: 21rem) {
   .ki-share > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
-/* Zoom-compact (390 px at 200 % is 12.2rem): the wordmark drops to icon-only, the session ring leaves and the
-   controls keep their 44 px minimum in device pixels instead of growing with the text (2.75rem is 88 px at 200 %:
-   five of them would widen the document), so Zaslon, Podijeli grad, the pill and Sigurnost still fit one row.
-   A container query styles the container's descendants, never the container itself: the 44 px goes on the
-   header's children, and the two icon buttons give up half their side padding (the header's own padding is
-   out of this block's reach). */
+/* Zoom-compact (390 px at 200 % is 12.2rem): the wordmark drops to icon-only, the weather chip to its glyph (the
+   temperature stays in its aria-label), the session ring leaves and the controls keep their 44 px minimum in device
+   pixels instead of growing with the text (2.75rem is 88 px at 200 %: five of them would widen the document), so the
+   chip, Podijeli grad, the pill and Sigurnost still fit one row. A container query styles the container's descendants,
+   never the container itself: the 44 px goes on the header's children, and the icon buttons give up half their side
+   padding (the header's own padding is out of this block's reach). */
 @container header (max-width: 18rem) {
   .ki-head > * { --target: 44px; }
-  .ki-screen { padding-inline: var(--sp-1); }
+  .ki-weather { padding-inline: var(--sp-1); }
+  .ki-weather > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .ki-share { padding-inline: var(--sp-1); }
   .ki-wordmark { min-inline-size: 44px; justify-content: center; }
   .ki-wordmark-text { font-size: 0; }
@@ -125,7 +118,7 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-session .g-ring { display: none; }
 }
 @media (max-width: 59.99rem) {
-  .ki-head > [data-key='screen'] { grid-column: 3; }
+  .ki-head > [data-key='weather'] { grid-column: 2; }
   .ki-head > [data-key='share'] { grid-column: 4; }
   .ki-head > [data-key='session'] { grid-column: 5; }
   .ki-head > [data-key='safety'] { grid-column: 6; }
@@ -174,42 +167,31 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 .banner-dismiss { margin-inline-start: auto; flex: none; min-inline-size: var(--target); }
 
 /* Desktop: the status line spans the page as one 56 px row over one full
-   workspace column (spec §3, D4, D10): wordmark, the spacer, Zaslon, Podijeli
-   grad, the session pill, Još and the safety control. No six-domain bar, no
-   clock and no way into Karta [O-56]: Karta stands beside Sada on the page
-   (.ki-desk); the tab bar leaves. */
+   workspace column (spec §3, D4, D10): wordmark, the weather chip, the spacer,
+   Podijeli grad, the session pill, Još and the safety control. No six-domain
+   bar, no clock and no way into Karta [O-56]: Karta stands beside Sada on the
+   page (.ki-desk); the tab bar leaves. */
 @media (min-width: 60rem) {
-  .ki { --ki-top: 3.5rem; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; grid-template-areas: 'status' 'presentation' 'banners' 'main'; }
+  .ki { --ki-top: 3.5rem; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; grid-template-areas: 'status' 'banners' 'main'; }
   html:has(.ki) { scroll-padding-block: 3.5rem 0; }
-  .ki-head { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
+  .ki-head { grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
   .ki-wordmark-text { font-size: var(--type-title); }
-  .ki-screen { padding-inline: var(--sp-3); border-color: var(--tone-stroke); }
-  .ki-screen > span { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
   .ki-share { padding-inline: var(--sp-3); border-color: var(--tone-stroke); }
-  /* Placed by key, so a session without Zaslon or the share button keeps the rest flush right. */
-  .ki-head > [data-key='screen'] { grid-column: 3; }
+  /* Placed by key, so a session without the weather chip or the share button keeps the rest flush right. */
+  .ki-head > [data-key='weather'] { grid-column: 2; }
+  .ki-head > [data-key='space'] { grid-column: 3; }
   .ki-head > [data-key='share'] { grid-column: 4; }
   .ki-head > [data-key='session'] { grid-column: 5; }
   .ki-head > [data-key='more'] { grid-column: 6; }
   .ki-head > [data-key='safety'] { grid-column: 7; }
-  /* The Zaslon panel in one band (round 2, desktop F6: 228 of 900 px pushed Sada down): the two views and the action
-     share a row under the head, the privacy line closes it. */
-  .present { grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--sp-2) var(--sp-6); padding: var(--sp-3) var(--sp-8); }
-  .present > :not(.present-views):not(.present-actions) { grid-column: 1 / -1; }
-  .present-views { gap: var(--sp-6); }
-  .present-actions { justify-content: end; }
   .ki-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
   .ki-more[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
   .ki-more[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
-  .ki-clock { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-text-primary); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; touch-action: manipulation; }
-  .ki-clock .icon { width: 1rem; height: 1rem; color: var(--tone-text-muted); }
-  /* The shared weather group (weather-status.ts) keeps its own classes; a hairline separates it from the clock and another the sunset from the temperature (kajimafix 01.9); only the sunset glyph takes the amber tone here. */
-  .ki-weather { display: inline-flex; align-items: center; gap: var(--sp-1); margin-inline-start: var(--sp-1); padding-inline-start: var(--sp-2); border-inline-start: 1px solid var(--tone-stroke); }
-  .ki-clock .tb-sun { color: var(--tone-weather); margin-inline-start: var(--sp-1); padding-inline-start: var(--sp-2); border-inline-start: 1px solid var(--tone-stroke); }
+  .ki-weather { padding-inline: var(--sp-3); }
   .ki-tabbar { display: none; }
   .ki-banners { grid-area: banners; padding: var(--sp-4) var(--sp-6) 0; }
   .ki-main { grid-area: main; padding: var(--sp-3) var(--sp-6) var(--sp-10); }   /* spec §3: page inset 24 px, band to content 12 px */
-  @media (hover: hover) { .ki-more:hover, .ki-clock:hover { background: var(--tone-surface-2); color: var(--tone-text-primary); } }
+  @media (hover: hover) { .ki-more:hover { background: var(--tone-surface-2); color: var(--tone-text-primary); } }
 }
 @media (min-width: 90rem) {
   .ki-main { padding-inline: var(--sp-8); }
@@ -251,15 +233,35 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 }
 .sheet-label { margin: 0; font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
 
-/* Share the city: the QR plate is an object (R-D3) at 200 px, the code at
-   numeral mono, a 4 px bar that fills over the slot (smoothly between the 1 s
-   ticks; in one step back to zero when the code changes, dashboard.ts) with the
-   seconds to the next code, the sentence with this page's host, the read-aloud
-   line, a 44 px copy and one live status region that is in the tree from the
-   start and takes no room until it has something to say (the spacing is a
-   margin on each following child, not a grid gap, so the empty region adds
-   none). */
+/* Share the city (dashboard.ts openShareSheet): one sheet in two parts. "Na
+   telefon": the QR plate is an object (R-D3) at 200 px, the code at numeral
+   mono, a 4 px bar that fills over the slot (smoothly between the 1 s ticks;
+   in one step back to zero when the code changes) with the seconds to the next
+   code, the sentence with this page's host, the read-aloud line, a 44 px copy
+   and one live status region that is in the tree from the start and takes no
+   room until it has something to say (the spacing is a margin on each
+   following child, not a grid gap, so the empty region adds none). "Na javnom
+   zaslonu": the presentation panel under a hairline, the two views side by
+   side, the action and the privacy line (owner, 5 Oct 2026: one button, one
+   sheet, in place of the header's Zaslon box and its inline band). */
 .dialog-share .dialog-body { touch-action: pan-y; }
+.share-parts { display: grid; }
+.share-part + .share-part { margin-block-start: var(--sp-5); padding-block-start: var(--sp-4); border-block-start: 1px solid var(--tone-stroke); }
+.share-part-title { margin: 0 0 var(--sp-3); font-size: var(--type-head); text-align: start; }
+.share-refused { margin: 0; color: var(--tone-text-muted); }
+.share-body[aria-busy='true'] .share-qr .skeleton { display: block; inline-size: 200px; block-size: 200px; border-radius: var(--r-md); }
+.present { display: grid; gap: var(--sp-3); }
+.present-head { display: grid; gap: var(--sp-1); }
+.present-head p, .present-label { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); }
+.present-views { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
+.present-views > div { min-width: 0; }
+.present-subject { margin: 0; font-size: var(--type-control); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.present-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
+.present-actions button { white-space: normal; text-align: start; }
+.present-confirm { display: grid; gap: var(--sp-3); }
+.present-confirm p, .present-feedback { margin: 0; font-size: var(--type-control); }
+.present-feedback { color: var(--tone-action-brand); }
+.present-private { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); max-width: var(--measure-prose); }
 .share-body { display: grid; justify-items: center; text-align: center; }
 .share-body > * + * { margin-block-start: var(--sp-3); }
 .share-qr .qr { box-sizing: border-box; inline-size: 200px; max-inline-size: none; }

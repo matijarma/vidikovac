@@ -59,7 +59,7 @@ for (const size of sizes) for (const theme of ['light', 'dark'] as const) {
         await test.step(`present ${layer}`, async () => {
           await openLayer(phone, layer);
           const panel = phone.getByTestId('presentation-panel');
-          if (!(await panel.isVisible())) await phone.getByTestId('screen-control').click();
+          if (!(await panel.isVisible())) await phone.getByTestId('share-city').click();
           await expect(panel).toBeVisible();
           await phone.getByTestId('present-view').click();
           await expect(phone.getByTestId('presentation-feedback')).toContainText('Prikazano', { timeout: 20_000 });

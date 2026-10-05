@@ -15,8 +15,8 @@ export const TRANSPORT_TAB_WORD = 'Karta';
 
 const shell = (over: Partial<ShellState> = {}): ShellState => ({
   layer: 'grad-sada', directory: false, phase: 'live', frozen: false, reconnecting: false, secondsLeft: 600, totalSeconds: 600,
-  expiresAt: null, countdownHidden: false, paused: false, loading: false, canShare: true, label: null, role: 'scanner',
-  participants: 1, error: null, lastRefresh: null, mapFull: false, notice: null, sourcesDown: 0, surface: 'phone',
+  expiresAt: null, countdownShown: false, paused: false, loading: false, canShare: true, canScreen: false, weather: null, label: null, role: 'scanner',
+  participants: 1, error: null, lastRefresh: null, mapFull: false, notice: null, surface: 'phone',
   stopName: null, hasScreen: false, canCast: false, castReason: null, castSent: false,
   notify: {} as ShellState['notify'], notifyActive: 0, notifyKeys: [],
   ...over,

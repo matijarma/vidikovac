@@ -78,16 +78,13 @@
     "session": "Session",
     "remaining": "{time} left",
     "paused": "Refreshing is paused; the view holds the data as of {time}.",
-    "sourcesDown_one": "{count} source is not responding.",
-    "sourcesDown_other": "{count} sources are not responding.",
     "wordmarkLabel": "Kaj ima?, home page",
     "wordmarkSada": "Kaj ima?, back to Now",
     "skip": "Skip to content",
     "detailBack": "Back to the list",
     "emptyTitle": "This is where Zagreb unlocks",
     "emptyLead": "Scan the code from a screen in the venue or type the eight letters; ten minutes of the city are on your device.",
-    "clockLabel": "{time}, {weather}. Open Weather.",
-    "clockOnly": "{time}. Open Weather."
+    "weatherLabel": "{weather}. Open Weather."
   },
   "time": {
     "justNow": "just now",
@@ -457,9 +454,9 @@
     "refresh": "Data refresh",
     "refreshOn": "On",
     "refreshOff": "Paused",
-    "countdown": "Countdown in the header",
-    "countdownOn": "Shown",
-    "countdownOff": "Hidden",
+    "countdown": "Countdown always in the header",
+    "countdownOn": "Always",
+    "countdownOff": "Last five minutes",
     "languageName": "English",
     "languageAction": "Change the language to {name}.",
     "languageCurrent": "Currently: {name}"
@@ -487,6 +484,7 @@
     "refreshNow": "Refresh now",
     "share": "Share the city",
     "shareTitle": "Share the city",
+    "shareToPhone": "To a phone",
     "shareBody": "Another person scans this code or types the letters at {host}/s. They get their own five minutes; your time does not change. The code changes every 30 seconds.",
     "shareUnavailable": "This session came from another person and cannot be shared further.",
     "shareTooLate": "Too little time left to share.",
@@ -1126,11 +1124,9 @@
     }
   },
   "presentation": {
-    "control": "Screen",
     "title": "On the public screen",
     "present": "Show this view",
     "stop": "Return to city overview",
-    "close": "Close",
     "current": "Currently on screen",
     "next": "This view",
     "overview": "City overview",
@@ -1279,6 +1275,11 @@
   },
   "sada": {
     "departuresAt": "Next departures, {stop}",
+    "trains": "Trains",
+    "trainsAt": "Trains · {station}",
+    "trainsShow": "Show trains, {station}",
+    "transitShow": "Show trams and buses",
+    "noTrains": "No more trains today.",
     "mapBand": "Map around {place}. Open the map.",
     "viewSchema": "Diagram",
     "viewMap": "Map"

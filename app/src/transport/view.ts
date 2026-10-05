@@ -471,12 +471,14 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
  * line and the headsign are ZET's text: a row that fails the row-surface check
  * (kiosk/arrivals.ts vettedArrival) is not drawn at all.
  */
-export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number, kind: 'departure' | 'timetable' = 'departure', now?: number, via?: string): string {
+export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number, kind: 'departure' | 'timetable' = 'departure', now?: number, via?: string, link?: string): string {
   if (!vettedArrival(row)) return '';
   const live = row.live && frozenAt === undefined;
+  const cells = `${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}${via ? `<small class="sada-via">${esc(via)}</small>` : ''}</span>${arrivalTime(i18n, row, frozenAt, now)}`;
   // Keyed by the trip, so a poll that moves its estimate by a few seconds changes the time in place instead of drawing
-  // the row again (a trip passes a stop once; a row without a trip id falls back to its line and time).
-  return `<li class="sada-departure" data-kind="${kind}" data-key="${attr(row.tripId || `${row.routeId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}${via ? `<small class="sada-via">${esc(via)}</small>` : ''}</span>${arrivalTime(i18n, row, frozenAt, now)}</li>`;
+  // the row again (a trip passes a stop once; a row without a trip id falls back to its line and time). `link` is the
+  // attributes of an anchor that wraps the cells (the train rows open their station on Karta); the caller escapes them.
+  return `<li class="sada-departure" data-kind="${kind}" data-key="${attr(row.tripId || `${row.routeId}|${row.atMs}`)}" data-live="${live}">${link ? `<a class="sada-departure-link" ${link}>${cells}</a>` : cells}</li>`;
 }
 
 /** What comes next here, departures first [O-50]: the first three trips as
