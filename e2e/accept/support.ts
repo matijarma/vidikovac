@@ -39,8 +39,8 @@ export {
 export const PLACE_MIN_CHARS = 3;
 /** The time word of a timeless row (owner string, §11). */
 export const ALWAYS_WORD = 'uvijek';
-/** Read-only touch: the stop's board stays this long, then the wall returns by itself ([O-58]). */
-export const TOUCH_BOARD_MS = 60_000;
+/** Read-only touch: the stop's board stays this long, then the wall returns by itself ([O-58]; 30 s since 5 Oct 2026). */
+export const TOUCH_BOARD_MS = 30_000;
 /** The phone's first viewport (the Pixel 7 emulation keeps its touch and scale, the viewport is the plan's 390×844). */
 export const PHONE_VIEWPORT = Object.freeze({ width: 390, height: 844 });
 /** The desktop the phone's layout widens to ([O-56]). */

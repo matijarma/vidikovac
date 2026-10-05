@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
 // WP2 step 9, the wall's read-only touch [O-58]: a stop ring on the map opens
-// that stop's board for 60 s, a row of "U blizini" its detail, the pharmacy
+// that stop's board for 30 s, a row of "U blizini" its detail, the pharmacy
 // its address and phone; nothing else reacts, the camera never moves, and the
 // wall returns by itself (the timer, the deadline read on every tick and poll,
-// an outage, anything else taking the stage). Proven at three levels: the hit
+// an outage, anything else taking the stage) or on a second tap on the detail
+// or on what it shows. A press held on any of them opens Postavke instead
+// (5 Oct 2026). Proven at three levels: the hit
 // arithmetic (kiosk/mapview.ts), the panel and its builders (kiosk/timeline.ts)
 // and the controller's wiring (kiosk.ts) with every dependency faked.
 import '../../shared/kiosk/external-text';
@@ -30,7 +32,7 @@ import { drawnStops, fieldPixel, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, touchAt }
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from '../../app/src/kiosk/pharmacies';
 import { kioskStrings } from '../../app/src/kiosk/strings';
 import {
-  mountTouchPanel, TOUCH_MS, type TimelineMeasure, type TimelineRow,
+  mountTouchPanel, TOUCH_FITS, TOUCH_MS, type TimelineMeasure, type TimelineRow, type TouchFit,
 } from '../../app/src/kiosk/timeline';
 import * as touchContent from '../../app/src/kiosk/touch-content';
 import { loadStopBoardRows, pharmacyDetailVariants, rowDetailVariants, STOP_BOARD_ROWS, stopBoardVariants, TIMETABLE_LINE_TRIPS } from '../../app/src/kiosk/touch-content';
@@ -243,6 +245,52 @@ describe('the touch panel (kiosk/timeline.ts mountTouchPanel)', () => {
     panel.show('row', []);
     expect(host.querySelector('.k-touch')).toBeNull();
   });
+
+  // Owner, 5 Oct 2026: a second press on the "uvijek" row showed only "uvijek". No variant fitted, the leanest stayed
+  // as it was, and the body's overflow:hidden cut its title away below the time. The last resort makes it fit.
+  it('makes the leanest variant fit when none holds whole: its secondary lines go first, then its title is clamped to two lines, then to one', () => {
+    expect(TOUCH_FITS).toEqual(['lean', 'clamp', 'tight']);
+    const always = row({ id: 'always:gradska-vijecnica', kind: 'always', always: true, atMs: null, title: 'Zgrada Gradske vijećnice', sub: 'Trg Stjepana Radića 1' });
+    const variants = rowDetailVariants(i18n, always, NOW);
+    expect(variants.length).toBeGreaterThan(1);
+    /** A box that holds the body only from `fit` on (TOUCH_FITS order); `null` never holds it. */
+    const holdsFrom = (fit: TouchFit | null): TimelineMeasure => ({
+      box: (el) => {
+        if (!el.classList.contains('k-touch-body')) return { height: 200, width: 400, overflow: false };
+        const at = el.dataset.fit === undefined ? -1 : TOUCH_FITS.indexOf(el.dataset.fit as TouchFit);
+        return { height: 200, width: 400, overflow: fit === null || at < TOUCH_FITS.indexOf(fit) };
+      },
+      lines: () => 1,
+    });
+    const shown = (fit: TouchFit | null): HTMLElement => {
+      const host = document.createElement('div');
+      host.className = 'k-nearby-host';
+      document.body.replaceChildren(host);
+      mountTouchPanel(host, { measure: holdsFrom(fit) }).show('row', variants);
+      return host.querySelector<HTMLElement>('.k-touch [data-testid=touch-detail]')!;
+    };
+    for (const fit of TOUCH_FITS) {
+      const body = shown(fit);
+      // The leanest variant, its time and its title always there, at the first fit its box holds.
+      expect(body.outerHTML.replace(/ data-fit="\w+"/, '')).toBe(doc(variants.at(-1)!).querySelector<HTMLElement>('[data-testid=touch-detail]')!.outerHTML);
+      expect(text(body.querySelector('.k-touch-when'))).toBe('uvijek');
+      expect(text(body.querySelector('.k-touch-title'))).toBe('Zgrada Gradske vijećnice');
+      expect(body.dataset.fit).toBe(fit);
+    }
+    // A box too small for anything keeps the tightest fit: the time and one line of the title.
+    expect(shown(null).dataset.fit).toBe('tight');
+    // A variant that holds whole carries no fit at all.
+    const roomy = document.createElement('div');
+    document.body.replaceChildren(roomy);
+    mountTouchPanel(roomy, { measure: { box: () => ({ height: 900, width: 600, overflow: false }), lines: () => 1 } }).show('row', variants);
+    expect(roomy.querySelector<HTMLElement>('[data-testid=touch-detail]')!.dataset.fit).toBeUndefined();
+    expect([...roomy.querySelectorAll('.k-touch-line')].map(text)).toEqual(['Trg Stjepana Radića 1']);
+    // The stylesheet: the secondary lines leave under any fit, the title clamps to two lines and then to one.
+    const css = readFileSync(join(import.meta.dirname, '..', '..', 'app/src/ui/kiosk-city.css'), 'utf8');
+    expect(css).toContain('.kiosk .k-touch-body[data-fit] .k-touch-line,.kiosk .k-touch-body[data-fit] .k-touch-timetable{display:none}');
+    expect(css).toContain('.kiosk .k-touch-body[data-fit=clamp] .k-touch-title,.kiosk .k-touch-body[data-fit=tight] .k-touch-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}');
+    expect(css).toContain('.kiosk .k-touch-body[data-fit=tight] .k-touch-title{-webkit-line-clamp:1;line-clamp:1}');
+  });
 });
 
 // --- the controller ------------------------------------------------------------------------
@@ -353,6 +401,9 @@ function mount(opts: { viewport?: { width: number; height: number }; modules?: (
 
 describe('lazy touch content (DR2 budget)', () => {
   const tapPharmacy = (k: ReturnType<typeof mount>): void => k.q('[data-testid=strip-pharmacy]')!.click();
+  /** The next gesture's finger coming down on the pharmacy (the wall starts the content's load on it); a second tap
+   *  would close the open detail (5 Oct 2026). */
+  const touchDown = (k: ReturnType<typeof mount>): void => { k.q('[data-testid=strip-pharmacy]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true })); };
 
   it('keeps content off startup, shares a pending gesture load and renders the current touch', async () => {
     let deliver!: (value: typeof touchContent) => void;
@@ -362,7 +413,7 @@ describe('lazy touch content (DR2 budget)', () => {
     await flush();
     expect(load).not.toHaveBeenCalled();
     tapPharmacy(k);
-    tapPharmacy(k);
+    touchDown(k);
     expect(load).toHaveBeenCalledTimes(1);
     expect(text(k.q('[data-testid=touch-loading]'))).toBe(i18n.t('status.loading'));
     expect(k.q('[data-testid=kiosk-invitation]')).not.toBeNull();
@@ -414,7 +465,7 @@ describe('lazy touch content (DR2 budget)', () => {
     expect(text(k.q('[data-testid=touch-loading]'))).toBe(i18n.t('presentation.unavailable'));
     k.tick(CODE_TICK_MS);
     expect(load).toHaveBeenCalledTimes(1);
-    tapPharmacy(k);
+    touchDown(k);
     await flush();
     expect(load).toHaveBeenCalledTimes(2);
     expect(k.detail()?.dataset.kind).toBe('pharmacy');
@@ -424,7 +475,7 @@ describe('lazy touch content (DR2 budget)', () => {
 
 describe('the wall answers a touch (kiosk.ts)', () => {
   beforeAll(async () => { await loadStopBoardRows(); });
-  it('opens the place\'s stop board from its ring at the map\'s centre for 60 s, over the list, without moving the camera, then returns by itself', async () => {
+  it('opens the place\'s stop board from its ring at the map\'s centre for 30 s, over the list, without moving the camera, then returns by itself', async () => {
     const k = mount();
     await flush();
     expect(k.board()).toBeNull();
@@ -448,7 +499,7 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     expect(k.asked()).toEqual(camera);
     expect((k.map.factory.mock.calls[0]![0] as { interactive?: boolean }).interactive).toBe(false);
     expect(k.q('[data-testid=kiosk-map]')!.inert).toBe(true);
-    // 60 s later the one-shot fires and the wall is the list again.
+    // 30 s later the one-shot fires and the wall is the list again.
     const timer = k.timers.find((t) => t.ms === TOUCH_MS && !t.cleared)!;
     expect(timer).toBeDefined();
     k.setNow(NOW + TOUCH_MS);
@@ -473,7 +524,7 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     k.handle.destroy();
   });
 
-  it('opens another stop\'s board from its ring, asking for its boards, and a second touch restarts the 60 s', async () => {
+  it('opens another stop\'s board from its ring, asking for its boards, and a touch on another stop restarts the 30 s', async () => {
     const k = mount();
     await flush();
     k.touchMap(ZRINJEVAC);
@@ -482,13 +533,13 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     const board = k.board()!;
     expect(text(board.querySelector('.k-touch-title'))).toBe('Zrinjevac');
     expect([...board.querySelectorAll('[data-kind=departure] .sada-dest')].map(text)).toEqual(['Sopot', 'Kaptol']);
-    k.setNow(NOW + 30_000);
+    k.setNow(NOW + 20_000);
     k.touchMap(STOP);
     expect(text(k.board()!.querySelector('.k-touch-title'))).toBe('Trg bana J. Jelačića');
     k.setNow(NOW + TOUCH_MS + 1_000);
     k.tick(CODE_TICK_MS);
     expect(k.board()).not.toBeNull();
-    k.setNow(NOW + 30_000 + TOUCH_MS);
+    k.setNow(NOW + 20_000 + TOUCH_MS);
     k.tick(CODE_TICK_MS);
     expect(k.board()).toBeNull();
     k.handle.destroy();
@@ -540,9 +591,10 @@ describe('the wall answers a touch (kiosk.ts)', () => {
   });
 
   // lane/w-settings (24 Sep, second step): the operator was told "press and hold anywhere on the wall for about a
-  // second". A press held LONG_PRESS_MS anywhere on a screen-sized wall opens Postavke, except on the touch's own
-  // targets (a stop or pharmacy ring, a row of the list, the footer's pharmacy), which keep their tap and never open
-  // the settings. Slop 12 px; a handheld keeps only the brand's press.
+  // second". A press held LONG_PRESS_MS anywhere on a screen-sized wall opens Postavke, since 5 Oct 2026 on the
+  // touch's own targets too (a stop or pharmacy ring, a row of the list, the footer's pharmacy): the press opens
+  // Postavke and its release's click is swallowed, while a tap there still opens the detail and a second tap closes
+  // it. Slop 12 px; a handheld keeps only the brand's press.
   describe('a press held anywhere on the wall', () => {
     const pointer = (el: Element, type: string, x = 0, y = 0): boolean =>
       el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
@@ -588,24 +640,35 @@ describe('the wall answers a touch (kiosk.ts)', () => {
       k.handle.destroy();
     });
 
-    it('on a stop ring for LONG_PRESS_MS opens no Postavke; the board opens on the tap that ends the press', async () => {
+    it('on a stop ring for LONG_PRESS_MS opens Postavke and no board, the release\'s click swallowed; a tap opens the board', async () => {
       const k = mount();
       await flush();
       const map = k.q('[data-testid=kiosk-map]')!;
       const [x, y] = ring(k, STOP);
       pointer(map, 'pointerdown', x, y);
       k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS);
-      expect(panel(k)).toBeNull();
+      expect(panel(k)!.hidden).toBe(false);
       expect(k.board()).toBeNull();
       pointer(map, 'pointerup', x, y);
       click(map, x, y);
+      expect(k.board()).toBeNull();
+      panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      expect(panel(k)!.hidden).toBe(true);
+      // A tap on the same ring opens its board; a second tap on it gives the list back.
+      pointer(map, 'pointerdown', x, y);
+      pointer(map, 'pointerup', x, y);
+      click(map, x, y);
       expect(k.board()).not.toBeNull();
-      expect(panel(k)).toBeNull();
-      // Another ring on the frame, the same way.
+      expect(panel(k)!.hidden).toBe(true);
+      pointer(map, 'pointerdown', x, y);
+      pointer(map, 'pointerup', x, y);
+      click(map, x, y);
+      expect(k.board()).toBeNull();
+      // Another ring on the frame, the same way: held, Postavke.
       const [zx, zy] = ring(k, ZRINJEVAC);
       pointer(map, 'pointerdown', zx, zy);
       k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS);
-      expect(panel(k)).toBeNull();
+      expect(panel(k)!.hidden).toBe(false);
       k.handle.destroy();
     });
 
@@ -628,35 +691,63 @@ describe('the wall answers a touch (kiosk.ts)', () => {
       expect(panel(k)!.hidden).toBe(true);
       click(map, zx, zy);
       expect(k.board()).toBeNull();
-      // The own ring still opens its board on a tap and no Postavke on a hold.
+      // The own ring still opens its board on a tap.
       const [x, y] = ring(k, STOP);
       pointer(map, 'pointerdown', x, y);
-      k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS);
-      expect(panel(k)!.hidden).toBe(true);
       pointer(map, 'pointerup', x, y);
       click(map, x, y);
       expect(k.board()).not.toBeNull();
+      expect(panel(k)!.hidden).toBe(true);
       k.handle.destroy();
     });
 
-    it('on a row of the list and on the footer\'s pharmacy opens no Postavke; their detail opens on the tap', async () => {
+    // Owner, 5 Oct 2026: a press on the timeline put "uvijek / Zgrada Gradske vijećnice / Trg Stjepana Radića 1"
+    // over the list for a minute, with no way back, and never opened Postavke.
+    it('on a row of the list and on the footer\'s pharmacy opens Postavke and no detail; a tap opens the detail and a second tap closes it', async () => {
       const k = mount();
       await flush();
       const row = k.q<HTMLElement>('[data-testid=nearby-rows] > .nearby-row[data-kind=event]')!;
       expect(row).not.toBeNull();
       pointer(row, 'pointerdown', 1500, 500);
       k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS);
-      expect(panel(k)).toBeNull();
+      expect(panel(k)!.hidden).toBe(false);
       pointer(row, 'pointerup', 1500, 500);
       click(row, 1500, 500);
-      expect(k.detail()).not.toBeNull();
+      expect(k.detail()).toBeNull();
+      expect(k.nearbyHost().dataset.touch).toBeUndefined();
+      panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      expect(panel(k)!.hidden).toBe(true);
+      // A tap opens the row's detail; a second tap on the row gives the list back.
+      pointer(row, 'pointerdown', 1500, 500);
+      pointer(row, 'pointerup', 1500, 500);
+      click(row, 1500, 500);
+      expect(k.detail()!.dataset.kind).toBe('event');
+      pointer(row, 'pointerdown', 1500, 500);
+      pointer(row, 'pointerup', 1500, 500);
+      click(row, 1500, 500);
+      expect(k.detail()).toBeNull();
+      expect(k.nearbyHost().dataset.touch).toBeUndefined();
+      // The footer's pharmacy: held, Postavke and no detail; tapped, its detail; tapped on the detail, the list again.
       const pharmacy = k.q('[data-testid=strip-pharmacy]')!;
       pointer(pharmacy, 'pointerdown', 900, 1050);
       k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS);
-      expect(panel(k)).toBeNull();
+      expect(panel(k)!.hidden).toBe(false);
       pointer(pharmacy, 'pointerup', 900, 1050);
       click(pharmacy, 900, 1050);
+      expect(k.detail()).toBeNull();
+      panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      // The strip is drawn again when the panel closes: the pharmacy is found again.
+      const again = k.q('[data-testid=strip-pharmacy]')!;
+      pointer(again, 'pointerdown', 900, 1050);
+      pointer(again, 'pointerup', 900, 1050);
+      click(again, 900, 1050);
       expect(text(k.detail()!.querySelector('.k-touch-kicker'))).toBe('Dežurna ljekarna 24/7: Trg bana J. Jelačića 3.');
+      const detail = k.q('.k-touch')!;
+      pointer(detail, 'pointerdown', 1500, 600);
+      pointer(detail, 'pointerup', 1500, 600);
+      click(detail, 1500, 600);
+      expect(k.detail()).toBeNull();
+      expect(k.q('.k-touch')).toBeNull();
       k.handle.destroy();
     });
 
@@ -694,7 +785,7 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     });
   });
 
-  it('lets nothing else react: the ground, a vehicle, and the open board itself', async () => {
+  it('lets nothing else react, the ground and a vehicle; a tap on the open board gives the list back', async () => {
     const k = mount();
     await flush();
     const [x, y] = [30, 30];
@@ -705,9 +796,11 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     k.q('[data-testid=kiosk-qr]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(k.q('.k-touch')).toBeNull();
     k.touchMap(STOP);
-    const before = k.board()!.outerHTML;
+    expect(k.board()).not.toBeNull();
     k.board()!.querySelector('li')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(k.board()!.outerHTML).toBe(before);
+    expect(k.board()).toBeNull();
+    expect(k.q('.k-touch')).toBeNull();
+    expect(k.nearbyHost().dataset.touch).toBeUndefined();
     k.handle.destroy();
   });
 
@@ -722,6 +815,12 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     expect(text(detail.querySelector('.k-touch-title'))).toBe('Koncert u kinu');
     expect([...detail.querySelectorAll('.k-touch-line')].map(text)).toEqual(['Kino Europa', 'Varšavska 3']);
     expect(k.nearbyHost().dataset.touch).toBe('row');
+    // A second tap on the same row gives the list back at once (5 Oct 2026); the next opens the detail again.
+    event.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(k.detail()).toBeNull();
+    expect(k.nearbyHost().dataset.touch).toBeUndefined();
+    event.querySelector('.nearby-title')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(k.detail()!.dataset.kind).toBe('event');
     // R1: the wall's departures are the cells of one line; a tap on any cell opens the place's board.
     const departures = k.q<HTMLElement>('[data-testid=nearby-rows] > .nearby-row[data-kind=departures]');
     expect(departures).not.toBeNull();
@@ -1165,7 +1264,7 @@ describe('a touch quiets the reveals (R2)', () => {
     }
   });
 
-  it('without a touch the line advances on a beat within 100 s; with a row\'s detail open nothing is revealed for its 60 s', async () => {
+  it('without a touch the line advances on a beat within 100 s; with a row\'s detail open nothing is revealed for its 30 s', async () => {
     const loud = mount({ boards: evening });
     await flush();
     expect(loud.q('[data-kind=departures]')).not.toBeNull();
@@ -1182,12 +1281,12 @@ describe('a touch quiets the reveals (R2)', () => {
     pointer(row, 'pointerup', 1500, 500);
     click(row, 1500, 500);
     expect(k.detail()).not.toBeNull();
-    // For the touch's whole 60 s (TOUCH_MS) no beat reveals anything, on the list or the line.
-    expect(run(k, 59)).toEqual([]);
+    // For the touch's whole 30 s (TOUCH_MS) no beat reveals anything, on the list or the line.
+    expect(run(k, TOUCH_MS / 1000 - 1)).toEqual([]);
     expect(k.detail()).not.toBeNull();
-    // The wall returns by itself after its 60 s: the beats run again, and the advance is back within the next 100 s.
+    // The wall returns by itself after its 30 s: the beats run again, and the advance is back within the next 100 s.
     const after = new Set<string>();
-    for (let s = 60; s <= 160; s++) {
+    for (let s = TOUCH_MS / 1000; s <= TOUCH_MS / 1000 + 100; s++) {
       k.setNow(NOW + s * 1000);
       k.tick(CODE_TICK_MS);
       for (const v of reveals(k)) after.add(v);

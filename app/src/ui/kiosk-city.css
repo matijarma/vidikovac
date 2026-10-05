@@ -160,6 +160,10 @@
 .kiosk .k-touch{--k-touch-read:max(40px,var(--k-main-size));--k-touch-walk:max(28px,var(--k-sup-size));display:grid;grid-template-rows:minmax(0,1fr);min-width:0;min-height:0;padding:var(--k-gap) var(--k-gap) calc(var(--k-gap) * .5);background:var(--k-surface);border-radius:var(--k-radius-s)}
 .kiosk .k-touch-body{display:grid;grid-auto-rows:min-content;align-content:start;gap:calc(var(--k-gap) * .5);min-width:0;min-height:0;overflow:hidden}
 .kiosk .k-touch-title{margin:0;font-size:calc(var(--k-touch-read));font-weight:700;line-height:1.1;letter-spacing:-.01em;overflow-wrap:break-word;color:var(--k-ink)}
+/* The touch panel's last resort (timeline.ts TOUCH_FITS): when no variant holds whole, the leanest drops its secondary lines, then clamps its title to two lines and at last to one, so the title always shows (owner, 5 Oct 2026: a clipped body showed only "uvijek"). */
+.kiosk .k-touch-body[data-fit] .k-touch-line,.kiosk .k-touch-body[data-fit] .k-touch-timetable{display:none}
+.kiosk .k-touch-body[data-fit=clamp] .k-touch-title,.kiosk .k-touch-body[data-fit=tight] .k-touch-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
+.kiosk .k-touch-body[data-fit=tight] .k-touch-title{-webkit-line-clamp:1;line-clamp:1}
 .kiosk .k-touch-rows{display:grid;grid-auto-rows:min-content;margin:0;padding:0;list-style:none}
 .kiosk .k-touch .sada-departure{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:calc(var(--k-gap) * .6);min-height:calc(64px * var(--k-zoom,1));border-top:1px solid var(--k-line);font-size:calc(var(--k-touch-read));line-height:1.1}
 .kiosk .k-touch .sada-departure:first-child{border-top:0}

@@ -243,10 +243,15 @@ judged by the events' own timestamps, each a single pointer held shorter than
 panel; `deps.requestFullscreen` (default `requestFullscreen()` on the
 document element) enters it and the next double tap leaves it through
 `deps.exitFullscreen` while `document.fullscreenElement` is set. The first
-`pointerdown` arms only the wake lock; a handheld gets neither. While the touch answers, the touch's
-own targets (a stop or pharmacy ring on the map, a row of
-`[data-testid=nearby-rows]`, the footer's `strip-pharmacy`) keep their tap and
-a press held on them opens no settings. Enter or Space open the panel at once,
+`pointerdown` arms only the wake lock; a handheld gets neither. Since 5 Oct
+2026 the wall-wide press arms on the touch's own targets too (a stop or
+pharmacy ring on the map, a row of `[data-testid=nearby-rows]`, the footer's
+`strip-pharmacy`, the open detail): `wallPressable` refuses only the brand,
+the open panel, Osnovno and the DEV grid, and once a press has opened
+Postavke `bindLongPress` swallows the one `click` its release makes (a
+capture listener on the bound element, retired by the next `pointerdown` or
+key), so `onTouch` opens no detail under the panel. A tap keeps its touch.
+Enter or Space open the panel at once,
 on the focused brand or whenever the wall has focus (`onWallKey` on
 `document`): the kiosk root carries `tabindex="-1"` (focusable, never a tab
 stop) and `focusWall()` gives it the focus when a phase mounts and on any
@@ -283,10 +288,16 @@ as its own chunk on the first touch, `loadStopBoardRows`), then one "Vozni
 red" line of `TIMETABLE_LINE_TRIPS` (4) later trips; a row of the list opens
 `rowDetailVariants`, the pharmacy `pharmacyDetailVariants` (the vetted
 caption, the name and the curated phone). The panel shows the first variant
-its box holds whole and closes after `TOUCH_MS` (60 s, by its timer and by
-the deadline checked on every tick and poll), when an outage starts under an
-open board, on a phase change, on a presentation and on destroy; a second
-touch replaces it. Touch does nothing on a handheld, in a paired composition
+its box holds whole; when none does, the leanest stays with `data-fit` set
+on its body by `TOUCH_FITS` (`lean` drops its `.k-touch-line` and timetable
+lines, `clamp` also clamps its title to two lines, `tight` to one; the first
+that fits, else `tight`), so its title always shows: a body left overflowing
+under `overflow: hidden` showed only its first line, "uvijek". It closes
+after `TOUCH_MS` (30 s since 5 Oct 2026, by its timer and by the deadline
+checked on every tick and poll), on a tap on the open panel or a second tap
+on what it shows (the same row, ring or pharmacy, `onTouch`), when an outage
+starts under an open board, on a phase change, on a presentation and on
+destroy; a touch on another subject replaces it. Touch does nothing on a handheld, in a paired composition
 or presentation, in Postavke and while Osnovno is open. On the schema only the
 map's ring hit test is off (`touchOnMap` returns null), so the list's rows and
 the footer's pharmacy item still open their panels.

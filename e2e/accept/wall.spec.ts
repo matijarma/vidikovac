@@ -270,7 +270,7 @@ test.describe('wall at 1920×1080: eight scenes', () => {
     });
 
     // (F) Read-only touch [O-58], D3 (WP2 step 9): the ring at the frame's centre is the place's own stop.
-    test(`${id} (${scene.zagreb} Zagreb): read-only touch, the place's stop ring opens its departures for 60 s and the wall returns by itself`, async ({ page, request }) => {
+    test(`${id} (${scene.zagreb} Zagreb): read-only touch, the place's stop ring opens its departures for 30 s and the wall returns by itself`, async ({ page, request }) => {
       test.setTimeout(SCENE_TIMEOUT_MS);
       await openWall(page, request, scene, `${label}-touch`, false);
       await expect(page.getByTestId('kiosk-invitation'), `${label}: the wall paints its invitation within ${LOAD_MS / 1000} s`).toBeVisible({ timeout: LOAD_MS });

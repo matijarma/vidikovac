@@ -499,6 +499,50 @@ describe('the long press on the brand', () => {
     expect(b.open).toHaveBeenCalledTimes(1);
   });
 
+  // 5 Oct 2026: the wall-wide press arms on the rows of the list too, whose click opens a row's detail; the click a
+  // press's release makes belongs to the press, not to a tap.
+  it('swallows the one click that follows a press that opened, before anything inside or below hears it; a tap\'s click passes', () => {
+    const b = brand();
+    const heard = vi.fn();
+    const inner = document.createElement('span');
+    b.button.appendChild(inner);
+    document.body.addEventListener('click', heard);
+    inner.addEventListener('click', heard);
+    try {
+      b.pointer('pointerdown');
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).toHaveBeenCalledTimes(1);
+      b.pointer('pointerup');
+      inner.click();
+      expect(heard).not.toHaveBeenCalled();
+      // Once only: the next tap's click is heard, on the span and on the body.
+      b.pointer('pointerdown');
+      b.pointer('pointerup');
+      inner.click();
+      expect(heard).toHaveBeenCalledTimes(2);
+      // A release that made no click here leaves nothing behind: the next gesture's pointerdown retires the swallow.
+      heard.mockClear();
+      b.pointer('pointerdown');
+      b.time.advance(LONG_PRESS_MS);
+      b.pointer('pointerup');
+      b.pointer('pointerdown');
+      b.pointer('pointerup');
+      inner.click();
+      expect(heard).toHaveBeenCalledTimes(2);
+      // So does a key, and the keyboard's own open swallows nothing.
+      heard.mockClear();
+      b.pointer('pointerdown');
+      b.time.advance(LONG_PRESS_MS);
+      b.pointer('pointerup');
+      b.button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      expect(b.open).toHaveBeenCalledTimes(4);
+      inner.click();
+      expect(heard).toHaveBeenCalledTimes(2);
+    } finally {
+      document.body.removeEventListener('click', heard);
+    }
+  });
+
   it('a short press, a pointer that leaves or a secondary button opens nothing', () => {
     const b = brand();
     b.pointer('pointerdown');
@@ -736,6 +780,19 @@ describe('the long press on the brand', () => {
       expect(b.open).toHaveBeenCalledTimes(1);
       b.time.advance(LONG_PRESS_MS * 2);
       expect(b.open).toHaveBeenCalledTimes(1);
+    });
+
+    it('the click after a release that opened is swallowed as well, once', () => {
+      const b = brand();
+      const heard = vi.fn();
+      b.button.addEventListener('click', heard);
+      stamped(b.button, 'pointerdown', 1_000);
+      stamped(b.button, 'pointerup', 1_000 + LONG_PRESS_MS);
+      expect(b.open).toHaveBeenCalledTimes(1);
+      b.button.click();
+      expect(heard).not.toHaveBeenCalled();
+      b.button.click();
+      expect(heard).toHaveBeenCalledTimes(1);
     });
 
     it('a release one millisecond short of LONG_PRESS_MS opens nothing', () => {

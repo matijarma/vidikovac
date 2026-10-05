@@ -190,15 +190,19 @@ says "unavailable".
 
 Touch, where the screen has it, is read-only and needs no interactive map: the
 wall finds the touched ring itself, within the finger tolerance. A stop ring
-opens that stop's board for 60 seconds: its next three departures in the
+opens that stop's board for 30 seconds: its next three departures in the
 phone's row, then one "Vozni red" line with later trips. A row shows its
 detail (venue, address, the tram to it) and the pharmacy its caption, name and
 phone; the pharmacy opens from its ring, its row or the footer's pharmacy
 item, and a departure row opens the place's own board. The panel covers the
-list in its box and the wall returns by itself: after 60 seconds, when a ZET
+list in its box and the wall returns by itself: after 30 seconds, when a ZET
 outage starts under a board, on a presentation or when the phase changes; a
-second touch replaces the first. Nothing else reacts and the camera never
-moves. Touch is off in a presentation and in Postavke; in the schema view the
+touch on another subject replaces the first, and a touch on the panel or again
+on its subject gives the list back at once. A panel that cannot hold even its
+leanest form drops its secondary lines and clamps its title, so the title
+always shows. A press held anywhere, rows and rings included, opens the
+settings and never a panel; a double tap switches fullscreen on and off.
+Nothing else reacts and the camera never moves. Touch is off in a presentation and in Postavke; in the schema view the
 map takes no touch, while the list and the footer still do. Scanning is the
 only way to take content along.
 

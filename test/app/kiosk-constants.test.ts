@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX, LONG_PRESS_MS } from '../../app/src/kiosk/constants';
+import { TOUCH_FITS, TOUCH_MS } from '../../app/src/kiosk/timeline';
 
 const APP = join(import.meta.dirname, '..', '..', 'app', 'src');
 const read = (rel: string): string => readFileSync(join(APP, rel), 'utf8');
@@ -18,6 +19,11 @@ describe('lane S constants', () => {
   it('toggles fullscreen on two taps within 400 ms and 24 px, each shorter than the settings press', () => {
     expect([DOUBLE_TAP_MS, DOUBLE_TAP_SLOP_PX]).toEqual([400, 24]);
     expect(DOUBLE_TAP_MS).toBeLessThan(LONG_PRESS_MS);
+  });
+
+  it('holds a touch\'s detail for 30 s, and fits its leanest variant in three steps', () => {
+    expect(TOUCH_MS).toBe(30_000);
+    expect(TOUCH_FITS).toEqual(['lean', 'clamp', 'tight']);
   });
 
   it('declares the 40 px and 28 px legibility floors on the kiosk sheet’s :root', () => {

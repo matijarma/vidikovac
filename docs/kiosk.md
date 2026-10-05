@@ -75,15 +75,16 @@ upute o pretraživanju dodirom. Ukratko:
   najave polaska odnosi se na ZET; vlakovi zadržavaju svoje najave iz
   zasebnog HŽ-ova voznog reda.
 - Na zaslonu s dodirom dodir služi samo za čitanje: dodir na prsten
-  stajališta 60 sekundi pokazuje polaske s tog stajališta, dodir na redak
+  stajališta 30 sekundi pokazuje polaske s tog stajališta, dodir na redak
   popisa pokazuje pojedinosti retka, a dodir na dežurnu ljekarnu adresu i
-  telefon ljekarne; zatim se zaslon sam vraća. Sadržaj se može ponijeti samo
-  skeniranjem.
+  telefon ljekarne; zatim se zaslon sam vraća, a drugi dodir na ploču ili na
+  isti redak vraća popis odmah. Sadržaj se može ponijeti samo skeniranjem.
 - Skeniranje nikad ne prekida javni prikaz. Izričita prezentacija zaustavlja
   rečenicu i popis; potvrda preuzimanja i potvrda iscrtavanja ostaju.
 - Za postavljanje postoje samo polje „Adresa ili stajalište” i **Pokreni**.
-  Dugi pritisak (0,8 s) bilo gdje na zaslonu otvara Postavke s prekidačima
-  Mjesto, Kadar, Prikaz, Tema i Ritam.
+  Dugi pritisak (0,8 s) bilo gdje na zaslonu, i na retku popisa, otvara
+  Postavke s prekidačima Mjesto, Kadar, Prikaz, Tema i Ritam. Dvostruki dodir
+  uključuje i isključuje prikaz preko cijelog zaslona.
 - Postavke su prekidači: svaki klik odmah mijenja stanje; jedan okvir prema poslužitelju najviše svakih pet sekundi.
 - Na telefonu se nakon deset minuta sadržaj briše: ostaju poziv na novo
   skeniranje i poveznica na `/hitno`.
@@ -129,9 +130,10 @@ zaokruženi i sažeti kao u skupu za Grad.
    (`area`, za statistiku) izvodi iz mjesta, inače `zagreb`. Postava sama ne
    daje otključanu sesiju.
 3. Sve ostalo mijenja se poslije, na samom zaslonu. Dugi pritisak (0,8 s)
-   bilo gdje na zaslonu otvara **Postavke**, osim na mjestima koja odgovaraju
+   bilo gdje na zaslonu otvara **Postavke**, i na mjestima koja odgovaraju
    na dodir (prsten stajališta ili ljekarne na karti, redak popisa, ljekarna
-   u podnožju): ondje dugi pritisak vrijedi kao dodir i ne otvara Postavke.
+   u podnožju, otvorena ploča): ondje dugi pritisak otvara Postavke, a ne
+   pojedinosti, dok kratak dodir i dalje otvara pojedinosti.
    S tipkovnice isto čine Enter ili razmaknica; zaslon drži fokus od
    učitavanja, a dodir izvan gumba vraća fokus na zaslon. Kratak dodir i prst
    koji se pomakne za više od 12 piksela ne otvaraju Postavke, a u zaglavlju
@@ -280,16 +282,19 @@ Gradska četvrt više se ne bira. Dodir na karti služi samo za čitanje.
 Stajališta su dodirljivi prstenovi i na gradskom kadru, uz toleranciju
 dodira od 28 CSS piksela, jer prst na zaslonu nije miš na stolu. Zaslon sam
 pronalazi dodirnuti prsten, pa karta ne mora primati dodir i ne pomiče se.
-Dodir na prsten 60 sekundi pokazuje ploču tog stajališta: sljedeća tri
+Dodir na prsten 30 sekundi pokazuje ploču tog stajališta: sljedeća tri
 polaska u istom retku kao na telefonu, zatim jedan redak „Vozni red” s
 kasnijim polascima; istu ploču za stajalište mjesta otvara i dodir na redak
 polaska. Dodir na drugi redak popisa pokazuje pojedinosti retka (mjesto
 održavanja, adresu i tramvaj do odredišta), a dodir na dežurnu ljekarnu, na
 karti, u popisu ili u sigurnosnoj traci, adresu, naziv i telefon ljekarne.
-Ploča prekriva popis „U blizini” unutar okvira popisa, a drugi dodir
-zamjenjuje prvi. Zaslon se sam vraća nakon 60 sekundi, kad ZET prestane
-slati položaje vozila dok je ploča otvorena, kad počne prezentacija ili kad
-se promijeni stanje zaslona. Tijekom prezentacije i u Postavkama dodir ne
+Ploča prekriva popis „U blizini” unutar okvira popisa. Dodir na nešto
+drugo zamjenjuje ploču, a dodir na samu ploču ili ponovni dodir na isti
+redak, prsten ili ljekarnu vraća popis odmah. Kad ploča ne stane cijela ni u
+najkraćem obliku, ispušta sporedne retke, a naslov skraćuje na dva retka,
+pa na jedan, s trotočjem na kraju, tako da se naslov uvijek vidi. Zaslon se
+sam vraća nakon 30 sekundi, kad ZET prestane slati položaje vozila dok je
+ploča otvorena, kad počne prezentacija ili kad se promijeni stanje zaslona. Tijekom prezentacije i u Postavkama dodir ne
 otvara ništa. U prikazu sheme ne reagira dodir na kartu, a retci popisa i
 ljekarna u sigurnosnoj traci otvaraju se i dalje. Pretrage i izbornika nema,
 a sadržaj se može ponijeti samo skeniranjem.

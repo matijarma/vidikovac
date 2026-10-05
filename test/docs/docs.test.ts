@@ -175,7 +175,7 @@ describe('the §11 rewrite of PRODUCT.md, DESIGN.md, docs/kiosk.md and INTEGRATI
       /prvi\s+jutarnji\s+tramvaj\s+od\s+22\s+sata\s+dok\s+ne\s+krene/,
       /„Osnovno”,\s+koje\s+se\s+otvara/,
     ]) expect(kiosk).not.toMatch(re);
-    for (const re of [/60\s+sekundi\s+pokazuje\s+ploču\s+tog\s+stajališta/, /Vozni\s+red/, /barem\s+jedan\s+ritam/]) {
+    for (const re of [/30\s+sekundi\s+pokazuje\s+ploču\s+tog\s+stajališta/, /Vozni\s+red/, /barem\s+jedan\s+ritam/]) {
       expect(kiosk).toMatch(re);
     }
   });

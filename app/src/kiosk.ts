@@ -1178,31 +1178,38 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (row.kind === 'pharmacy') return { kind: 'pharmacy', pharmacy: pharmaciesByDistance(null).find((p) => p.label === row.sub) ?? nearestPharmacy(stop) };
     return { kind: 'row', id: row.id };
   }
+  /** Whether two touches name the same subject: the same stop, the same row, the pharmacy. */
+  function sameTouch(a: Touch, b: Touch): boolean {
+    if (a.kind === 'stop' && b.kind === 'stop') return a.stop.id === b.stop.id;
+    if (a.kind === 'row' && b.kind === 'row') return a.id === b.id;
+    return a.kind === 'pharmacy' && b.kind === 'pharmacy';
+  }
   function onTouch(event: MouseEvent): void {
     if (!touchable() || !(event.target instanceof Element)) return;
     const target = event.target;
-    // The open detail is read, not pressed.
-    if (target.closest('.k-touch')) return;
+    // The open detail is read, and a tap on it gives the list back (owner, 5 Oct 2026: the detail stood over the
+    // list with no way back).
+    if (target.closest('.k-touch')) { if (touch) closeTouch(); return; }
     const row = target.closest<HTMLElement>('[data-testid=nearby-rows] > .nearby-row');
     const next = row ? touchOnRow(row)
       : target.closest('[data-testid=strip-pharmacy]') ? { kind: 'pharmacy' as const, pharmacy: nearestPharmacy(stop) }
         : target.closest('[data-testid=kiosk-map-host]') ? touchOnMap(event) : null;
-    if (next) openTouch(next);
+    if (!next) return;
+    // A second tap on what the detail shows (its row, its ring, the pharmacy) closes it; another subject replaces it.
+    if (touch && sameTouch(touch, next)) { closeTouch(); return; }
+    openTouch(next);
   }
   /** Whether a press at this point arms the wall-wide long press to Postavke (lane/w-settings, second step: the
    *  operator was told "press and hold anywhere on the wall for about a second"). On a screen-sized wall in the
-   *  invitation, anywhere but the brand (its own binding), the open panel and the basics, and never on one of the
-   *  touch's own targets while the touch answers: a stop or pharmacy ring under the finger, a row of the list, the
-   *  footer's pharmacy. Those keep their tap, and a press held on them opens no settings. A handheld keeps the
-   *  browser's own gestures and only the brand's press. */
+   *  invitation, anywhere but the brand (its own binding), the open panel and the basics -- the touch's own targets
+   *  included since 5 Oct 2026 (a ring, a row of the list, the footer's pharmacy, the open detail): a press held
+   *  there opens Postavke, and bindLongPress swallows the click its release makes, so no detail opens under the
+   *  panel; a tap still opens the detail. A handheld keeps the browser's own gestures and only the brand's press. */
   function wallPressable(event: MouseEvent): boolean {
     if (disposed || layout.size === 'handheld' || phase !== 'invitation') return false;
     const target = event.target;
     if (!(target instanceof Element)) return false;
-    if (target.closest('[data-testid=kiosk-brand], [data-testid=kiosk-settings-panel], [data-testid=kiosk-essentials], [data-testid=dev]')) return false;
-    if (!touchable()) return true;
-    if (target.closest('[data-testid=nearby-rows] > .nearby-row, [data-testid=strip-pharmacy]')) return false;
-    return !(target.closest('[data-testid=kiosk-map-host]') && touchOnMap(event));
+    return !target.closest('[data-testid=kiosk-brand], [data-testid=kiosk-settings-panel], [data-testid=kiosk-essentials], [data-testid=dev]');
   }
 
   function invitationModel(): InvitationModel {

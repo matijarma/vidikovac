@@ -115,7 +115,8 @@ export interface LongPressDeps {
 /**
  * A press held on `target` for LONG_PRESS_MS opens the settings; a shorter press, a finger that
  * moves more than LONG_PRESS_SLOP_PX, or a pointer that leaves opens nothing. Enter or Space on
- * the focused target opens at once (a keyboard is an operator's tool). The timer goes through
+ * the focused target opens at once (a keyboard is an operator's tool). The click that follows a
+ * press that opened is swallowed on the target, so the press is never also a tap. The timer goes through
  * the injected pair, so the kiosk's clock -- and a test's -- drives it. The press is never
  * stopped: the kiosk's first-tap wake-lock listener and its double tap hear it too. Returns the
  * unbinding.
@@ -131,6 +132,9 @@ export interface LongPressDeps {
  * timer got its turn. A clock the tests fake never reaches these stamps, which is why the
  * unit tests set them on the events themselves.
  */
+/** What retires the swallow of a long press's click: the next gesture, a finger or a key. */
+const RETIRES = ['pointerdown', 'keydown'] as const;
+
 export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => void {
   let timer: unknown = null;
   /** The frame after the timer (review N6), then the beat. */
@@ -152,7 +156,26 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
     downAt = null;
   };
   const near = (event: PointerEvent): boolean => origin !== null && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) <= LONG_PRESS_SLOP_PX;
-  const onBeat = (): void => { beat = null; if (origin === null) return; disarm(); deps.open('pointer'); };
+  /** The click a press's release makes after the press opened the panel belongs to the press, not to a tap: kiosk.ts
+   *  onTouch would open a row's detail under Postavke (5 Oct 2026, the press arms on the rows too). It is swallowed
+   *  once, in the capture phase on the target, before anything inside or below hears it. The next pointerdown or key
+   *  anywhere retires the swallow, so a release that made no click here can never eat a later tap. */
+  let swallowing: (() => void) | null = null;
+  const swallowClick = (): void => {
+    swallowing?.();
+    const doc = target.ownerDocument;
+    const eat = (event: Event): void => { event.stopPropagation(); event.preventDefault(); retire(); };
+    const retire = (): void => {
+      target.removeEventListener('click', eat, true);
+      for (const type of RETIRES) doc.removeEventListener(type, retire, true);
+      swallowing = null;
+    };
+    target.addEventListener('click', eat, true);
+    for (const type of RETIRES) doc.addEventListener(type, retire, true);
+    swallowing = retire;
+  };
+  const opened = (): void => { swallowClick(); deps.open('pointer'); };
+  const onBeat = (): void => { beat = null; if (origin === null) return; disarm(); opened(); };
   const down = (event: PointerEvent): void => {
     if (event.button > 0) return; // a secondary button is not a press
     disarm();
@@ -176,7 +199,7 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
     const long = beat !== null || frame !== null || (downAt !== null && timer !== null && Number.isFinite(event.timeStamp) && event.timeStamp - downAt >= LONG_PRESS_MS);
     const opens = long && near(event);
     disarm();
-    if (opens) deps.open('pointer');
+    if (opens) opened();
   };
   const gone = (): void => { disarm(); };
   /** A second finger anywhere on the document ends a press already armed (N7); the document's own listener
@@ -202,6 +225,7 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
   target.addEventListener('contextmenu', menu);
   return () => {
     disarm();
+    swallowing?.();
     target.removeEventListener('pointerdown', down);
     target.removeEventListener('pointermove', move);
     target.removeEventListener('pointerup', up);
