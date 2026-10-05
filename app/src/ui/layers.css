@@ -140,8 +140,8 @@
 .g-horizon { stroke: var(--tone-stroke-strong); stroke-width: 1.5; }
 .g-tick { stroke: var(--tone-stroke-strong); stroke-width: 1.5; }
 .g-ring-line { stroke-width: 1; stroke: var(--tone-stroke-strong); }
-.g-sun { fill: var(--tone-weather); }
-.g-sun-down { fill: var(--tone-text-subtle); }
+.g-sun-disc { fill: var(--tone-weather); }
+.g-sun-disc.g-sun-down { fill: var(--tone-text-subtle); }
 .g-sun-halo { fill: var(--tone-weather); opacity: 0.18; }
 .g-radar { inline-size: min(100%, 16rem); aspect-ratio: 4 / 3; }
 .g-sun { inline-size: min(100%, 20rem); }
@@ -151,7 +151,7 @@
    the SVG, in the same type role as the rest of the reading UI. */
 .g-wrap { display: grid; gap: var(--sp-1); justify-items: center; }
 .g-labels { display: flex; justify-content: space-between; font-size: var(--type-secondary); font-variant-numeric: tabular-nums; color: var(--tone-text-muted); position: relative; }
-.g-label-now { position: absolute; transform: translateX(-50%); color: var(--tone-text-primary); font-weight: var(--weight-bold); }
+.g-label-now { position: absolute; color: var(--tone-text-primary); font-weight: var(--weight-bold); white-space: nowrap; }
 /* Only the range figure positions a label by percent (the "now" marker), so
    only it needs its label row pinned to the same width as the track under
    it; sun and radar's legends are unpositioned and simply centre with the
@@ -197,42 +197,47 @@
 .provenance li { line-height: var(--leading-snug); }
 /* The one bare <a> in this block (the /izvori/ line) has no other class; it needs the target explicitly. */
 .provenance a { display: inline-flex; align-items: center; min-block-size: var(--target); }
-/* Weather workspace (T3.1, plan "Vrijeme"). Flat sections: a hairline and
-   24 px of air between them, no card (plan, "Surfaces"). The grid names and
-   the container-query lines that collapse them are pinned. */
+/* Weather workspace (T3.1, plan "Vrijeme"; rebuilt mobile-first in the
+   irritation pass, 5 Oct 2026). Flat sections: a hairline and 24 px of air
+   between them, no card (plan, "Surfaces"). One column on a phone; from 60rem
+   two, the observation and the hourly grid across both. The grid names and the
+   container-query lines that collapse them are pinned. */
 .wx-grid { display: grid; gap: 0; grid-template-columns: minmax(0, 1fr); }
 .sec.wx-sec { padding: var(--sp-6) 0 0; margin-block-start: var(--sp-6); border: 0; border-block-start: 1px solid var(--tone-stroke); border-radius: 0; background: transparent; box-shadow: none; }
 .wx-grid > .wx-sec:first-child { padding-block-start: 0; margin-block-start: 0; border-block-start: 0; }
-/* The layer title is for readers of the tree on a phone (the temperature is
-   the head); the desk shows it at the title role with the observation line
-   beside it, and the copy of that line under the temperature steps aside. */
-.wx-head { display: contents; }
-.wx-head .layer-title { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.wx-head .wx-head-obs { display: none; }
+/* The layer title stands on every surface: on a phone it names the page the Još row opened. */
+.wx-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-4); }
+.wx-head .layer-title { margin: 0; font-size: var(--type-title); line-height: var(--lh-title); }
 /* The observation: the temperature as the largest object, the condition beside it, the station line under them. */
 .wx-lead { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-2) var(--sp-4); align-items: center; }
-.wx-temp { margin: 0; font-size: var(--type-numeral-xl); font-weight: var(--weight-bold); letter-spacing: -0.035em; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
-.wx-cond { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--type-title); font-weight: var(--weight-medium); line-height: var(--lh-title); }
-.wx-cond .icon { width: 3rem; height: 3rem; color: var(--tone-weather); }
-.wx-obs, .wx-head-obs { flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); margin: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
-.wx-obs { display: flex; grid-column: 1 / -1; }
-/* Three facts on one strip under a hairline: a label at the secondary role over a bold tabular value. The
-   strip has no hairline of its own below it; the next section's hairline is the one that follows. */
-.wx-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr)); gap: var(--sp-3); margin: 0; padding-block: var(--sp-3) 0; border-block-start: 1px solid var(--tone-stroke); }
+.wx-temp { margin: 0; font-size: var(--type-numeral-xl); font-weight: var(--weight-bold); letter-spacing: -0.035em; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wx-cond { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--type-head); font-weight: var(--weight-medium); line-height: var(--lh-title); }
+.wx-cond .icon { flex: none; width: 2.5rem; height: 2.5rem; color: var(--tone-weather); }
+.wx-obs { display: flex; grid-column: 1 / -1; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); margin: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+/* Three facts on one row under a hairline, inside the observation: a label at the secondary role over a bold tabular
+   value. The row has no hairline of its own below it; the next section's hairline is the one that follows. */
+.wx-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr)); gap: var(--sp-3); max-inline-size: 40rem; margin: 0; padding-block: var(--sp-3) 0; border-block-start: 1px solid var(--tone-stroke); }
 .wx-fact { display: grid; gap: 0.15rem; min-inline-size: 0; }
 .wx-fact-label { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
 .wx-fact-value { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); margin: 0; font-size: var(--type-body); font-weight: var(--weight-bold); line-height: var(--lh-body); font-variant-numeric: tabular-nums; }
 /* The wind arrow flies with the wind; the span is what turns, so the icon keeps its sprite box. */
 .wx-arrow { display: inline-flex; color: var(--tone-text-muted); }
-/* Today: the range bar full width with its numbers at the head role, the sentence, the DHMZ prose, the validity line. */
-.wx-range .g-labels { font-size: var(--type-head); font-weight: var(--weight-bold); color: var(--tone-text-primary); }
+/* The hourly grid (R0): DHMZ's steps as cells, text first; two rows of six in a phone's room, one row of twelve from
+   36rem (container rules below), never a strip that scrolls sideways. The list itself is `ol.wx-hourly`: its section
+   carries the id `wx-hourly` as a class too, and must stay a plain section. A step with a chance of rain is tinted. */
+ol.wx-hourly { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-1); margin: 0; padding: 0; list-style: none; }
+.wx-hour { display: grid; justify-items: center; align-content: start; gap: var(--sp-1); min-inline-size: 0; padding-block: var(--sp-2); border-radius: var(--r-md); background: var(--tone-surface-2); text-align: center; font-variant-numeric: tabular-nums; }
+.wx-hour[data-wet='1'] { background: var(--tone-tint-weather); }
+.wx-hour time { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.wx-hour-icon { display: block; inline-size: 1.5rem; block-size: 1.5rem; color: var(--tone-weather); }
+.wx-hour-temp { font-size: var(--type-body); font-weight: var(--weight-bold); line-height: var(--lh-body); white-space: nowrap; }
+.wx-hour-rain { min-block-size: calc(var(--type-secondary) * var(--lh-body)); font-size: var(--type-secondary); font-weight: var(--weight-bold); line-height: var(--lh-body); white-space: nowrap; }
+/* Today and tomorrow: the range bar in a 30rem box with its numbers at the head role, the sentence, the DHMZ prose,
+   the validity line. The bar's "now" label is anchored by the marker's own share of the width (graphics.ts), so it
+   stays inside the box. */
+.wx-sec .g-wrap-range { inline-size: min(100%, 30rem); }
+.wx-range .g-labels, .wx-tomorrow .g-labels { font-size: var(--type-head); font-weight: var(--weight-bold); color: var(--tone-text-primary); }
 .wx-range-text { margin: 0; font-size: var(--type-body); line-height: var(--lh-body); }
-/* The hourly strip (R0): DHMZ's steps as cells in one scrolling row, text only. */
-.wx-hourly { display: flex; gap: var(--sp-2); overflow-x: auto; list-style: none; padding: 0; margin: 0; }
-.wx-hour { display: grid; min-inline-size: 4.5rem; justify-items: center; gap: var(--sp-1); font-variant-numeric: tabular-nums; }
-.wx-hour time { font-size: var(--type-secondary); color: var(--tone-text-muted); }
-.wx-hour-temp { font-size: var(--type-body); font-weight: var(--weight-bold); }
-.wx-hour-rain { font-size: var(--type-secondary); }
 .wx-prose { margin: 0; max-inline-size: 68ch; font-size: var(--type-body); font-weight: var(--weight-normal); line-height: var(--lh-prose); }
 /* The sun: a 20rem box for the arc with its axis words under it; the numbers once, in the line below. */
 .wx-sun .g-wrap-sun { inline-size: min(100%, 20rem); }
@@ -241,8 +246,20 @@
 .wx-sun-times { margin: 0; font-size: var(--type-body); font-weight: var(--weight-bold); line-height: var(--lh-body); font-variant-numeric: tabular-nums; }
 .wx-nowrap { white-space: nowrap; }
 .wx-sun-until { margin: 0; font-size: var(--type-control); line-height: var(--lh-body); }
+/* The radar: DHMZ's 120-pixel crop drawn at twice its size or the room's width, its cells kept sharp, the credit and
+   the image's time under it. */
+.wx-radar-figure { display: grid; gap: var(--sp-2); justify-items: start; margin: 0; }
+.wx-radar-figure img { display: block; inline-size: min(100%, 15rem); block-size: auto; aspect-ratio: 1; image-rendering: pixelated; border: 1px solid var(--tone-stroke); border-radius: var(--r-md); background: var(--tone-surface-2); }
+.wx-radar-rain { margin: 0; font-size: var(--type-body); font-weight: var(--weight-bold); line-height: var(--lh-body); }
+/* "Više": everything a person reads second, behind one disclosure under a hairline. The air rows (city/conditions.ts)
+   read as rows here: the station and its time stacked, the index word at the end, no underline. */
+.wx-reference { border-block-start: 1px solid var(--tone-stroke); }
+.wx-reference > .wx-grid { padding-block-end: var(--sp-4); }
+.wx-reference .city-row { min-block-size: var(--target); text-decoration: none; }
+.wx-reference .city-row > span:first-child { display: grid; gap: 0.15rem; min-inline-size: 0; }
+.wx-reference .city-row > span:last-child { flex: 0 1 45%; text-align: end; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
 /* Warnings: the level as a word with its shape, the event, the window, the text as prose. */
-.wx-warnings { display: grid; margin: 0; padding: 0; list-style: none; }
+ul.wx-warnings { display: grid; margin: 0; padding: 0; list-style: none; }
 .wx-warning { display: grid; gap: var(--sp-1); padding-block: var(--sp-3); border-block-start: 1px solid var(--tone-stroke); }
 .wx-warning:first-child { padding-block-start: 0; border-block-start: 0; }
 .wx-warning-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin: 0; }
@@ -257,10 +274,6 @@
 @media (min-width: 60rem) {
   .wx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--sp-8); align-items: start; }
   .wx-wide { grid-column: 1 / -1; }
-  .wx-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-4); }
-  .wx-head .layer-title { position: static; inline-size: auto; block-size: auto; margin: 0; overflow: visible; clip: auto; white-space: normal; font-size: var(--type-title); }
-  .wx-head .wx-head-obs { display: flex; }
-  .wx-now .wx-obs { display: none; }
 }
 
 /* Directory ("Još"). */
@@ -489,17 +502,32 @@
   .row-button { flex-wrap: wrap; }
   .row-lead { flex: 1 0 100%; justify-items: start; text-align: start; }
 }
-/* Weather in its room. In a narrow one (a 320 phone, or a phone at 200% text)
-   the temperature and its condition stack instead of sharing a line; in a
-   phone-sized room at normal text the three facts share one row instead of
-   falling to two and one, which the 8rem auto-fit minimum above would do at
-   390 px. Both measured against the .ws container in rem, like the blocks
-   above, so text zoom counts. */
+/* Weather in its room, measured against the .ws container in rem like the
+   blocks above, so text zoom counts. The hourly grid: six columns (two rows of
+   six) in a phone's room, twelve in one row from 36rem, four once six cells
+   would be narrower than "−12°" (a 320 phone, about 18rem), three at 200% text.
+   In a narrow room the temperature and its condition stack instead of sharing a
+   line; in a phone-sized room the three facts share one row instead of falling
+   to two and one, which the 8rem auto-fit minimum above would do, each column as
+   wide as its value so the wind's arrow stays on its line. From 36rem the
+   condition takes the title role beside the temperature. */
+@container ws (min-width: 36rem) {
+  ol.wx-hourly { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .wx-cond { font-size: var(--type-title); }
+  .wx-cond .icon { width: 3rem; height: 3rem; }
+}
+@container ws (max-width: 19rem) {
+  ol.wx-hourly { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@container ws (max-width: 13rem) {
+  ol.wx-hourly { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @container ws (max-width: 20rem) {
   .wx-lead { grid-template-columns: minmax(0, 1fr); }
 }
-@container ws (min-width: 20rem) and (max-width: 36rem) {
-  .wx-figures { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@container ws (min-width: 17rem) and (max-width: 36rem) {
+  .wx-figures { grid-template-columns: repeat(3, auto); justify-content: space-between; }
+  .wx-figures .wx-fact-value { flex-wrap: nowrap; white-space: nowrap; }
 }
 /* Safety in a narrow room (a phone at 200% text): two number tiles no longer
    fit side by side (2 × 8.5rem and the gap), so 112 takes one cell like the

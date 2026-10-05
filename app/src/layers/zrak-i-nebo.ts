@@ -1,11 +1,16 @@
-// Vrijeme: the Maksimir observation as the largest object on the page with
-// three facts on one strip, today's forecast range with the measured value
-// placed on it and the DHMZ narrative as prose, the sun path computed on the
-// device, DHMZ warnings as rows, and the week's quakes as rows first, then
-// placed by their own distance and bearing. The hourly strip reads DHMZ's
-// hourly steps for Grič (dhmz-hourly), as text in cells, never a curve.
-// No dial and no gauge: a number a person reads is text, and the only
-// figures are the range bar, the sun path and the radar (plan "Vrijeme").
+// Vrijeme, mobile-first (irritation pass, 5 Oct 2026): one column on a phone,
+// read top to bottom as a person asks. DHMZ's warnings first while any is in
+// force or announced; the Maksimir observation as the largest object with its
+// three facts (wind, humidity, pressure) on one row under it; DHMZ's hourly
+// steps for Grič (dhmz-hourly) as a grid of cells, two rows of six in a phone's
+// room and one row of twelve in a wider one, never a strip that scrolls
+// sideways; today's and tomorrow's forecast range with the measured value on
+// today's; the sun path computed on the device; DHMZ's radar crop around
+// Zagreb. Everything else (the warnings' empty confirmation, the heat and cold
+// waves, the bio forecast, air, the Sava and the week's quakes) is one
+// disclosure, "Više", under them. No dial and no gauge: a number a person reads
+// is text, and the only figures are the range bars, the sun path, the radar
+// image and the quake radar (plan "Vrijeme").
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { actionButton, section, sectionHead, signRow, type Tone } from '../experience/blocks';
 import { isActiveWarning } from '../experience/safety-state';
@@ -17,11 +22,11 @@ import type { I18n } from '../i18n/i18n';
 import { dataNumber, dataText } from '../panels/panel';
 import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { radar, rangeBar, sunPath } from '../ui/graphics';
-import { iconMarkup } from '../ui/icons';
+import { iconMarkup, type IconName } from '../ui/icons';
 import { sunTimes } from '../ui/solar';
 import type { LayerContext } from './types';
 import { conditionsMarkup } from '../city/conditions';
-import { bioForecastToday, forecastDayWord, waveDays } from '../kiosk/local';
+import { bioForecastToday, forecastDayWord, radarNow, waveDays } from '../kiosk/local';
 
 const QUAKE_RADIUS_KM = 150;
 const QUAKE_WINDOW_MS = 7 * 86_400_000;
@@ -31,15 +36,58 @@ const QUAKES_STEP = 10;
 const DAY_MS = 86_400_000;
 const COMPASS8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
 
-type WeatherModule = 'dhmz-now' | 'dhmz-forecast' | 'dhmz-cap' | 'emsc' | 'dhmz-hourly' | 'dhmz-bio' | 'dhmz-waves';
+type WeatherModule = 'dhmz-now' | 'dhmz-forecast' | 'dhmz-cap' | 'emsc' | 'dhmz-hourly' | 'dhmz-bio' | 'dhmz-waves' | 'dhmz-radar';
 
-/** Twelve hourly steps from the current hour (R0). */
+/** Twelve hourly steps from the current hour (R0): two rows of six on a phone, one row of twelve in a wider room. */
 const HOURLY_STEPS = 12;
-/** A step's chance of rain is printed from this percentage. */
+/** A step's chance of rain is printed from this percentage, and its cell is tinted. */
 const HOURLY_RAIN_FROM = 30;
+/** dhmz-hourly's own wet rule (worker/feed/modules/dhmz-hourly.ts WET_MM, WET_PROBABILITY; kiosk/local.ts isWetStep). */
+const HOURLY_WET_MM = 0.2;
+const HOURLY_WET_PROBABILITY = 60;
 
-/** DHMZ's hourly steps for Grič (Maksimir where Grič has none), from the current hour: the time, the temperature, and
- *  the chance of rain where it is 30 % or more. A step without a temperature is left out. */
+/**
+ * A step's glyph and its name. DHMZ's hourly file carries no legend for its sky symbols, so no sky is drawn for a dry
+ * step (weather-icon.ts: the only real failure is drawing the wrong sky); a wet step draws the rain the worker named
+ * by its amount, and a wet step with no word (near freezing, where it may be snow) the plain drops.
+ */
+function hourGlyph(i18n: I18n, item: FeedItem): { icon: IconName; label: string } | null {
+  switch (dataText(item, 'weather')) {
+    case 'slaba kiša': return { icon: 'cloud-drizzle', label: i18n.t('kiosk.nearby.rain.slaba') };
+    case 'kiša': return { icon: 'cloud-rain', label: i18n.t('kiosk.nearby.rain.kisa') };
+    case 'jaka kiša': return { icon: 'cloud-rain', label: i18n.t('kiosk.nearby.rain.jaka') };
+    default: break;
+  }
+  const precip = dataNumber(item, 'precip');
+  const prob = dataNumber(item, 'prob');
+  const wet = (precip !== null && precip >= HOURLY_WET_MM) || (prob !== null && prob >= HOURLY_WET_PROBABILITY);
+  return wet ? { icon: 'droplets', label: i18n.t('weather.hourWet') } : null;
+}
+
+/** The step's chance of rain when it is printed (30 % or more), whole. */
+function hourChance(item: FeedItem): number | null {
+  const prob = dataNumber(item, 'prob');
+  return prob !== null && prob >= HOURLY_RAIN_FROM ? Math.round(prob) : null;
+}
+
+/**
+ * One hourly cell: the hour, the glyph (or its empty slot, so the cells of a row line up), the temperature in whole
+ * degrees, and the chance of rain where it is 30 % or more, its words for a reader of the tree and "70 %" on screen.
+ * `rainSlots` false (no step of the grid is wet or has a chance to print) leaves the glyph slot and the rain line
+ * out, so a dry day's cells are the hour over the temperature.
+ */
+export function hourCell(i18n: I18n, item: FeedItem, rainSlots = true): string {
+  const temp = dataNumber(item, 'temp')!;
+  const chance = hourChance(item);
+  const glyph = hourGlyph(i18n, item);
+  const icon = glyph ? iconMarkup(glyph.icon, glyph.label, 'icon wx-hour-icon') : rainSlots ? '<span class="wx-hour-icon" aria-hidden="true"></span>' : '';
+  const rain = chance === null ? '' : `<span class="visually-hidden">${escapeHtml(i18n.t('weather.hourChance'))} </span>${chance} %`;
+  return `<li class="wx-hour" data-key="${escapeAttribute(item.id)}"${chance === null ? '' : ' data-wet="1"'}><time datetime="${escapeAttribute(item.at!)}">${escapeHtml(zagrebTime(item.at!))}</time>${icon}`
+    + `<span class="wx-hour-temp">${escapeHtml(`${numberText(i18n, temp, 0)}°`)}</span>${rainSlots || rain ? `<span class="wx-hour-rain">${rain}</span>` : ''}</li>`;
+}
+
+/** DHMZ's hourly steps for Grič (Maksimir where Grič has none), from the current hour, as a grid of cells (hourCell).
+ *  A step without a temperature is left out. */
 function hourlySection(i18n: I18n, ctx: LayerContext): string {
   const hourly = ctx.snapshots['dhmz-hourly'];
   const error = ctx.errors?.['dhmz-hourly'];
@@ -53,14 +101,8 @@ function hourlySection(i18n: I18n, ctx: LayerContext): string {
   const shown = (gric.length > 0 ? gric : steps('maksimir')).slice(0, HOURLY_STEPS);
   let body = hourly ? listState(i18n, hourly, 'dhmz-hourly', shown.length, i18n.t('status.unknown'), error) : loadingOrDown(i18n, ctx, 'dhmz-hourly');
   if (!body) {
-    const cells = shown.map((item) => {
-      const temp = dataNumber(item, 'temp')!;
-      const prob = dataNumber(item, 'prob');
-      const rain = prob !== null && prob >= HOURLY_RAIN_FROM ? `<span class="wx-hour-rain">${escapeHtml(i18n.t('kiosk.nearby.rainChance', { p: Math.round(prob) }))}</span>` : '';
-      return `<li class="wx-hour" data-key="${escapeAttribute(item.id)}"><time datetime="${escapeAttribute(item.at!)}">${escapeHtml(zagrebTime(item.at!))}</time>`
-        + `<span class="wx-hour-temp">${escapeHtml(i18n.t('panels.temperature', { value: numberText(i18n, temp, 0) }))}</span>${rain}</li>`;
-    });
-    body = `<ol class="wx-hourly" role="list" tabindex="0" aria-labelledby="wx-hourly-title" data-testid="weather-hourly">${cells.join('')}</ol>`;
+    const rainSlots = shown.some((item) => hourGlyph(i18n, item) !== null || hourChance(item) !== null);
+    body = `<ol class="wx-hourly" role="list" aria-labelledby="wx-hourly-title" data-testid="weather-hourly">${shown.map((item) => hourCell(i18n, item, rainSlots)).join('')}</ol>`;
   }
   return wxSection({
     id: 'wx-hourly', tone: 'weather', wide: true,
@@ -136,7 +178,7 @@ function nowSection(i18n: I18n, ctx: LayerContext): string {
     const condition = conditionText(dataText(o, 'weather'));
     const icon = weatherIcon(condition);
     const cond = condition ? `<p class="wx-cond">${icon ? iconMarkup(icon) : ''}<span>${escapeHtml(condition)}</span></p>` : '';
-    body = `<div class="wx-lead"><p class="wx-temp" data-testid="temp-now">${escapeHtml(i18n.t('panels.temperature', { value: numberText(i18n, temp, 1) }))}</p>${cond}<p class="wx-obs">${observed(i18n, o, observation, error)}</p></div>`;
+    body = `<div class="wx-lead"><p class="wx-temp" data-testid="temp-now">${escapeHtml(i18n.t('panels.temperature', { value: numberText(i18n, temp, 1) }))}</p>${cond}<p class="wx-obs">${observed(i18n, o, observation, error)}</p></div>${facts(i18n, o)}`;
   }
   // The observation has no visible head: the temperature is the head. The heading stays for readers of the tree.
   return wxSection({ id: 'wx-now', tone: 'weather', wide: true, body: `<h2 class="visually-hidden" id="wx-now-title">${escapeHtml(i18n.t('weather.now'))}</h2>${body}` });
@@ -221,12 +263,11 @@ export function warningRow(i18n: I18n, w: FeedItem, now: number): string {
 function warningsSection(i18n: I18n, ctx: LayerContext): string {
   const cap = ctx.snapshots['dhmz-cap'];
   const error = ctx.errors?.['dhmz-cap'];
-  // A warning whose window has closed is over; only the ones in force or still to come are warnings.
-  const items = (cap?.items ?? []).filter((w) => !w.until || Date.parse(w.until) >= ctx.now);
+  const items = liveWarnings(ctx);
   const list = listState(i18n, cap, 'dhmz-cap', items.length, i18n.t('weather.warningsNone'), error)
     || `<ul class="wx-warnings" role="list" data-testid="warnings">${items.map((w) => warningRow(i18n, w, ctx.now)).join('')}</ul>`;
   return wxSection({
-    id: 'wx-warnings', tone: 'urgency',
+    id: 'wx-warnings', tone: 'urgency', wide: true,
     body: sectionHead(i18n, { title: i18n.t('weather.warnings'), snapshot: cap, error, id: 'wx-warnings-title' }) + list,
   });
 }
@@ -318,16 +359,38 @@ function quakesSection(i18n: I18n, ctx: LayerContext): string {
   });
 }
 
+/**
+ * DHMZ's radar crop around Zagreb (/api/radar/zagreb.png, about 120 km across, the wall's inset), with the credit and
+ * the image's time under it, while a fresh radar item stands (kiosk/local.ts radarNow); absent without one. The rain
+ * line is said only when the worker found rain near the city: the module never says "no rain".
+ */
+function radarSection(i18n: I18n, ctx: LayerContext): string {
+  const snapshot = ctx.snapshots['dhmz-radar'];
+  const now = radarNow(snapshot ? [snapshot] : [], ctx.now);
+  if (!now) return '';
+  const rain = now.rainNear ? `<p class="wx-radar-rain">${escapeHtml(i18n.t('weather.radarRainNear'))}</p>` : '';
+  const figure = `<figure class="wx-radar-figure" data-replace data-sig="${escapeAttribute(now.src)}"><img src="${escapeAttribute(now.src)}" width="120" height="120" alt="${escapeAttribute(i18n.t('weather.radarAlt'))}" decoding="async">`
+    + `<figcaption class="sec-note">${escapeHtml(i18n.t('weather.radarCaption', { time: zagrebTime(now.atMs) }))}</figcaption></figure>`;
+  return wxSection({
+    id: 'wx-radar', tone: 'weather',
+    body: sectionHead(i18n, { title: i18n.t('weather.radar'), snapshot, error: ctx.errors?.['dhmz-radar'], id: 'wx-radar-title' }) + rain + figure,
+  });
+}
+
+/** DHMZ's warnings in force or announced, the ones the page leads with; a closed window is over. */
+function liveWarnings(ctx: LayerContext): FeedItem[] {
+  return (ctx.snapshots['dhmz-cap']?.items ?? []).filter((w) => !w.until || Date.parse(w.until) >= ctx.now);
+}
+
 export function renderZrakINebo(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
-  const observation = ctx.snapshots['dhmz-now'];
-  const o = observation?.items[0];
-  // The layer title is for readers of the tree on a phone; a desk shows it with the observation line beside it (layers.css `.wx-head`).
-  const headObs = o ? `<p class="wx-head-obs">${observed(i18n, o, observation, ctx.errors?.['dhmz-now'])}</p>` : '';
+  // The warnings lead while there is one; otherwise their confirmation (or their loading or down state) waits in "Više".
+  const warnings = warningsSection(i18n, ctx);
+  const leading = liveWarnings(ctx).length > 0;
   return createElementFromHTML(`<section class="layer ws ws-weather" id="layer-zrak-i-nebo" data-layer="zrak-i-nebo" data-reconcile aria-labelledby="layer-title-zrak-i-nebo">
-<header class="ws-head wx-head"><h2 class="layer-title" id="layer-title-zrak-i-nebo" tabindex="-1">${escapeHtml(i18n.t('layers.zrak-i-nebo'))}</h2>${headObs}</header>
-<div class="wx-grid">${nowSection(i18n, ctx)}${hourlySection(i18n, ctx)}${rangeSection(i18n, ctx)}${rangeSection(i18n,ctx,1)}${warningsSection(i18n, ctx)}${wavesSection(i18n, ctx)}${bioSection(i18n, ctx)}</div>
-<details class="wx-reference"><summary>${escapeHtml(i18n.t('weather.reference'))}</summary><div class="wx-grid">${o?facts(i18n,o):''}${sunSection(i18n, ctx)}${conditionsMarkup(ctx)}${quakesSection(i18n, ctx)}</div></details>
-${provenanceBlock(i18n, [ctx.snapshots['dhmz-now'], ctx.snapshots['dhmz-forecast'], ctx.snapshots['dhmz-hourly'], ctx.snapshots['dhmz-cap'], ctx.snapshots.emsc, ctx.snapshots['dhmz-bio'], ctx.snapshots['dhmz-waves']])}
+<header class="ws-head wx-head"><h2 class="layer-title" id="layer-title-zrak-i-nebo" tabindex="-1">${escapeHtml(i18n.t('layers.zrak-i-nebo'))}</h2></header>
+<div class="wx-grid">${leading ? warnings : ''}${nowSection(i18n, ctx)}${hourlySection(i18n, ctx)}${rangeSection(i18n, ctx)}${rangeSection(i18n, ctx, 1)}${sunSection(i18n, ctx)}${radarSection(i18n, ctx)}</div>
+<details class="wx-reference"><summary>${escapeHtml(i18n.t('weather.reference'))}</summary><div class="wx-grid">${leading ? '' : warnings}${wavesSection(i18n, ctx)}${bioSection(i18n, ctx)}${conditionsMarkup(ctx)}${quakesSection(i18n, ctx)}</div></details>
+${provenanceBlock(i18n, [ctx.snapshots['dhmz-now'], ctx.snapshots['dhmz-forecast'], ctx.snapshots['dhmz-hourly'], ctx.snapshots['dhmz-cap'], ctx.snapshots['dhmz-radar'], ctx.snapshots.emsc, ctx.snapshots['dhmz-bio'], ctx.snapshots['dhmz-waves']])}
 </section>`);
 }

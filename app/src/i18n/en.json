@@ -175,10 +175,16 @@
     "onFigure": "{shown} of {total} on the figure",
     "magnitude": "M {mag}",
     "depth": "depth {depth} km",
-    "reference": "Measurements, sun, air and the Sava bulletin",
+    "reference": "More: air, the Sava, earthquakes",
     "hourly": "By the hour",
     "bio": "Biometeorological forecast",
-    "waves": "Heat and cold waves"
+    "waves": "Heat and cold waves",
+    "hourChance": "chance of precipitation",
+    "hourWet": "precipitation",
+    "radar": "Precipitation radar",
+    "radarAlt": "DHMZ precipitation radar image around Zagreb, about 120 km across",
+    "radarCaption": "Source: DHMZ · taken at {time}",
+    "radarRainNear": "The radar shows rain near Zagreb."
   },
   "safety": {
     "hitnoSame": "The same page without a scan: Safety",

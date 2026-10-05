@@ -160,9 +160,12 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // The snimka pass S4 +1 landing.actions.snimka, the landing's link to /snimka/ (app/index.html): 1,142 hr, 1,113 en.
     // The pull-ins as ST and SD (shared/city/depot-run.ts) +2: motion.ahead (the card's "dalje: …", transport/detail.ts
     // vehicleAhead) and arrivals.depotVia (the stop sheet's "preko stajališta …", depotVia): 1,144 hr, 1,115 en.
+    // The irritation pass's Vrijeme +6 (layers/zrak-i-nebo.ts): weather.hourChance and weather.hourWet (the hourly
+    // cell's words for a reader of the tree), weather.radar, radarAlt, radarCaption and radarRainNear (the radar inset):
+    // 1,150 hr, 1,121 en.
     // A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1144);
-    expect(leafKeys(en).length).toBe(1115);
+    expect(leaves.length).toBe(1150);
+    expect(leafKeys(en).length).toBe(1121);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });

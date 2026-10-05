@@ -52,6 +52,9 @@ describe('rangeBar: track/fill/marker in SVG, min/max/now readable as HTML', () 
     expect(now.textContent).toBe('24,7°');
     // Positioned by percent along the track, not by a fixed px offset.
     expect(now.getAttribute('style')).toMatch(/left:\d+(\.\d+)?%/);
+    // Anchored by the same share of its own width, so it never spills past either end of the figure (irritation pass).
+    const [, left, shift] = /left:([\d.]+)%;transform:translateX\(-([\d.]+)%\)/.exec(now.getAttribute('style')!)!;
+    expect(shift).toBe(left);
   });
 
   it('omits the now label (and its marker) when there is no current reading', () => {
@@ -126,6 +129,13 @@ describe('sunPath: sunrise, noon and sunset as HTML beside the arc', () => {
     expect(svg).not.toBeNull();
     expect(svg.querySelectorAll('text')).toHaveLength(0);
     expect(svg.querySelector('.g-path')).not.toBeNull();
+    // The disc has its own class: the root's g-sun (the figure's box) never styles the circle, nor the circle the box.
+    expect(svg.querySelectorAll('.g-sun')).toHaveLength(0);
+    expect(svg.querySelector('circle.g-sun-disc')).not.toBeNull();
+  });
+  it('greys the disc under the horizon at night', () => {
+    const night = el(sunPath({ sunrise, sunset, now: sunset + 3 * 3_600_000, sunriseLabel: 'izlazak', sunsetLabel: 'zalazak', noonLabel: 'podne' }));
+    expect(night.querySelector('circle.g-sun-disc.g-sun-down')).not.toBeNull();
   });
 
   it('reads sunrise, noon and sunset from .g-labels, not the SVG', () => {

@@ -111,8 +111,9 @@ describe('layer registry', () => {
     expect(LAYER_MODULES['uprava-i-pravo']).toEqual(['glasnik', 'dogadanja']);
     expect(LAYER_MODULES['u-pokretu']).toEqual(['zet-rt', 'prometnice', 'dogadanja']);
     expect(LAYER_MODULES['zrak-i-nebo']).toContain('dhmz-now');
-    // R0: Vrijeme's hourly strip reads DHMZ's hourly steps; Sigurnost lists HAK's road states and the planned cuts.
-    expect(LAYER_MODULES['zrak-i-nebo']).toEqual(['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly', 'dhmz-bio', 'dhmz-waves']);
+    // R0: Vrijeme's hourly grid reads DHMZ's hourly steps, and since the irritation pass its radar inset DHMZ's radar;
+    // Sigurnost lists HAK's road states and the planned cuts.
+    expect(LAYER_MODULES['zrak-i-nebo']).toEqual(['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly', 'dhmz-bio', 'dhmz-waves', 'dhmz-radar']);
     expect(LAYER_MODULES['grad-sada']).toEqual(expect.arrayContaining(['dhmz-radar', 'dhmz-bio', 'dhmz-waves']));
     expect(LAYER_MODULES.sigurnost).toEqual(['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo', 'hak', 'prekidi']);
     expect(ALL_LAYER_MODULES).toContain('glasnik');
@@ -716,8 +717,9 @@ describe('Vrijeme: observation, today, sun, warnings and quakes (T3.1)', () => {
     expect([...section.querySelectorAll('svg.g')].map((svg) => svg.getAttribute('class'))).toEqual(['g g-range', 'g g-sun', 'g g-radar']);
   });
 
-  it('reads wind, humidity and pressure as three labelled facts on one strip, the wind with an arrow that flies with it', () => {
-    const facts = weather().querySelector('.wx-reference .wx-figures')!;
+  it('reads wind, humidity and pressure as three labelled facts on one row under the temperature, the wind with an arrow that flies with it', () => {
+    const facts = weather().querySelector('#wx-now .wx-figures')!;
+    expect(facts.closest('details'), 'the facts are on the page, not behind "Više"').toBeNull();
     expect(facts.querySelectorAll('.wx-fact')).toHaveLength(3);
     expect(text(facts)).toContain('hPa');
     expect(text(facts)).toContain('1013 hPa');
@@ -732,7 +734,7 @@ describe('Vrijeme: observation, today, sun, warnings and quakes (T3.1)', () => {
   });
 
   it('says "bez vjetra" with no arrow when the station reads zero', () => {
-    const facts = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-now': CALM } }).querySelector('.wx-reference .wx-figures')!;
+    const facts = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-now': CALM } }).querySelector('#wx-now .wx-figures')!;
     expect(text(facts.querySelector('[data-testid=wind-text]'))).toBe('bez vjetra');
     expect(facts.querySelector('.wx-arrow')).toBeNull();
   });
@@ -830,6 +832,89 @@ describe('Vrijeme: observation, today, sun, warnings and quakes (T3.1)', () => {
       expect(sec.classList.contains(id), `${id} carries its id as the class its own rules hook on`).toBe(true);
     }
     expect(section.querySelector('#wx-now')!.classList.contains('wx-wide')).toBe(true);
+  });
+});
+
+// The irritation pass (5 Oct 2026): the page rebuilt mobile-first. One column on a phone, in the order a person asks:
+// the warnings while any stands, the observation with its three facts, the hourly grid, today and tomorrow, the sun,
+// the radar; everything else behind one "Više".
+describe('Vrijeme, mobile-first: the order of the page and what waits in "Više"', () => {
+  const weather = (over: Partial<LayerContext> = {}) => renderLayer('zrak-i-nebo', ctx(over));
+  const RADAR_AT = Date.parse('2026-09-11T12:25:00Z');
+  const radar = (rainNear: boolean, at = RADAR_AT): ModuleSnapshot => base('dhmz-radar', [{
+    id: `dhmz-radar:${Math.floor(at / 1000)}`, module: 'dhmz-radar', kind: 'radar', tier: 'open', title: 'Radar DHMZ, Zagreb',
+    at: new Date(at).toISOString(), until: new Date(at + 600_000).toISOString(), data: { rainNear, rainCells: rainNear ? 40 : 0 },
+  }]);
+  const ids = (root: Element | null) => [...(root?.children ?? [])].map((el) => el.id || el.className);
+  const EMPTY_CAP = base('dhmz-cap', []);
+
+  it('leads with the warnings while one stands, then now, hourly, today, tomorrow, sun and radar; "Više" holds the rest', () => {
+    const page = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-radar': radar(false) } });
+    const [main, more] = [...page.querySelectorAll(':scope > .wx-grid, :scope > details > .wx-grid')];
+    expect(ids(main)).toEqual(['wx-warnings', 'wx-now', 'wx-hourly', 'wx-range', 'wx-tomorrow', 'wx-sun', 'wx-radar']);
+    expect(main!.closest('details')).toBeNull();
+    expect(page.querySelector(':scope > details.wx-reference > summary')!.textContent).toBe('Više: zrak, Sava, potresi');
+    // The bio forecast, the waves and air only stand when their data does; the fixture has a quake week.
+    expect(ids(more)).toEqual(['wx-quakes']);
+    expect(page.querySelector('#wx-warnings')!.classList.contains('wx-wide')).toBe(true);
+    // The layer's own title is in the head on every surface (layers.css shows it); the observation line lives under the temperature.
+    expect(page.querySelector('.wx-head > .layer-title')!.classList.contains('visually-hidden')).toBe(false);
+    expect(page.querySelector('.wx-head-obs')).toBeNull();
+  });
+
+  it('without a warning in force or announced the page starts at the temperature; the confirmation waits in "Više"', () => {
+    const page = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': EMPTY_CAP } });
+    expect(page.querySelector(':scope > .wx-grid > .sec')!.id).toBe('wx-now');
+    const warnings = page.querySelector('details.wx-reference #wx-warnings')!;
+    expect(text(warnings.querySelector('.state[data-kind=empty]'))).toBe('Nema upozorenja DHMZ-a za Zagreb. Potvrđeno 14:31.');
+    // A warning whose window has closed is over: it does not lead either.
+    const over = base('dhmz-cap', [{ ...SNAPSHOTS['dhmz-cap']!.items[0]!, until: '2026-09-11T12:00:00Z' }]);
+    expect(weather({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': over } }).querySelector(':scope > .wx-grid > .sec')!.id).toBe('wx-now');
+    // While the warnings are still loading they wait in "Više" too, never as a loading block above the temperature.
+    const { 'dhmz-cap': _cap, ...rest } = SNAPSHOTS;
+    const loading = weather({ snapshots: rest });
+    expect(loading.querySelector(':scope > .wx-grid > .sec')!.id).toBe('wx-now');
+    expect(loading.querySelector('details.wx-reference #wx-warnings')).not.toBeNull();
+  });
+
+  it('shows the radar crop with the DHMZ credit and the image\'s time while a fresh radar item stands, and says rain only when the worker saw it', () => {
+    const page = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-radar': radar(true) } });
+    const section = page.querySelector('#wx-radar')!;
+    expect(text(section.querySelector('.sec-title'))).toBe('Radar oborina');
+    const img = section.querySelector<HTMLImageElement>('figure.wx-radar-figure > img')!;
+    expect(img.getAttribute('src')).toBe(`/api/radar/zagreb.png?v=${Math.floor(RADAR_AT / 1000)}`);
+    expect(img.getAttribute('alt')).toBe('Radarska slika oborina DHMZ-a oko Zagreba, oko 120 km u promjeru');
+    expect([img.getAttribute('width'), img.getAttribute('height')]).toEqual(['120', '120']);
+    expect(text(section.querySelector('figcaption'))).toBe('Izvor: DHMZ · snimljeno u 14:25');
+    expect(text(section.querySelector('.wx-radar-rain'))).toBe('Radar pokazuje kišu u blizini Zagreba.');
+    // The figure swaps whole when the image changes.
+    expect(section.querySelector('figure')!.getAttribute('data-replace')).not.toBeNull();
+    expect(section.querySelector('figure')!.getAttribute('data-sig')).toBe(img.getAttribute('src'));
+    // No rain seen: the image without a rain sentence (the module never says "no rain").
+    const dry = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-radar': radar(false) } }).querySelector('#wx-radar')!;
+    expect(dry.querySelector('img')).not.toBeNull();
+    expect(dry.querySelector('.wx-radar-rain')).toBeNull();
+    // No module, a stale item past its ten minutes, or a down source: no section at all.
+    expect(weather().querySelector('#wx-radar')).toBeNull();
+    expect(weather({ snapshots: { ...SNAPSHOTS, 'dhmz-radar': radar(true, NOW - 11 * 60_000) } }).querySelector('#wx-radar')).toBeNull();
+    expect(weather({ snapshots: { ...SNAPSHOTS, 'dhmz-radar': { ...radar(true), status: 'down' } } }).querySelector('#wx-radar')).toBeNull();
+    // The radar's credit joins the page's sources.
+    expect(page.querySelector('.provenance li[data-key=dhmz-radar]')).not.toBeNull();
+    expect(text(page.querySelector('.provenance'))).toContain('Izvor: dhmz-radar');
+  });
+
+  it('keeps the range bar\'s "now" label inside the figure at either end (anchored by the marker\'s own share)', () => {
+    const near = (temp: number) => weather({ snapshots: { ...SNAPSHOTS, 'dhmz-now': base('dhmz-now', [{ ...SNAPSHOTS['dhmz-now']!.items[0]!, data: { ...SNAPSHOTS['dhmz-now']!.items[0]!.data, temp } }]) } })
+      .querySelector('#wx-range .g-label-now')!.getAttribute('style')!;
+    for (const temp of [-15, 12, 18, 24, 45]) {
+      const style = near(temp);
+      const left = Number(/left:([\d.]+)%/.exec(style)![1]);
+      const shift = Number(/translateX\(-([\d.]+)%\)/.exec(style)![1]);
+      // The label's start sits at left% of the row minus shift% of its own width: equal shares keep both edges inside.
+      expect(shift, `${temp} °C`).toBe(left);
+      expect(left).toBeGreaterThanOrEqual(0);
+      expect(left).toBeLessThanOrEqual(100);
+    }
   });
 });
 

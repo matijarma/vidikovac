@@ -131,6 +131,9 @@ export interface NearbyRow {
   source: string;
   /** What the phone opens when the row is tapped. */
   selection?: PublicSelection;
+  /** A row without a subject of its own whose page is a layer: a sunrise, a sunset or rain opens Vrijeme on the phone
+   *  (city/nearby-markup.ts). The wall ignores it. */
+  layer?: 'zrak-i-nebo';
   /** What the map highlights while the row is the subject. */
   map?: MapHighlight;
   /** A departure row's own arrival (route, headsign, countdown minutes), for the badge and the sentence. */
@@ -810,6 +813,7 @@ function solarRows(input: NearbyInput): NearbyRow[] {
     sub: '',
     live: false,
     source: 'solar',
+    layer: 'zrak-i-nebo',
   }];
 }
 
@@ -1260,6 +1264,7 @@ function rainRows(input: NearbyInput): NearbyRow[] {
         sub,
         live: false,
         source: 'dhmz-hourly',
+        layer: 'zrak-i-nebo',
         detail: { kind: 'rain', word, percent },
       }];
     }
@@ -1282,6 +1287,7 @@ function rainRows(input: NearbyInput): NearbyRow[] {
     sub: '',
     live: false,
     source: 'dhmz-radar',
+    layer: 'zrak-i-nebo',
     detail: { kind: 'radar' },
   }];
 }
