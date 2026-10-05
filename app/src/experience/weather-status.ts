@@ -21,6 +21,8 @@ export interface WeatherStatus {
   condition: string;
   /** '21,4 °C' in the reader's locale, one decimal at most, like the kiosk header. */
   temp: string;
+  /** '21 °C': the whole degree, what the phone header's chip prints (the decimal stays in the aria). */
+  tempShort: string;
   /** Today's sunset in Zagreb, 'HH:MM'. */
   sunset: string;
   /** The last good copy is shown: the source stopped answering. */
@@ -37,12 +39,13 @@ export function weatherStatus(i18n: I18n, snapshots: FeedSnapshots, now: number)
   if (temp === null) return null;
   const condition = conditionText(dataText(observation, 'weather'));
   const tempText = i18n.t('panels.temperature', { value: numberText(i18n, temp, 1) });
+  const tempShort = i18n.t('panels.temperature', { value: numberText(i18n, Math.round(temp), 0) });
   // The Zagreb calendar day, not the UTC one: after a Zagreb midnight the sunset shown is already the new day's.
   const sunset = zagrebTime(sunTimes(new Date(`${zagrebDayKey(now)}T12:00:00Z`)).sunset);
   const stale = snapshot.status === 'stale';
   const parts = [condition, tempText, i18n.t('weatherStatus.sunset', { time: sunset })];
   if (stale) parts.push(i18n.t('status.staleShort', { time: zagrebTime(snapshot.staleSince ?? snapshot.fetchedAt) }));
-  return { icon: weatherIcon(condition), condition, temp: tempText, sunset, stale, aria: parts.filter(Boolean).join(', ') };
+  return { icon: weatherIcon(condition), condition, temp: tempText, tempShort, sunset, stale, aria: parts.filter(Boolean).join(', ') };
 }
 
 /** glyph · temperature · sunset glyph + time; the caller wraps it in the link that carries `status.aria`. */

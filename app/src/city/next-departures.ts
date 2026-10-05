@@ -134,13 +134,17 @@ export function departuresBlock(ctx: LayerContext, place: PlaceContext, opts: De
     : stopName !== null ? i18n.t('sada.departuresAt', { stop: stopName }) : i18n.t('arrivals.title');
   const heading = trains ? `<h3 class="sada-departures-title">${e(label)}</h3>`
     : opts.heading && stopName !== null && stopName.trim() !== place.name.trim() ? `<h3 class="sada-departures-title">${e(stopName)}</h3>` : '';
-  // The train toggle (owner, 5 Oct 2026): a small train glyph with its word at the head's end, pressed while the trains
-  // show; the tap writes the view's filter, so the state survives a poll and a return to the layer. While ZET's fleet
-  // is silent or reduced (the wall's rail policy) a dot on it says the trains are worth a look; nothing switches by itself.
+  // The train toggle (owner, 5 Oct 2026: "small, subtle"): a 44 px quiet icon button with the train glyph alone, its
+  // name in the aria-label and the title; pressed in the brand tint while the trains show. With a heading it ends the
+  // heading's row; without one it takes no row of its own: the list keeps a 44 px rail at its end (data-rail) and the
+  // button stands in that rail on the first row. The tap writes the view's filter, so the state survives a poll and a
+  // return to the layer. While ZET's fleet is silent or reduced (the wall's rail policy) a dot on it says the trains are
+  // worth a look; nothing switches by itself.
   const hint = rail !== null && !trains && railPolicy(serviceStateOf(ctx.snapshots['zet-rt'], ctx.now).kind) !== undefined;
-  const toggle = rail === null ? '' : `<button type="button" class="sada-departures-mode" data-testid="departures-trains" data-action="filter" data-filter-key="${DEPARTURES_FILTER}" data-filter-value="${trains ? 'zet' : 'hz'}" aria-pressed="${trains}" aria-label="${a(i18n.t(trains ? 'sada.transitShow' : 'sada.trainsShow', { station: stationName }))}"${hint ? ' data-hint="1"' : ''}>${iconMarkup('train-front')}<span>${e(i18n.t('sada.trains'))}</span></button>`;
-  const head = heading || toggle ? `<div class="sada-departures-head">${heading}${toggle}</div>` : '';
-  return `<section class="sada-departures" data-key="departures" aria-label="${a(label)}">${head}<ul class="sada-departure-list" data-testid="day-departures"${line ? ' data-line="1"' : ''}${trains ? ' data-mode="hz"' : ''}${busy ? ' aria-busy="true"' : ''}>${body}</ul></section>`;
+  const toggle = rail === null ? '' : `<button type="button" class="btn-quiet icon-btn sada-departures-mode" data-testid="departures-trains" data-action="filter" data-filter-key="${DEPARTURES_FILTER}" data-filter-value="${trains ? 'zet' : 'hz'}" aria-pressed="${trains}" aria-label="${a(i18n.t(trains ? 'sada.transitShow' : 'sada.trainsShow', { station: stationName }))}" title="${a(i18n.t('sada.trains'))}"${hint ? ' data-hint="1"' : ''}>${iconMarkup('train-front', undefined, 'icon icon-sm')}</button>`;
+  const head = heading ? `<div class="sada-departures-head">${heading}${toggle}</div>` : toggle;
+  const rail44 = toggle && !heading ? ' data-rail="1"' : '';
+  return `<section class="sada-departures" data-key="departures" aria-label="${a(label)}">${head}<ul class="sada-departure-list" data-testid="day-departures"${line ? ' data-line="1"' : ''}${trains ? ' data-mode="hz"' : ''}${rail44}${busy ? ' aria-busy="true"' : ''}>${body}</ul></section>`;
 }
 
 /** The old entry point, kept until Sada calls departuresBlock itself (WP4 chunk B): the page's place, else one resolved from the context. */

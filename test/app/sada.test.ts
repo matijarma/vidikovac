@@ -460,8 +460,15 @@ describe('the trains on Sada (U3.md S3; owner 5 Oct 2026: behind the departures 
     expect(toggle.dataset.filterKey).toBe('departures');
     expect(toggle.dataset.filterValue).toBe('hz');
     expect(toggle.getAttribute('aria-label')).toBe('Prikaži vlakove, Glavni kolodvor');
-    expect(text(toggle)).toBe('Vlakovi');
+    // Small and subtle (owner, 5 Oct 2026): the glyph alone, its word as the title; no head row without a heading,
+    // the list keeps a 44 px rail for it instead.
+    expect(text(toggle)).toBe('');
+    expect(toggle.getAttribute('title')).toBe('Vlakovi');
+    expect(toggle.classList.contains('btn-quiet') && toggle.classList.contains('icon-btn')).toBe(true);
     expect(toggle.querySelector('svg use')?.getAttribute('href')).toBe('#icon-train-front');
+    expect(section.querySelector('.sada-departures-head')).toBeNull();
+    expect(toggle.parentElement?.classList.contains('sada-departures')).toBe(true);
+    expect(section.querySelector<HTMLElement>('[data-testid=day-departures]')?.dataset.rail).toBe('1');
     expect(toggle.hasAttribute('data-hint'), 'ZET is live: no dot').toBe(false);
     expect(section.querySelectorAll('[data-testid=day-departures] > li.sada-departure')).toHaveLength(3);
     expect(section.querySelector('[data-testid=day-departures]')?.hasAttribute('data-mode')).toBe(false);
@@ -475,6 +482,9 @@ describe('the trains on Sada (U3.md S3; owner 5 Oct 2026: behind the departures 
     expect(list.dataset.mode).toBe('hz');
     expect(text(section.querySelector('.sada-departures-title'))).toBe('Vlakovi · Glavni kolodvor');
     expect(section.querySelector('section.sada-departures')?.getAttribute('aria-label')).toBe('Vlakovi · Glavni kolodvor');
+    // With a heading the toggle ends the heading's row and the list needs no rail.
+    expect(section.querySelector('.sada-departures-head [data-testid=departures-trains]')).not.toBeNull();
+    expect(list.hasAttribute('data-rail')).toBe(false);
     const rows = [...list.querySelectorAll<HTMLElement>('li.sada-departure')];
     expect(rows).toHaveLength(3);
     expect(rows.every((row) => row.dataset.live === 'false' && row.dataset.kind === 'timetable')).toBe(true);

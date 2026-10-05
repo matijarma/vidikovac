@@ -65,12 +65,13 @@ export function devChipMarkup(labels: DevLabels, options: { current: DevSurface 
  * the tiny × after it. --dev-strut is the wordmark's font size where it stands, so each target's
  * line box is the wordmark's own and the small word shares its baseline; the targets are 44 px
  * squares centred in a header row that is at least that tall. The phone and desk header (.ki-head,
- * a grid) keeps the suffix in its free column after the wordmark, pulled back over the column gap.
- * A phone's row has no room to spare (390 px leaves 0 px beside a DEV session's pill), so there the
- * words step back as the header already lets them under 21rem, each only below the width that
- * needs it (measured in both languages): the share button's word under 31rem, Zaslon's under
- * 25rem (its glyph shows instead), and under 23rem the × itself, whose place is then the menu's
- * last row; the wordmark, the pill and the safety control never move. The wall's brand group
+ * a grid of named areas, ui/dashboard.css) gives the mark its own area `dev` right after the
+ * wordmark, pulled back over the column gap; the area is empty and 0 wide outside DEV (5 Oct 2026:
+ * a mark pinned to a column number met the weather chip placed in the same column and the row
+ * wrapped). A phone's row has no room to spare, so there the words step back as the header already
+ * lets them under 23rem, each only below the width that needs it (measured in both languages):
+ * the share button's word under 31rem, and under 23rem the × itself, whose place is then the
+ * menu's last row; the wordmark, the pill and the safety control never move. The wall's brand group
  * (.k-head-brand), /hitno's header line (.brand) and the /dev/ grid's header take it inline. The
  * menu opens under the suffix, above the page.
  *
@@ -98,11 +99,9 @@ export const DEV_CHIP_CSS = `
 .dev-menu a:hover{background:var(--dev-surface)}
 .dev-menu a[aria-current='page']{font-weight:700}
 .dev a:focus-visible,.dev summary:focus-visible{outline:2px solid var(--dev-focus);outline-offset:-2px}
-.ki-head>.dev{grid-column:2;grid-row:1;justify-self:start;margin-inline-start:calc(-1 * var(--sp-1,4px));--dev-strut:var(--type-body,1rem)}
-.ki-head>.dev~[data-key='space']{grid-column:2;grid-row:1}
+.ki-head>.dev{grid-area:dev;justify-self:start;margin-inline-start:calc(-1 * var(--sp-1,4px));--dev-strut:var(--type-body,1rem)}
 @media (min-width:60rem){.ki-head>.dev{margin-inline-start:calc(-1 * var(--sp-3,12px));--dev-strut:var(--type-title,1.5rem)}}
 @container header (max-width:31rem){.ki-head>.dev~.ki-share>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
-@container header (max-width:25rem){.ki-head>.dev~.ki-screen>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.ki-head>.dev~.ki-screen>.icon{display:inline-block}.ki-head>.dev~.ki-screen{padding-inline:0}}
 @container header (max-width:23rem){.ki-head>.dev .dev-off{display:none}.ki-head>.dev .dev-menu-off{display:block}}
 .k-head-brand>.dev{--dev-strut:var(--k-sup-size)}
 header>.brand+.dev{--dev-strut:1.375rem}

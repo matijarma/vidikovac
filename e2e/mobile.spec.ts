@@ -255,6 +255,33 @@ for (const viewport of [PHONE, SMALL, LANDSCAPE]) {
 }
 
 // --- 2. sticky chrome -----------------------------------------------------------------
+// 5 Oct 2026: the header's controls are placed by named grid areas on ONE row; a chip placed by column number once met
+// the DEV mark's column and the whole row wrapped under the wordmark. Measured, not styled: at every phone width and
+// on the desk, the header is one control tall and no two of its controls share a pixel.
+test('the header is one row at 360, 390, 430 and 1440 px: no control wraps under the wordmark and none overlaps another', async ({ page }) => {
+  const fixture = await openDashboard(page, PHONE);
+  await settle(page, fixture);
+  for (const width of [360, 390, 430, 1440]) {
+    await page.setViewportSize({ width, height: width > 1000 ? 900 : 844 });
+    await page.waitForTimeout(300);
+    const read = await page.evaluate((sel) => {
+      const head = document.querySelector<HTMLElement>(sel)!;
+      const kids = [...head.children].map((el) => ({ key: (el as HTMLElement).dataset.key ?? el.className, box: el.getBoundingClientRect() }))
+        .filter((k) => k.box.width > 0 && k.box.height > 0);
+      const overlaps: string[] = [];
+      for (let i = 0; i < kids.length; i += 1) for (let j = i + 1; j < kids.length; j += 1) {
+        const a = kids[i]!.box, b = kids[j]!.box;
+        const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left), oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (ox > 1 && oy > 1) overlaps.push(`${kids[i]!.key} over ${kids[j]!.key} by ${Math.round(ox)} px`);
+      }
+      return { height: head.getBoundingClientRect().height, overlaps, right: Math.max(...kids.map((k) => k.box.right)), keys: kids.map((k) => k.key) };
+    }, PHONE_SHELL.header);
+    expect(read.height, `at ${width} px the header is one control tall (it is ${fmt(read.height)}; controls: ${read.keys.join(' ')})`).toBeLessThanOrEqual(60);
+    expect(read.overlaps, `at ${width} px no header control overlaps another`).toEqual([]);
+    expect(read.right, `at ${width} px the last control ends inside the viewport`).toBeLessThanOrEqual(width + EDGE_TOLERANCE_PX);
+  }
+});
+
 test('the header stays pinned: after scrolling 1,500 px on Sada, .ki-head still starts at the top edge', async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
   await settle(page, fixture);

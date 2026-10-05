@@ -48,7 +48,6 @@ app/src/city/next-departures.ts:131 #departuresBlock → vetExternal('name', sto
 app/src/city/next-departures.ts:132 #departuresBlock → vetExternal('name', rail.station.name, 'row')
 app/src/city/next-departures.ts:135 #departuresBlock → e(label)
 app/src/city/next-departures.ts:136 #departuresBlock → e(stopName)
-app/src/city/next-departures.ts:141 #departuresBlock → e(i18n.t('sada.trains'))
 app/src/kiosk.ts:189 #shellMarkup → escapeHtml(s.appName)
 app/src/kiosk.ts:200 #shellMarkup → escapeHtml(s.basics.title)
 app/src/kiosk.ts:200 #shellMarkup → escapeHtml(s.basics.hint)
@@ -332,8 +331,8 @@ app/src/layers/grad-sada.ts:112 #mapBand → vetExternal('name', place.name, 'ro
 app/src/layers/grad-sada.ts:182 #renderGradSada → vetExternal('name', place.name, 'row')
 app/src/layers/grad-sada.ts:185 #renderGradSada → e(name)
 app/src/layers/grad-sada.ts:188 #renderGradSada → e(note)
-app/src/map/city-layers.ts:92 #cityLayers → 'text-field':['case',small,'',['get','badge']]
-app/src/map/city-layers.ts:106 #cityLayers → 'text-field':mode==='venues'?['get','title']:['step',['zoom'],['case',notVenueOrRail,'',['get','title']],PLACE_NAMES_ZOOM,['case',isRail,'',['get','title']],STOP_LABEL_ZOOM,['get','title']]
+app/src/map/city-layers.ts:98 #cityLayers → 'text-field':['case',small,'',['get','badge']]
+app/src/map/city-layers.ts:112 #cityLayers → 'text-field':mode==='venues'?['get','title']:['step',['zoom'],['case',notVenueOrRail,'',['get','title']],PLACE_NAMES_ZOOM,['case',isRail,'',['get','title']],STOP_LABEL_ZOOM,['get','title']]
 app/src/map/city-map.ts:246 #vehicleLabel → vetExternal('headsign', v.short, 'row')
 app/src/map/city-map.ts:249 #vehicleLabel → vetExternal('headsign', text, 'row')
 app/src/map/city-map.ts:932 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')

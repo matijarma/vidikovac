@@ -25,12 +25,12 @@ const CLEAR = observation({ temp: 21, humidity: 54, windDir: 'SZ', windSpeed: 2,
 describe('weatherStatus', () => {
   it('reads a live observation into glyph, condition, temperature and today’s sunset, and words the aria in that order', () => {
     expect(weatherStatus(hr, { 'dhmz-now': CLEAR }, NOW)).toEqual({
-      icon: 'sun', condition: 'vedro', temp: '21 °C', sunset: '19:16', stale: false, aria: 'vedro, 21 °C, zalazak 19:16',
+      icon: 'sun', condition: 'vedro', temp: '21 °C', tempShort: '21 °C', sunset: '19:16', stale: false, aria: 'vedro, 21 °C, zalazak 19:16',
     });
   });
   it('keeps one decimal like the kiosk header, in the reader’s locale', () => {
     const warm = observation({ temp: 21.4, weather: 'vedro' });
-    expect(weatherStatus(hr, { 'dhmz-now': warm }, NOW)?.temp).toBe('21,4 °C');
+    expect(weatherStatus(hr, { 'dhmz-now': warm }, NOW)).toMatchObject({ temp: '21,4 °C', tempShort: '21 °C' });
     expect(weatherStatus(en, { 'dhmz-now': warm }, NOW)).toMatchObject({ temp: '21.4 °C', aria: 'vedro, 21.4 °C, sunset 19:16' });
   });
   it('marks a stale copy and says since when, in the same word the status badge uses', () => {
@@ -46,7 +46,7 @@ describe('weatherStatus', () => {
   });
   it('drops DHMZ’s lone dash for a missing condition: no glyph, no word, the temperature and the sun still stand', () => {
     expect(weatherStatus(hr, { 'dhmz-now': observation({ temp: 19, weather: '-' }) }, NOW)).toEqual({
-      icon: null, condition: '', temp: '19 °C', sunset: '19:16', stale: false, aria: '19 °C, zalazak 19:16',
+      icon: null, condition: '', temp: '19 °C', tempShort: '19 °C', sunset: '19:16', stale: false, aria: '19 °C, zalazak 19:16',
     });
   });
   it('names the sky it cannot draw: an unknown condition keeps its word and gets no glyph', () => {
@@ -79,7 +79,7 @@ describe('weatherStatusMarkup', () => {
     expect(weatherStatusMarkup(weatherStatus(hr, { 'dhmz-now': CLEAR }, NOW)!)).not.toContain('zalazak');
   });
   it('escapes the texts it prints', () => {
-    expect(weatherStatusMarkup({ icon: null, condition: '', temp: '<b>', sunset: '"x"', stale: false, aria: '' })).toBe(
+    expect(weatherStatusMarkup({ icon: null, condition: '', temp: '<b>', tempShort: '<b>', sunset: '"x"', stale: false, aria: '' })).toBe(
       '<span class="tb-temp">&lt;b&gt;</span><svg class="icon icon-sm tb-sun" aria-hidden="true"><use href="#icon-sunset"></use></svg><span>&quot;x&quot;</span>',
     );
   });
