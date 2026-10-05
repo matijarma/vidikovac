@@ -260,7 +260,7 @@ test.describe('wall at 1920×1080: eight scenes', () => {
         for (const probe of [WALL_PROBES.togglePlace, WALL_PROBES.toggleFrame, WALL_PROBES.toggleView, WALL_PROBES.toggleTheme, WALL_PROBES.toggleRhythm]) {
           softly(await panel.locator(probe).count(), `${label}: the settings carry the click-toggle ${probe}`).toBeGreaterThanOrEqual(1);
         }
-        softly((await attrOf(page, `${WALL_PROBES.settingsPanel} ${WALL_PROBES.toggleFrame}`, 'data-value')) ?? '', `${label}: Kadar (${WALL_PROBES.toggleFrame}) carries data-value 4, 6 or 8`).toMatch(/^[468]$/);
+        softly((await attrOf(page, `${WALL_PROBES.settingsPanel} ${WALL_PROBES.toggleFrame}`, 'data-value')) ?? '', `${label}: Kadar (${WALL_PROBES.toggleFrame}) carries data-value 2, 4 or 6`).toMatch(/^[246]$/);
         await page.keyboard.press('Escape');
         await softly(panel, `${label}: Escape closes the settings`).toBeHidden({ timeout: 5_000 });
       });

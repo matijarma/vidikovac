@@ -96,7 +96,7 @@ export interface BeaconCreateInput {
    * 'place' meta and screenMetadata() derives the place from the stop on read.
    */
   place?: ScreenPlace | null;
-  /** Kadar 4 / 6 / 8; omitted reads back as DEFAULT_FRAME_STOPS. */
+  /** Kadar 2 / 4 / 6; omitted, or a legacy 8 stored before 5 Oct 2026, reads back as DEFAULT_FRAME_STOPS. */
   frame?: FrameStops;
   /** A DEV screen (worker/routes/dev.ts): sessions without a code, no caps, no counts. */
   dev?: true;
@@ -231,7 +231,7 @@ export class BeaconDO extends DurableObject<Env> {
    * room's 'joined' frame. `place`, `placeSet` and `frame` are always present, enriched on read
    * (worker/pairing/place.ts enrichPlace): a record from before place-v2 derives its place from
    * the stored stop; a stored null (an empty field, "Cijeli grad") reads as Trg bana Jelačića
-   * with placeSet false; a missing frame reads as DEFAULT_FRAME_STOPS. Nothing is migrated.
+   * with placeSet false; a missing frame, or a legacy 8, reads as DEFAULT_FRAME_STOPS. Nothing is migrated.
    */
   screenMetadata(): ScreenMetadata {
     const expiry = Number(this.meta('screenExpiresAt') ?? '0');

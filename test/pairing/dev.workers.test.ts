@@ -48,7 +48,7 @@ describe('the DEV screen: one per network per Zagreb day', () => {
     const again = await devScreenFor('203.0.113.10');
     expect(again.beaconId).toBe(first.beaconId);
     expect(again.secret).toBe(first.secret);
-    expect(first.screen).toMatchObject({ kind: 'temporary', stop: null, area: 'zagreb', placeSet: false, frame: 6, dev: true });
+    expect(first.screen).toMatchObject({ kind: 'temporary', stop: null, area: 'zagreb', placeSet: false, frame: 4, dev: true });
     expect(first.screen!.expiresAt).toBeGreaterThan(Date.now() + 23 * HOUR);
     expect(first.provisionUrl).toBe(`https://vidikovac.test/kiosk/?DEV#${first.beaconId}.${first.secret}`);
     // Another network has its own.

@@ -12,7 +12,7 @@
 // spans it (R-KP2), no padding and no selection (R-KP11: the enlarged
 // screen-stop ring is the anchor, a `selectedStop` would draw a second ring
 // over it). A wall whose place somebody chose is framed instead (WP2): N
-// stops around the place (Kadar 4 / 6 / 8), the radius measured along the
+// stops around the place (Kadar 2 / 4 / 6), the radius measured along the
 // tram lines (shared/city/frame.ts) and fitted by map/frame.ts frameView, a
 // neighbourhood with its buses and its names. A paired screen keeps today's
 // Promet contract (R-KP8): street zoom, the stop selected, the phone's route
@@ -632,7 +632,7 @@ export interface FieldInput {
   /** The frame's measured radius, metres (shared/city/frame.ts frameRadiusM, computed once by the
    *  caller for the camera, the "U blizini" circle and the pill); absent, FRAME_RADIUS_M[frame]. */
   radiusM?: number;
-  /** Kadar 4 / 6 / 8; absent, DEFAULT_FRAME_STOPS. Read only for the fallback radius. */
+  /** Kadar 2 / 4 / 6; absent, DEFAULT_FRAME_STOPS. Read only for the fallback radius. */
   frame?: FrameStops;
   /** A phone's band keeps its glance at the stop (spanM) instead of the frame. */
   handheld?: boolean;
@@ -786,8 +786,8 @@ export function labelPadding(widthPx: number, heightPx: number, spanM: number): 
  *  camera's own band reach the picture without a second map.
  *
  *  The FRAME is a neighbourhood, and its rules are keyed on being framed, not
- *  on the zoom (Kadar 4 / 6 / 8 must never flip the naming grammar, though
- *  Kadar 8 on a compact wall sits on the whole city's z12.7): every stop in
+ *  on the zoom (Kadar 2 / 4 / 6 must never flip the naming grammar, though
+ *  Kadar 2 frames near the z15.5 ceiling and Kadar 6 a whole zoom out): every stop in
  *  the frame is drawn, not only the screen's own routes', at the fixed
  *  neighbourhood dot; the ranked stop names with every tram interchange
  *  (map/overlays.ts); the place marks titled; the major street names on. */
@@ -888,7 +888,7 @@ export interface KioskMapInput {
    *  list and departures use it while the map keeps the whole-city window [O-65]. Framed is
    *  this, never Boolean(place). Absent: a stop keeps today's centred camera. */
   placeSet?: boolean;
-  /** Kadar 4 / 6 / 8 (credentials.screen?.frame ?? DEFAULT_FRAME_STOPS). */
+  /** Kadar 2 / 4 / 6 (credentials.screen?.frame ?? DEFAULT_FRAME_STOPS). */
   frame?: FrameStops;
   /** The measured frame radius, metres: shared/city/frame.ts frameRadiusM for the place, computed
    *  once by the caller so the camera, the "U blizini" circle and the pill read one number. Absent,
@@ -936,7 +936,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
    *  paired presentation is a phone putting ONE subject on the wall, which
    *  must be named there: both keep the names and the points they always had. */
   const cityWindow = input.phase === 'invitation' && !input.exploring;
-  /** The wall framed on its place: N stops around it (Kadar 4 / 6 / 8), a
+  /** The wall framed on its place: N stops around it (Kadar 2 / 4 / 6), a
    *  neighbourhood with its buses, its counted BAJS discs, tonight's venues
    *  named, the ranked stop names with the interchanges and the street names.
    *  Keyed on the chosen place (placeSet), never on a place being present: the

@@ -5,28 +5,51 @@
 //
 // The radius is measured per place [O-68], and measured ALONG THE TRAM LINES
 // (orchestrator decision 6, run/RUN.md): N stops down the lines that serve the
-// place, which is what "6 stajališta odavde" means to a rider and what the
-// owner-approved numbers come from (typical 1.5 / 2.2 / 2.8 km, the pill
-// "2,2 km · ~16 min" at Trg bana Jelačića). The air distance to the N-th
-// nearest stop name, the first reading of the brief's words, measured
-// 0.68 / 0.94 / 1.10 km: nearest by air counts the stops of every other line
-// around a junction, not the stops down the place's own. The camera, the
+// place, which is what "4 stajališta odavde" means to a rider. The air
+// distance to the N-th nearest stop name would count the stops of every other
+// line around a junction, not the stops down the place's own. The camera, the
 // "U blizini" circle and the pill all read the same number, so the map never
 // frames one distance while the list promises another.
+//
+// Kadar 2 / 4 / 6, default 4 (irritation pass, 5 Oct 2026). The first ladder,
+// 4 / 6 / 8 stops as the median over the ways out, framed Trg bana J. Jelačića
+// at 1.5 / 2.2 / 2.8 km: the owner found even Kadar 4 near-unusable on the wall
+// (a district, not the square's neighbourhood). The owner's ladder at Trg is
+// now 0.7 / 1.0 / 1.3 km, Kadar 6 a touch tighter than the old Kadar 4. Two
+// changes get there. The ways out are aggregated by their 25th percentile,
+// not their median, so a few long directions (at Trg, line 14 up to Gupčeva
+// zvijezda and the western lines out to Slovenska) no longer drive the frame.
+// And each Kadar has hard metre caps (FRAME_RADIUS_CAP_M), so a long-legged
+// line can never widen the stage past what the step promises. Measured over
+// feed 000396 (review.local/companion/plan/WP2/frame-calibration.mjs and
+// test/city/frame.test.ts): Trg's measure reads 837 / 1459 / 1732 m and its
+// caps give 700 / 1000 / 1300 m; Kvaternikov trg 643 / 1000 / 1300 m;
+// Črnomerec 700 / 1000 / 1300 m. Most tram platforms sit at a step's upper
+// cap; only a dense junction frames tighter.
 import { distanceM, normalName } from './geo';
 
-/** Kadar 4 / 6 / 8: how many tram stops around the place the frame reaches. */
-export const FRAME_STOPS = [4, 6, 8] as const;
+/** Kadar 2 / 4 / 6: how many tram stops around the place the frame reaches. */
+export const FRAME_STOPS = [2, 4, 6] as const;
 export type FrameStops = (typeof FRAME_STOPS)[number];
-export const DEFAULT_FRAME_STOPS: FrameStops = 6;
+export const DEFAULT_FRAME_STOPS: FrameStops = 4;
 
 export function isFrameStops(x: unknown): x is FrameStops {
   return (FRAME_STOPS as readonly unknown[]).includes(x);
 }
 
-/** The measured radius never frames less than half a kilometre or more than three. */
-export const FRAME_RADIUS_MIN_M = 500;
-export const FRAME_RADIUS_MAX_M = 3000;
+/**
+ * The least and the most each Kadar frames, in metres, whatever the lines measure: the
+ * owner's ladder at Trg bana J. Jelačića is the upper caps, 0.7 / 1.0 / 1.3 km. Both bounds
+ * grow with N, so clamping the largest measure up to N to N's own caps keeps a wider Kadar
+ * from ever framing less.
+ */
+export const FRAME_RADIUS_CAP_M: Readonly<Record<FrameStops, readonly [min: number, max: number]>> = Object.freeze({
+  2: Object.freeze([400, 700] as const),
+  4: Object.freeze([650, 1000] as const),
+  6: Object.freeze([900, 1300] as const),
+});
+/** Which of a place's ways out the radius reads: the 25th percentile of their N-th stops, so one or two long directions do not drive the frame. */
+export const FRAME_PERCENTILE = 0.25;
 /** With no tram stop this close (the place's own stop included), the frame counts bus stops instead. */
 export const FRAME_TRAM_REACH_M = 3000;
 /**
@@ -40,10 +63,11 @@ export const FRAME_SAME_STOP_M = 300;
  * The radius per Kadar when no stops are loaded yet (the first paint, a failed stop table)
  * or no tram line order is known, and the calibration target the measured radius is held
  * to (test/city/frame.test.ts, review.local/companion/plan/WP2/frame-calibration.mjs:
- * within 20 %). The measure over feed 000395's tram platforms gives a median of
- * 1524 / 2139 / 2753 m (WP2's notes: p50 1519 / 2191 / 2847 m over every stop and line).
+ * within 20 %). The measure over feed 000396's 270 tram platforms gives a median of
+ * 700 / 1000 / 1300 m (the upper caps); the table sits a little inside them, so a screen
+ * whose stops have not loaded yet frames no more than most measured ones.
  */
-export const FRAME_RADIUS_M: Readonly<Record<FrameStops, number>> = Object.freeze({ 4: 1300, 6: 2000, 8: 2700 });
+export const FRAME_RADIUS_M: Readonly<Record<FrameStops, number>> = Object.freeze({ 2: 650, 4: 950, 6: 1250 });
 
 /** Walking pace the pill prints: 7.5 minutes per kilometre (8 km/h, the owner's figure). */
 export const WALK_MIN_PER_KM = 7.5;
@@ -152,10 +176,13 @@ function sortsBefore(a: FrameStop, b: FrameStop): boolean {
   return a.lon !== b.lon ? a.lon < b.lon : a.lat < b.lat;
 }
 
-function median(values: readonly number[]): number {
+/** The q-quantile of a non-empty list, interpolated between the two nearest ranks (0.5 is the median). */
+function quantile(values: readonly number[], q: number): number {
   const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  const at = (sorted.length - 1) * q;
+  const lo = Math.floor(at);
+  const hi = Math.ceil(at);
+  return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (at - lo);
 }
 
 /**
@@ -166,8 +193,9 @@ function median(values: readonly number[]): number {
  * counts the distinct stop names down the line, the place's own name not among them, to the
  * N-th. Each distinct N-th stop counts once, however many lines reach it (five lines down one
  * street are one way out, not five), at its air distance from the place; the radius is the
- * median over those stops. Where no line reaches N stops (a short line) the frame reaches the
- * farthest stop any line does.
+ * FRAME_PERCENTILE quantile over those stops. Where no line reaches N stops (a short line) the
+ * frame reaches the farthest stop any line does, and where no line goes anywhere it reads as
+ * the Kadar's upper cap.
  */
 function alongTheLines(place: { lon: number; lat: number }, stops: readonly FrameStop[], frame: FrameStops): number | null {
   const { lines, tram, names } = lineIndex(stops);
@@ -211,23 +239,23 @@ function alongTheLines(place: { lon: number; lat: number }, stops: readonly Fram
       } else farthest = Math.max(farthest, d);
     }
   }
-  if (ends.size > 0) return median([...ends.values()]);
-  return farthest >= 0 ? farthest : FRAME_RADIUS_MAX_M;
+  if (ends.size > 0) return quantile([...ends.values()], FRAME_PERCENTILE);
+  return farthest >= 0 ? farthest : FRAME_RADIUS_CAP_M[frame][1];
 }
 
 /**
- * The frame's radius around a place, in metres, clamped to [FRAME_RADIUS_MIN_M,
- * FRAME_RADIUS_MAX_M] and never less for a wider Kadar: N stops down the tram lines that serve
- * the place (alongTheLines), as the largest of that measure over this Kadar and every narrower
- * one. The N-th stop down a curving line can lie nearer by air than an earlier one, and which
- * lines reach N stops changes with N, so the bare measure shrank from Kadar 6 to 8 at 8 of
+ * The frame's radius around a place, in metres, clamped to the Kadar's FRAME_RADIUS_CAP_M and
+ * never less for a wider Kadar: N stops down the tram lines that serve the place
+ * (alongTheLines), as the largest of that measure over this Kadar and every narrower one. The
+ * N-th stop down a curving line can lie nearer by air than an earlier one, and which lines
+ * reach N stops changes with N, so the bare measure shrank from one Kadar to the next at 8 of
  * feed 000395's 270 tram platforms (Horvati 2474 to 2395 m); a wider Kadar that framed less
- * would contradict its own words.
+ * would contradict its own words. The caps grow with N, so the clamp keeps that order.
  *
  * Only when no tram stop lies within FRAME_TRAM_REACH_M of the place, its own stop included,
  * does the frame count bus stops, as the air distance to the N-th nearest distinct-name bus
  * stop (the artefact carries no bus call order); a place that is itself a bus stop does not
- * count its own name, and fewer than N bus stops reads as the maximum. An empty table (nothing
+ * count its own name, and fewer than N bus stops reads as the Kadar's upper cap. An empty table (nothing
  * loaded yet), a place's stop with no tram line order, or a place with no usable position
  * falls back to FRAME_RADIUS_M; a row with a broken position is never counted. The answer is
  * always a finite number of metres.
@@ -239,7 +267,8 @@ export function frameRadiusM(
 ): number {
   const fallback = FRAME_RADIUS_M[frame];
   if (stops.length === 0 || !located(place)) return fallback;
-  const clamp = (m: number): number => Math.min(FRAME_RADIUS_MAX_M, Math.max(FRAME_RADIUS_MIN_M, m));
+  const [min, max] = FRAME_RADIUS_CAP_M[frame];
+  const clamp = (m: number): number => Math.min(max, Math.max(min, m));
   if (lineIndex(stops).tram.some((stop) => distanceM(place, stop) <= FRAME_TRAM_REACH_M)) {
     let radius = -Infinity;
     for (const n of FRAME_STOPS) {
@@ -262,7 +291,7 @@ export function frameRadiusM(
     const seen = nearest.get(name);
     if (seen === undefined || d < seen) nearest.set(name, d);
   }
-  const nth = [...nearest.values()].sort((a, b) => a - b)[frame - 1] ?? FRAME_RADIUS_MAX_M;
+  const nth = [...nearest.values()].sort((a, b) => a - b)[frame - 1] ?? max;
   return clamp(nth);
 }
 
@@ -273,7 +302,7 @@ export function frameSpanM(radiusM: number): number {
 
 /**
  * The pill under "U blizini": the radius with a decimal comma and one decimal (a whole
- * kilometre prints without one) and its walking minutes, "2,2 km · ~16 min", "2 km · ~15 min".
+ * kilometre prints without one) and its walking minutes, "1,3 km · ~10 min", "1 km · ~8 min".
  *
  * The minutes follow the printed distance, not the hidden metres, so one printed distance
  * always carries one number of minutes; a half minute rounds to the even minute (2,2 km is

@@ -39,7 +39,7 @@ describe('real temporary screens', () => {
     expect(screen.screen?.kind).toBe('temporary');
     expect(screen.screen?.stop?.name).toContain('Jelačića');
     // The legacy body's stop is the place, chosen by the operator; the area stays as sent.
-    expect(screen.screen).toMatchObject({ area: 'donji-grad', place: TRG_PLACE, placeSet: true, frame: 6 });
+    expect(screen.screen).toMatchObject({ area: 'donji-grad', place: TRG_PLACE, placeSet: true, frame: 4 });
     expect(screen.screen?.expiresAt).toBeGreaterThan(Date.now() + 23 * 60 * 60_000);
     const kiosk = await connectWs(`/ws/beacon/${screen.beaconId}`, '192.0.2.4');
     const frame = await authKiosk(kiosk, screen.secret);
@@ -69,7 +69,7 @@ describe('real temporary screens', () => {
     // The record stores no place; every read names Trg bana Jelačića with placeSet false, so
     // the list and the departures have a place while the map keeps the whole-city window.
     expect(screen.screen).toEqual({
-      kind: 'temporary', expiresAt: screen.screen!.expiresAt, stop: null, area: 'zagreb', place: TRG_PLACE, placeSet: false, frame: 6,
+      kind: 'temporary', expiresAt: screen.screen!.expiresAt, stop: null, area: 'zagreb', place: TRG_PLACE, placeSet: false, frame: 4,
     });
     expect(await storedPlaceMeta(screen.beaconId)).toBe('');
     const kiosk = await connectWs(`/ws/beacon/${screen.beaconId}`, '192.0.2.9');
@@ -78,7 +78,7 @@ describe('real temporary screens', () => {
     // The settings panel's frame, over that same socket, re-frames the screen.
     kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: '106_1', area: 'trnje' }));
     const after = await kiosk.inbox.nextOfType('codes');
-    expect(after.screen).toMatchObject({ area: 'trnje', place: TRG_PLACE, placeSet: true, frame: 6 });
+    expect(after.screen).toMatchObject({ area: 'trnje', place: TRG_PLACE, placeSet: true, frame: 4 });
     expect((after.screen as { stop: { name: string } }).stop.name).toContain('Jelačića');
     kiosk.ws.close(1000, 'done');
     const listed = (await indexStub(testEnv).listBeacons()).find((b) => b.beaconId === screen.beaconId);
@@ -176,12 +176,12 @@ describe('real temporary screens', () => {
 // travels by its id only (the server fills its name and point); an address carries
 // its point, which must lie inside Zagreb. The area follows from the place.
 describe('screens with a place (place-v2)', () => {
-  it('a stop place and frame 8: the stop, its district and its name in the label, read back unchanged by the grant and the room', async () => {
-    const response = await createScreen({ place: { kind: 'stop', stopId: '106_1', address: 'Trg bana Josipa Jelačića 3' }, frame: 8 });
+  it('a stop place and frame 6: the stop, its district and its name in the label, read back unchanged by the grant and the room', async () => {
+    const response = await createScreen({ place: { kind: 'stop', stopId: '106_1', address: 'Trg bana Josipa Jelačića 3' }, frame: 6 });
     expect(response.status).toBe(201);
     const screen = await response.json<CreateBeaconResponse>();
     expect(screen.screen).toMatchObject({
-      stop: { id: '106_1' }, area: TRG_STOP.district, frame: 8, placeSet: true,
+      stop: { id: '106_1' }, area: TRG_STOP.district, frame: 6, placeSet: true,
       place: { ...TRG_PLACE, address: 'Trg bana Josipa Jelačića 3' },
     });
     expect(screen.screen!.place!.name).toContain('Jelačića');
@@ -210,7 +210,7 @@ describe('screens with a place (place-v2)', () => {
     expect(response.status).toBe(201);
     const screen = await response.json<CreateBeaconResponse>();
     expect(screen.screen).toMatchObject({
-      stop: null, area: districtOf(15.97, 45.8135) ?? 'zagreb', frame: 6, placeSet: true,
+      stop: null, area: districtOf(15.97, 45.8135) ?? 'zagreb', frame: 4, placeSet: true,
     });
     expect(screen.screen!.place).toEqual({ kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' });
     const listed = (await indexStub(testEnv).listBeacons()).find((b) => b.beaconId === screen.beaconId);
@@ -220,8 +220,8 @@ describe('screens with a place (place-v2)', () => {
   it('keeps an explicit area beside a place, and a frame without a place', async () => {
     const withArea = await (await createScreen({ place: { kind: 'stop', stopId: '106_1' }, area: 'trnje' })).json<CreateBeaconResponse>();
     expect(withArea.screen).toMatchObject({ area: 'trnje', place: TRG_PLACE, placeSet: true });
-    const frameOnly = await (await createScreen({ frame: 4 })).json<CreateBeaconResponse>();
-    expect(frameOnly.screen).toMatchObject({ area: 'zagreb', stop: null, place: TRG_PLACE, placeSet: false, frame: 4 });
+    const frameOnly = await (await createScreen({ frame: 2 })).json<CreateBeaconResponse>();
+    expect(frameOnly.screen).toMatchObject({ area: 'zagreb', stop: null, place: TRG_PLACE, placeSet: false, frame: 2 });
   });
 
   it('fits a default label that a long street name would push past 80 characters, dropping whole words', async () => {
@@ -261,7 +261,7 @@ describe('screens with a place (place-v2)', () => {
     const nullPlace = await createScreen({ place: null });
     expect(nullPlace.status).toBe(201);
     const city = await nullPlace.json<CreateBeaconResponse>();
-    expect(city.screen).toMatchObject({ stop: null, area: 'zagreb', place: TRG_PLACE, placeSet: false, frame: 6 });
+    expect(city.screen).toMatchObject({ stop: null, area: 'zagreb', place: TRG_PLACE, placeSet: false, frame: 4 });
     expect(await storedPlaceMeta(city.beaconId)).toBe('');
     const absent = await createScreen({ stopId: '236_2' });
     expect(absent.status).toBe(201);
@@ -277,7 +277,7 @@ describe('screens with a place (place-v2)', () => {
     expect(await both.json()).toEqual({ error: 'bad-request', field: 'place' });
   });
 
-  it('answers 400 with the field for a place it cannot take, a frame outside 4/6/8, or a place beside a stopId', async () => {
+  it('answers 400 with the field for a place it cannot take, a frame outside 2/4/6 (a legacy 8 too), or a place beside a stopId', async () => {
     const cases: Array<[unknown, string]> = [
       [{ place: { kind: 'address', name: 'X', lon: 0, lat: 0 } }, 'place'],
       [{ place: { kind: 'address', name: 'Beč', lon: 16.37, lat: 48.21 } }, 'place'],
@@ -293,6 +293,7 @@ describe('screens with a place (place-v2)', () => {
       [{ place: null, stopId: '106_1' }, 'place'],
       [{ place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, stopId: '106_1' } }, 'place'],
       [{ frame: 5 }, 'frame'],
+      [{ frame: 8 }, 'frame'],
       [{ frame: '6' }, 'frame'],
       [{ place: { kind: 'stop', stopId: '106_1' }, frame: null }, 'frame'],
     ];

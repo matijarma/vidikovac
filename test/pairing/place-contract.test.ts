@@ -40,10 +40,10 @@ describe('S1: worker/protocol.ts place-v2', () => {
 
   it('keeps screen-set version 1 beside version 2', () => {
     const v1: BeaconClientMessage = { t: 'screen-set', version: 1, stopId: '106_1', area: 'zagreb' };
-    const v2stop: BeaconClientMessage = { t: 'screen-set', version: 2, place: { kind: 'stop', stopId: '236_2' }, frame: 8 };
-    const v2city: BeaconClientMessage = { t: 'screen-set', version: 2, place: null, frame: 6 };
+    const v2stop: BeaconClientMessage = { t: 'screen-set', version: 2, place: { kind: 'stop', stopId: '236_2' }, frame: 6 };
+    const v2city: BeaconClientMessage = { t: 'screen-set', version: 2, place: null, frame: 4 };
     const v2address: BeaconClientMessage = {
-      t: 'screen-set', version: 2, place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 4,
+      t: 'screen-set', version: 2, place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 2,
     };
     for (const message of [v1, v2stop, v2city, v2address]) expect(JSON.parse(JSON.stringify(message))).toEqual(message);
     expectTypeOf<Extract<BeaconClientMessage, { t: 'screen-set'; version: 2 }>['frame']>().toEqualTypeOf<FrameStops>();
@@ -75,9 +75,9 @@ describe('WP3 step 0: worker/pairing/place.ts', () => {
     expect(isTramRoute('no-such-route')).toBe(false);
   });
 
-  it('accepts only the frames 4, 6 and 8', () => {
-    expect([4, 6, 8].map(parseFrame)).toEqual([4, 6, 8]);
-    expect([5, '6', null, undefined, 6.5].map(parseFrame)).toEqual([null, null, null, null, null]);
+  it('accepts only the frames 2, 4 and 6; a legacy 8 is refused', () => {
+    expect([2, 4, 6].map(parseFrame)).toEqual([2, 4, 6]);
+    expect([8, 5, '4', null, undefined, 4.5].map(parseFrame)).toEqual([null, null, null, null, null, null]);
   });
 
   it('exposes the validation and enrichment signatures WP3 fills', () => {

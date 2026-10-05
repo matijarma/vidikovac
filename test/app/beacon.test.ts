@@ -131,8 +131,8 @@ describe('createBeaconClient', () => {
     client.setScreen({ place: { kind: 'stop', stopId: '106_1' }, frame: 6 });
     expect(sockets[0]!.json(0)).toEqual({ t: 'screen-set', version: 2, place: { kind: 'stop', stopId: '106_1' }, frame: 6 });
     // The whole city is an explicit null, never an omitted place.
-    client.setScreen({ place: null, frame: 8 });
-    expect(sockets[0]!.json(1)).toEqual({ t: 'screen-set', version: 2, place: null, frame: 8 });
+    client.setScreen({ place: null, frame: 2 });
+    expect(sockets[0]!.json(1)).toEqual({ t: 'screen-set', version: 2, place: null, frame: 2 });
     client.setScreen({ place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 4 });
     expect(sockets[0]!.json(2)).toEqual({ t: 'screen-set', version: 2, place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 4 });
     // Nothing of version 1 leaves this client any more.

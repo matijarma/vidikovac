@@ -140,12 +140,12 @@ describe('the wall’s map below its legible minimum', () => {
     const zoomed = stub();
     requestKioskMap(zoomed.maps, { ...base, widthPx: 1338, heightPx: 324, displayScale: 2 }, zoomed.adapter);
     expect(first(zoomed).prozor.pillsYield).toBe(true);
-    // Tall enough but framed below the marks' floor (Trg at 669 x 457 fits at z12.3): the discs would pile, so a strip too.
+    // Tall enough but framed below the marks' floor (Trg's Kadar 6 at 669 x 300 fits at z12.4): the discs would pile, so a strip too.
     const low = stub();
-    requestKioskMap(low.maps, { ...base, widthPx: 669, heightPx: 457 }, low.adapter);
+    requestKioskMap(low.maps, { ...base, widthPx: 669, heightPx: 300 }, low.adapter);
     expect((low.factory.mock.calls[0]![0] as { zoom: number }).zoom).toBeLessThan(12.7);
     expect(first(low).prozor.pillsYield).toBe(true);
-    // The wall's own field frames Trg at z13.2 and keeps its discs and names.
+    // The wall's own field frames Trg at z14 and keeps its discs and names.
     const tall = stub();
     requestKioskMap(tall.maps, { ...base, widthPx: 1170, heightPx: 803 }, tall.adapter);
     expect(first(tall).prozor.pillsYield).toBeUndefined();

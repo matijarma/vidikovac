@@ -5,7 +5,7 @@
 //
 // Six rows of click-toggles, each click changing the state at once -- no
 // draft, no Spremi: Mjesto (the place, changed through the shared "Adresa ili
-// stajalište" field or set to the whole city), Kadar (4 / 6 / 8 stops),
+// stajalište" field or set to the whole city), Kadar (2 / 4 / 6 stops),
 // Prikaz (map / schema), Tema, Ritam (20 / 30 / 60 s) and Zaslon (the expiry
 // and the one way to forget the screen).
 //

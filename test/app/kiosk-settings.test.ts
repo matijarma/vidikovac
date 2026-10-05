@@ -66,7 +66,7 @@ function panel(opts: { screen?: Partial<SettingsScreen>; online?: boolean; theme
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const time = fakeClock();
-  let screen: SettingsScreen = { place: KVATERNIKOV, frame: 6, expiresAt: NOW + 20 * 3_600_000, ...opts.screen };
+  let screen: SettingsScreen = { place: KVATERNIKOV, frame: 4, expiresAt: NOW + 20 * 3_600_000, ...opts.screen };
   let online = opts.online ?? true;
   let theme: ThemePreference = opts.theme ?? 'solar';
   let rhythm: Rhythm = 20;
@@ -130,8 +130,8 @@ describe('Postavke: one click-toggle per row', () => {
     expect([...p.handle.element.querySelectorAll('.k-settings-label')].map(text)).toEqual(['Mjesto', 'Kadar', 'Prikaz', 'Tema', 'Ritam', 'Zaslon']);
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Kvaternikov trg');
     expect(text(p.q('[data-testid=toggle-place]'))).toBe('Promijeni');
-    expect(p.q('[data-testid=toggle-frame]').dataset.value).toBe('6');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
+    expect(p.q('[data-testid=toggle-frame]').dataset.value).toBe('4');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
     expect(p.q('[data-testid=toggle-view]').dataset.value).toBe('map');
     expect(text(p.q('[data-testid=toggle-view]'))).toBe('Prikaz: karta');
     expect(text(p.q('[data-testid=toggle-theme]'))).toBe('Tema: po suncu');
@@ -152,17 +152,17 @@ describe('Postavke: one click-toggle per row', () => {
     expect(p.q('[data-testid=settings-place-city]').hidden).toBe(true);
   });
 
-  it('cycles Kadar 6 → 8 → 4 → 6 on the button itself, the text changing at once', () => {
+  it('cycles Kadar 4 → 6 → 2 → 4 on the button itself, the text changing at once', () => {
     const p = panel();
     p.handle.open();
     const frame = p.q('[data-testid=toggle-frame]');
     p.click('toggle-frame');
-    expect(frame.dataset.value).toBe('8');
-    expect(text(frame)).toBe('Kadar: 8 stajališta odavde');
+    expect(frame.dataset.value).toBe('6');
+    expect(text(frame)).toBe('Kadar: 6 stajališta odavde');
+    p.click('toggle-frame');
+    expect(text(frame)).toBe('Kadar: 2 stajališta odavde');
     p.click('toggle-frame');
     expect(text(frame)).toBe('Kadar: 4 stajališta odavde');
-    p.click('toggle-frame');
-    expect(text(frame)).toBe('Kadar: 6 stajališta odavde');
   });
 
   it('applies Prikaz, Ritam and Tema at once in this browser, never as a frame to the DO', () => {
@@ -191,7 +191,7 @@ describe('Postavke: one click-toggle per row', () => {
   it('speaks English from the one catalogue', () => {
     const p = panel({ locale: 'en' });
     p.handle.open();
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Frame: 6 stops from here');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Frame: 4 stops from here');
     expect(text(p.q('[data-testid=toggle-rhythm]'))).toBe('Rhythm: 20 s');
     expect(text(p.q('[data-testid=toggle-view]'))).toBe('View: map');
   });
@@ -205,11 +205,11 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.time.advance(SETTINGS_SEND_DELAY_MS - 1);
     expect(p.sent).toEqual([]);
     p.time.advance(1);
-    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '236_2' }, frame: 8 }]);
+    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '236_2' }, frame: 6 }]);
     // The panel waits for the DO's answer without closing, and repaints from it.
     p.answer();
     expect(p.handle.isOpen()).toBe(true);
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 8 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
     p.time.advance(SAVE_TIMEOUT_MS * 2);
     expect(p.sent).toHaveLength(1);
     expect(p.q('[data-testid=settings-error]').hidden).toBe(true);
@@ -218,15 +218,15 @@ describe('Postavke: the send queue and the DO’s window', () => {
   it('three quick clicks send one frame carrying the last state', () => {
     const p = panel();
     p.handle.open();
-    p.click('toggle-frame'); // 8
+    p.click('toggle-frame'); // 6
     p.time.advance(300);
-    p.click('toggle-frame'); // 4
+    p.click('toggle-frame'); // 2
     p.time.advance(300);
     p.click('toggle-place');
-    p.click('settings-place-city'); // the whole city, frame 4
+    p.click('settings-place-city'); // the whole city, frame 2
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Cijeli grad');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent).toEqual([{ place: null, frame: 4 }]);
+    expect(p.sent).toEqual([{ place: null, frame: 2 }]);
     p.answer();
     p.time.advance(SCREEN_SET_MIN_MS + SAVE_TIMEOUT_MS);
     expect(p.sent).toHaveLength(1);
@@ -245,37 +245,37 @@ describe('Postavke: the send queue and the DO’s window', () => {
   it('a second change inside five seconds waits for the window, counted from the DO’s answer', () => {
     const p = panel();
     p.handle.open();
-    p.click('toggle-frame'); // 8
+    p.click('toggle-frame'); // 6
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     expect(p.sent).toHaveLength(1);
     p.time.advance(200);
     p.answer();
-    p.click('toggle-frame'); // 4
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
+    p.click('toggle-frame'); // 2
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 2 stajališta odavde');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     expect(p.sent).toHaveLength(1);
     p.time.advance(SCREEN_SET_MIN_MS - SETTINGS_SEND_DELAY_MS - 1);
     expect(p.sent).toHaveLength(1);
     p.time.advance(1);
-    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '236_2' }, frame: 8 }, { place: { kind: 'stop', stopId: '236_2' }, frame: 4 }]);
+    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '236_2' }, frame: 6 }, { place: { kind: 'stop', stopId: '236_2' }, frame: 2 }]);
   });
 
   it('keeps one frame in flight: a change made before the answer goes after it, the latest state winning', () => {
     const p = panel();
     p.handle.open();
-    p.click('toggle-frame'); // 8
-    p.time.advance(SETTINGS_SEND_DELAY_MS);
-    p.click('toggle-frame'); // 4
     p.click('toggle-frame'); // 6
-    p.click('toggle-frame'); // 8 again: the frame in flight already carries it
+    p.time.advance(SETTINGS_SEND_DELAY_MS);
+    p.click('toggle-frame'); // 2
+    p.click('toggle-frame'); // 4
+    p.click('toggle-frame'); // 6 again: the frame in flight already carries it
     p.time.advance(SCREEN_SET_MIN_MS);
     expect(p.sent).toHaveLength(1);
     p.answer();
     p.time.advance(SCREEN_SET_MIN_MS);
     expect(p.sent).toHaveLength(1);
-    p.click('toggle-frame'); // 4
+    p.click('toggle-frame'); // 2
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent.map((f) => f.frame)).toEqual([8, 4]);
+    expect(p.sent.map((f) => f.frame)).toEqual([6, 2]);
   });
 
   it('a refusal repaints the toggles from the DO’s truth with one sentence, and nothing is re-sent', () => {
@@ -285,10 +285,10 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     // An error word that belongs to something else on the socket is not this panel's.
     p.handle.refused('auth-required');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 8 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
     expect(p.q('[data-testid=settings-error]').hidden).toBe(true);
     p.handle.refused('bad-frame');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
     expect(text(p.q('[data-testid=settings-error]'))).toBe('Poslužitelj nije prihvatio mjesto. Odaberi ponovno.');
     expect(p.handle.isOpen()).toBe(true);
     p.time.advance(SCREEN_SET_MIN_MS + SAVE_TIMEOUT_MS);
@@ -309,7 +309,7 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     p.handle.refused('screen-set-rate');
     expect(text(p.q('[data-testid=settings-error]'))).toBe('Pričekaj koji trenutak pa odaberi ponovno.');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
     p.click('toggle-frame');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     expect(p.sent).toHaveLength(1);
@@ -326,11 +326,11 @@ describe('Postavke: the send queue and the DO’s window', () => {
     expect(p.q('[data-testid=settings-error]').hidden).toBe(true);
     p.time.advance(1);
     expect(text(p.q('[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
     p.time.advance(60_000);
     expect(p.sent).toHaveLength(1);
-    p.answer({ place: { kind: 'stop', stopId: '236_2' }, frame: 8 });
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 8 stajališta odavde');
+    p.answer({ place: { kind: 'stop', stopId: '236_2' }, frame: 6 });
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
     expect(p.handle.isOpen()).toBe(true);
   });
 
@@ -342,7 +342,7 @@ describe('Postavke: the send queue and the DO’s window', () => {
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     expect(p.sent).toEqual([]);
     expect(text(p.q('[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
-    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 6 stajališta odavde');
+    expect(text(p.q('[data-testid=toggle-frame]'))).toBe('Kadar: 4 stajališta odavde');
   });
 
   it('a click made just before the panel closes is still sent', () => {
@@ -400,7 +400,7 @@ describe('Postavke: Mjesto through the shared field', () => {
     p.handle.open();
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Zapruđe · Zapruđe 12');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '200_1', address: 'Zapruđe 12' }, frame: 6 }]);
+    expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '200_1', address: 'Zapruđe 12' }, frame: 4 }]);
   });
 
   it('sends an address place with its point, and names it by what was typed', () => {
@@ -412,19 +412,19 @@ describe('Postavke: Mjesto through the shared field', () => {
     p.fields[0]!.options.onChange({ kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, '');
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Ilica 25');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent).toEqual([{ place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 6 }]);
+    expect(p.sent).toEqual([{ place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 4 }]);
     p.answer();
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Ilica 25');
   });
 
   it('"Cijeli grad" sends place null with the frame it shows', () => {
-    const p = panel({ screen: { frame: 8 } });
+    const p = panel({ screen: { frame: 6 } });
     p.handle.open();
     p.click('toggle-place');
     p.click('settings-place-city');
     expect(p.fields[0]!.destroyed).toBe(true);
     p.time.advance(SETTINGS_SEND_DELAY_MS);
-    expect(p.sent).toEqual([{ place: null, frame: 8 }]);
+    expect(p.sent).toEqual([{ place: null, frame: 6 }]);
   });
 
   it('a second press on Promijeni closes the field, and so does closing the panel', () => {
@@ -780,36 +780,38 @@ describe('the long press on the brand', () => {
 describe('what the wall reads from the screen record', () => {
   const base: ScreenMetadata = { kind: 'temporary', expiresAt: NOW + 1, stop: null, area: 'zagreb' };
   it('takes the DO’s place and frame; the read-path default place is not a chosen one', () => {
-    expect(wallPlaceOf({ ...base, place: KVATERNIKOV, placeSet: true, frame: 8 }, isTram)).toEqual({ place: KVATERNIKOV, placeSet: true, frame: 8 });
+    expect(wallPlaceOf({ ...base, place: KVATERNIKOV, placeSet: true, frame: 6 }, isTram)).toEqual({ place: KVATERNIKOV, placeSet: true, frame: 6 });
     const trg = { kind: 'tram' as const, name: TRG.name, lon: TRG.lon, lat: TRG.lat, stopId: TRG.id };
-    expect(wallPlaceOf({ ...base, place: trg, placeSet: false, frame: 6 }, isTram)).toEqual({ place: trg, placeSet: false, frame: 6 });
+    expect(wallPlaceOf({ ...base, place: trg, placeSet: false, frame: 4 }, isTram)).toEqual({ place: trg, placeSet: false, frame: 4 });
     // A place without placeSet came from a DO that stored it: chosen.
     expect(wallPlaceOf({ ...base, place: KVATERNIKOV }, isTram).placeSet).toBe(true);
   });
-  it('reads a record from before place-v2 by its stop, frame 6', () => {
-    expect(wallPlaceOf({ ...base, stop: ZAPRUDE }, isTram)).toEqual({ place: { kind: 'tram', name: 'Zapruđe', lon: 15.99, lat: 45.77, stopId: '200_1' }, placeSet: true, frame: 6 });
+  it('reads a record from before place-v2 by its stop, frame 4', () => {
+    expect(wallPlaceOf({ ...base, stop: ZAPRUDE }, isTram)).toEqual({ place: { kind: 'tram', name: 'Zapruđe', lon: 15.99, lat: 45.77, stopId: '200_1' }, placeSet: true, frame: 4 });
     expect(wallPlaceOf({ ...base, stop: { ...ZAPRUDE, routes: ['220'] } }, isTram).place?.kind).toBe('bus');
   });
   it('is the whole city for a record with no place and no stop, an explicit null, or no record', () => {
     for (const screen of [base, { ...base, place: null }, { ...base, place: null, stop: ZAPRUDE }, null, undefined]) {
-      expect(wallPlaceOf(screen, isTram)).toEqual({ place: null, placeSet: false, frame: 6 });
+      expect(wallPlaceOf(screen, isTram)).toEqual({ place: null, placeSet: false, frame: 4 });
     }
-    expect(wallPlaceOf({ ...base, frame: 5 as never }, isTram).frame).toBe(6);
+    expect(wallPlaceOf({ ...base, frame: 5 as never }, isTram).frame).toBe(4);
+    // A Kadar 8 stored before 5 Oct 2026 is no longer a Kadar: it reads as the default, nothing migrated.
+    expect(wallPlaceOf({ ...base, place: KVATERNIKOV, frame: 8 as never }, isTram).frame).toBe(4);
   });
   it('uses the frame fallback without line order, a handheld band, or the whole-city window', () => {
     const place = { kind: 'address' as const, name: 'Ilica', lon: 15.97, lat: 45.81 };
     const stops = ring(place, [300, 600, 900, 1200, 1500, 1800, 2100, 2400]);
-    const wall = { place, placeSet: true, frame: 6 as const };
-    const measured = frameSpanM(frameRadiusM(place, frameStopsFrom(stops, isTram), 6));
+    const wall = { place, placeSet: true, frame: 4 as const };
+    const measured = frameSpanM(frameRadiusM(place, frameStopsFrom(stops, isTram), 4));
     expect(wallSpanM({ handheld: false, wall, stops, isTram })).toBe(measured);
     // A ring supplies no tram call order. The integrated camera measures the
     // along-line radius in kiosk.ts once the network arrives (decision 6).
-    expect(measured).toBe(2 * FRAME_RADIUS_M[6]);
-    expect(wallSpanM({ handheld: false, wall: { ...wall, frame: 4 }, stops, isTram })).toBe(2 * FRAME_RADIUS_M[4]);
-    expect(wallSpanM({ handheld: false, wall, stops: null, isTram })).toBe(2 * FRAME_RADIUS_M[6]);
+    expect(measured).toBe(2 * FRAME_RADIUS_M[4]);
+    expect(wallSpanM({ handheld: false, wall: { ...wall, frame: 2 }, stops, isTram })).toBe(2 * FRAME_RADIUS_M[2]);
+    expect(wallSpanM({ handheld: false, wall, stops: null, isTram })).toBe(2 * FRAME_RADIUS_M[4]);
     expect(wallSpanM({ handheld: true, wall, stops, isTram })).toBe(HANDHELD_SPAN_M);
     expect(wallSpanM({ handheld: false, wall: { ...wall, placeSet: false }, stops, isTram })).toBe(FIELD_SPAN_M);
-    expect(wallSpanM({ handheld: false, wall: { place: null, placeSet: false, frame: 6 }, stops, isTram })).toBe(FIELD_SPAN_M);
+    expect(wallSpanM({ handheld: false, wall: { place: null, placeSet: false, frame: 4 }, stops, isTram })).toBe(FIELD_SPAN_M);
   });
   it('names a place in the Mjesto row by what the operator typed', () => {
     const s = kioskStrings('hr');

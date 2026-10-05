@@ -86,7 +86,7 @@ describe('docs/kiosk.md', () => {
       'Postavke su prekidači: svaki klik odmah mijenja stanje; jedan okvir prema poslužitelju najviše svakih pet sekundi',
       '**Adresa ili stajalište**',
       '**Pokreni**',
-      '„Na zaslonu: Kvaternikov trg i 6 stajališta uokolo”',
+      '„Na zaslonu: Kvaternikov trg i 4 stajališta uokolo”',
       '„Na zaslonu: cijeli grad.”',
       '„Poslužitelj nije prihvatio mjesto. Odaberi ponovno.”',
     ]) expect(kiosk, text).toContain(text);

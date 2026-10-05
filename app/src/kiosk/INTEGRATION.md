@@ -16,7 +16,9 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
   this order: a place somebody chose (`placeSet` true) frames N stops around
   it on a wall, the square of side 2R on the field's shorter side
   (`map/frame.ts` `frameView`, R measured per place along the tram lines by
-  `shared/city/frame.ts` `frameRadiusM`, Kadar 4 / 6 / 8); a phone's band, and
+  `shared/city/frame.ts` `frameRadiusM`, Kadar 2 / 4 / 6, the 25th percentile
+  of the ways out held to each Kadar's `FRAME_RADIUS_CAP_M`, about
+  0.7 / 1 / 1.3 km at Trg bana J. Jelačića); a phone's band, and
   a stop from a caller before place-v2, keep the centred street-level camera;
   the read-path default place (`placeSet` false) keeps `CITY_WINDOW`, the whole city fitted
   to the field with 24 px of clearance. The frame and the window are fitted
@@ -99,7 +101,7 @@ twice for one screen and never reaches into MapLibre itself.
 Contract testids across this hand-off (global constraints, contract 8; the
 whole probe list is `docs/companion-2026-09-22.md` §15.6): `kiosk-live` names
 the field's section; `kiosk-map-host` and `kiosk-map` name the map container
-inside it, and `kiosk-map-host` carries `data-frame="4|6|8"` and, once the
+inside it, and `kiosk-map-host` carries `data-frame="2|4|6"` and, once the
 style idles, `data-major-labels="<count>"`; `map-note` is the outage
 note over the map, and `.k-map-legend` holds the three legend items of
 `kiosk.legend.*`. The front page carries no panel: beside the field it has the
@@ -247,7 +249,7 @@ the start screen; there is no wizard and no provisioning aside, on a wall or
 on a phone. Its rows are click-toggles that name their current state: Mjesto
 (`toggle-place` opens the shared `kiosk/place-field.ts` field,
 `settings-place-city` sets the whole city), Kadar
-(`toggle-frame[data-value=4|6|8]`), Prikaz
+(`toggle-frame[data-value=2|4|6]`), Prikaz
 (`toggle-view[data-value=map|schema]`), Tema (`toggle-theme`), Ritam
 (`toggle-rhythm[data-value=20|30|60]`) and Zaslon (expiry and "Zaboravi
 zaslon"). Prikaz and Ritam belong to this browser (`kiosk/prefs.ts`,
@@ -296,13 +298,14 @@ socket, `ScreenMetadata` on `joined`, 10-minute screens and 5-minute one-hop
 grants are unchanged.
 
 `ScreenMetadata` carries `place` (`ScreenPlace`, `shared/city/place.ts`),
-`placeSet` and `frame` (`FrameStops`, 4 | 6 | 8, `shared/city/frame.ts`),
+`placeSet` and `frame` (`FrameStops`, 2 | 4 | 6, `shared/city/frame.ts`),
 always present on the create response, the scan grant and the room `joined`
 frame. Records made before place-v2 are enriched on read (`screenMetadata()`
 and `worker/pairing/place.ts`), never migrated: a stored stop is the chosen
 place (`placeSet: true`); no place and no stop reads as Trg bana J. Jelačića
 with `placeSet: false`, so the list and the departures always have a place
-while the map keeps the whole-city window; a missing frame reads as 6. The
+while the map keeps the whole-city window; a missing frame, or a Kadar 8
+stored before Kadar 2 / 4 / 6 (5 Oct 2026), reads as 4, the default. The
 kiosk reads the same answer through `wallPlaceOf()` (`kiosk/settings.ts`),
 which also covers a credential copy stored before the deploy, and frames the
 invitation with `wallSpanM()`: the whole measured circle

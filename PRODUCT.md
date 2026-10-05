@@ -53,8 +53,9 @@ Događanja and Još; and "tracked estimates are labelled on every row".
 
 The wall now names its place in the header (a stop or a street;
 Trg bana J. Jelačića for a screen whose setup field was left empty) and frames
-six stops around it by default (Kadar: 4, 6 or 8 "stajališta odavde"), the
-radius measured per place; a screen set to the whole city keeps the whole-city
+four stops around it by default (Kadar: 2, 4 or 6 "stajališta odavde"), the
+radius measured per place within each step's metre caps (about 0.7 / 1 / 1.3 km
+at Trg bana Jelačića); a screen set to the whole city keeps the whole-city
 window. One written sentence with a coloured kicker (Promet, Kultura, Vrijeme,
 Bicikli, Noćas, Radovi) changes with the screen's rhythm, every 20 seconds by
 default: at most 80 characters, never cut with an ellipsis, shown only while
@@ -138,7 +139,7 @@ saying what the screen will show, and **Pokreni**. A picked stop is the
 screen's place; a picked street becomes the nearest tram stop within 400 m,
 else the nearest bus stop within 300 m, else the address itself; an empty
 field keeps the whole-city window, with Trg bana Jelačića as the place for the
-list and the departures. Place, frame (Kadar: 4, 6 or 8 stops), view, theme,
+list and the departures. Place, frame (Kadar: 2, 4 or 6 stops), view, theme,
 rhythm and expiry sit in an on-screen settings panel opened by a long press on
 the brand; the header names the place and carries no operator control. The map
 takes the whole left column. A screen set to the whole city opens on the city
@@ -148,9 +149,10 @@ and no other stop mark, the BAJS stations that have a bike as small teal dots
 without a number, closures, the on-duty pharmacy and tonight's venues,
 unnamed; neighbourhood names leave the basemap and buses join the picture only
 once the camera is in a neighbourhood. A screen with a place opens on N stops
-around it (Kadar: 4, 6 or 8 "stajališta odavde", default 6), its radius
-measured per place along the tram lines that serve it, the same number the
-"U blizini" pill prints ("2 km · ~15 min" at 2 km). On the frame buses stay at
+around it (Kadar: 2, 4 or 6 "stajališta odavde", default 4), its radius
+measured per place along the tram lines that serve it and held to each
+step's metre caps, the same number the "U blizini" pill prints
+("1 km · ~8 min" at 1 km). On the frame buses stay at
 every hour, every BAJS station is a disc with its count (a small teal dot
 without a number when it has no bike, grey and blank when the count is
 unknown, never "?"), venues appear only with a

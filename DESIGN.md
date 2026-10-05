@@ -96,7 +96,7 @@ or Space while the wall has focus.
 The map has a legend of three plain items (tram route, BAJS bike count,
 culture tonight), never a caveat, and no legend stands where no map is drawn
 (lagano). A screen with a place (a stop or an address) opens on a frame of N
-stops around it (Kadar: 4, 6 or 8 "stajališta odavde", default 6), its radius
+stops around it (Kadar: 2, 4 or 6 "stajališta odavde", default 4), its radius
 measured per place and the same number the "U blizini" circle and its pill
 use. The frame is a neighbourhood: buses at every hour, every BAJS station a
 disc carrying its count (a station with no bike a small teal dot without a
@@ -239,7 +239,7 @@ neighbourhood. Compact landscape and portrait keep the same grammar in their
 own arrangements.
 
 The map is a meaningful geographic view, not a background beneath a route
-board. The screen's place and frame (Kadar: 4, 6 or 8 stops around it,
+board. The screen's place and frame (Kadar: 2, 4 or 6 stops around it,
 measured per place), and public selections, determine framing; without a
 chosen place the whole-city window stays. Do not force every vehicle number to
 overlap at terminals: retain dots and collision-aware labels. Stop rings keep
@@ -253,7 +253,7 @@ place. Route count is not a measure of importance and is not
 used for this. From the thinning zoom up every name is back, exactly as
 derived. A framed screen names by being framed, not by zoom: whatever its
 Kadar, it names the place and the tram interchanges inside its radius and no
-street, so Kadar 4, 6 or 8 never changes the naming grammar; the
+street, so Kadar 2, 4 or 6 never changes the naming grammar; the
 thinning rule belongs to the whole-city window alone. Preserve the map
 instance across polling and composition changes.
 

@@ -504,15 +504,15 @@ describe('the field camera and the paired camera', () => {
     expect(KIOSK_EMPHASIS).toEqual(['event', 'quake', 'assembly', 'pharmacy']);
   });
 
-  it('frames a chosen place on a wall: Kadar 6\u2019s 2 km on the field\u2019s shorter side unless a measured radius is handed in; a phone\u2019s band keeps its glance', () => {
+  it('frames a chosen place on a wall: Kadar 4\u2019s 950 m on the field\u2019s shorter side unless a measured radius is handed in; a phone\u2019s band keeps its glance', () => {
     const view = fieldView({ stop: STOP, placeSet: true, district: null, widthPx: 1400, heightPx: 888, spanM: FIELD_SPAN_M });
-    expect(view).toEqual({ ...frameView(STOP, 2000, 1400, 888), emphasis: KIOSK_EMPHASIS, outline: true });
+    expect(view).toEqual({ ...frameView(STOP, 950, 1400, 888), emphasis: KIOSK_EMPHASIS, outline: true });
     expect(view.center).toEqual([STOP.lon, STOP.lat]);
     // The measured radius wins over the Kadar's fallback, and the Kadar picks the fallback.
     const wall = { stop: STOP, placeSet: true, district: null, widthPx: 1250, heightPx: 870, spanM: FIELD_SPAN_M };
-    expect(fieldView({ ...wall, radiusM: 2182 }).zoom).toBe(frameView(STOP, 2182, 1250, 870).zoom);
-    expect(fieldView({ ...wall, frame: 8 }).zoom).toBeCloseTo(13.02, 2);
-    expect(fieldView({ ...wall, frame: 4 }).zoom).toBeCloseTo(14.07, 2);
+    expect(fieldView({ ...wall, radiusM: 1300 }).zoom).toBe(frameView(STOP, 1300, 1250, 870).zoom);
+    expect(fieldView({ ...wall, frame: 6 }).zoom).toBeCloseTo(14.13, 2);
+    expect(fieldView({ ...wall, frame: 2 }).zoom).toBeCloseTo(15.07, 2);
     // A phone's band keeps its glance at the stop: the handheld span across its width.
     expect(fieldView({ ...wall, widthPx: 356, heightPx: 420, spanM: HANDHELD_SPAN_M, handheld: true })).toEqual({ zoom: fieldZoom(356, STOP.lat, HANDHELD_SPAN_M), emphasis: KIOSK_EMPHASIS, outline: true, center: [STOP.lon, STOP.lat] });
   });
@@ -532,7 +532,7 @@ describe('the field camera and the paired camera', () => {
     expect(framedPlace({ stop: STOP, placeSet: true })).toBe(STOP);
     expect(framedPlace({ stop: STOP, place, placeSet: true })).toBe(place);
     expect(framedPlace({ stop: null, placeSet: true })).toBeNull();
-    expect([frameRadiusOf({}), frameRadiusOf({ frame: 4 }), frameRadiusOf({ frame: 8, radiusM: 1234 })]).toEqual([2000, 1300, 1234]);
+    expect([frameRadiusOf({}), frameRadiusOf({ frame: 2 }), frameRadiusOf({ frame: 6, radiusM: 1234 })]).toEqual([950, 650, 1234]);
   });
 
   // The screen a person sets up with one button has no stop and no district:
@@ -617,22 +617,24 @@ describe('the field camera and the paired camera', () => {
 
   // The frame (WP2 step 4): the square of side 2R around the place on the
   // field's shorter side, R measured per place (shared/city/frame.ts).
-  it('frameView fits the square of side 2R on the field\u2019s shorter side: the wall frames Kadar 4 / 6 / 8 at z14.07 / 13.45 / 13.02', () => {
-    const wide = [1300, 2000, 2700].map((r) => frameView(STOP, r, 1250, 870).zoom);
-    expect(wide[0]).toBeCloseTo(14.07, 2);
-    expect(wide[1]).toBeCloseTo(13.45, 2);
-    expect(wide[2]).toBeCloseTo(13.02, 2);
-    expect(Math.abs(wide[1]! - 13.45)).toBeLessThanOrEqual(0.01);
-    // The design boxes: the compact wall clamps Kadar 8 to the floor, the totem is taller than it is wide.
+  it('frameView fits the square of side 2R on the field\u2019s shorter side: the wall frames Kadar 2 / 4 / 6\u2019s fallback at z15.07 / 14.53 / 14.13', () => {
+    const wide = [650, 950, 1250].map((r) => frameView(STOP, r, 1250, 870).zoom);
+    expect(wide[0]).toBeCloseTo(15.07, 2);
+    expect(wide[1]).toBeCloseTo(14.53, 2);
+    expect(wide[2]).toBeCloseTo(14.13, 2);
+    // The owner's ladder at Trg, 0.7 / 1.0 / 1.3 km: Kadar 6 frames where the old Kadar 4's 1.3 km fallback did.
+    expect(frameView(STOP, 1300, 1250, 870).zoom).toBeCloseTo(14.07, 2);
+    // The design boxes: the compact wall frames a little wider, the totem is taller than it is wide.
     const at = (c: 'wide' | 'compact' | 'portrait', r: number) => frameView(STOP, r, FIELD_DESIGN_WIDTH[c], FIELD_DESIGN_HEIGHT[c]).zoom;
-    expect([at('wide', 1300), at('wide', 2000), at('wide', 2700)]).toEqual(wide);
-    expect(at('compact', 1300)).toBeCloseTo(13.53, 2);
-    expect(at('compact', 2000)).toBeCloseTo(12.90, 2);
-    expect(at('compact', 2700)).toBe(FIELD_MIN_ZOOM);
+    expect([at('wide', 650), at('wide', 950), at('wide', 1250)]).toEqual(wide);
+    expect(at('compact', 650)).toBeCloseTo(14.53, 2);
+    expect(at('compact', 950)).toBeCloseTo(13.98, 2);
+    expect(at('compact', 1250)).toBeCloseTo(13.58, 2);
+    // A frame wider than the compact box can hold is clamped to the floor.
     expect(frameView(STOP, 2700, 794, 610).zoom).toBe(12.7);
-    expect(at('portrait', 1300)).toBeCloseTo(14.24, 2);
-    expect(at('portrait', 2000)).toBeCloseTo(13.62, 2);
-    expect(at('portrait', 2700)).toBeCloseTo(13.18, 2);
+    expect(at('portrait', 650)).toBeCloseTo(15.24, 2);
+    expect(at('portrait', 950)).toBeCloseTo(14.69, 2);
+    expect(at('portrait', 1250)).toBeCloseTo(14.29, 2);
     // The centre is the place itself; a box not yet laid out is the floor, never NaN; defaults are the kiosk's field limits.
     expect(frameView(STOP, 2000, 1250, 870).center).toEqual([STOP.lon, STOP.lat]);
     expect(frameView(STOP, 2000, 0, 0).zoom).toBe(12.7);
@@ -640,8 +642,8 @@ describe('the field camera and the paired camera', () => {
     expect(frameView(STOP, 100, 1250, 870).zoom).toBe(FIELD_MAX_ZOOM);
     // At the derived zoom the square's 2R fills the shorter side less the clearance, and fits the longer one.
     const ppm = 1 / metresPerPixel(wide[1]!, STOP.lat);
-    expect(4000 * ppm).toBeCloseTo(870 - 2 * 24, 0);
-    expect(4000 * ppm).toBeLessThan(1250 - 2 * 24);
+    expect(1900 * ppm).toBeCloseTo(870 - 2 * 24, 0);
+    expect(1900 * ppm).toBeLessThan(1250 - 2 * 24);
   });
 
   it('frameBounds lays out 2R of ground across and up at the place\u2019s latitude, and boundsView is the window\u2019s own fit', () => {

@@ -14,14 +14,15 @@ upute o pretraživanju dodirom. Ukratko:
   trotočjem i mijenja se u ritmu zaslona, zadano svakih 20 sekundi; na
   zaslonu ostaje barem jedan ritam, osim kad činjenica te rečenice prestane
   vrijediti.
-- Karta prikazuje mjesto i 6 stajališta uokolo (postavka Kadar: 4, 6 ili 8
-  stajališta odavde); polumjer kadra mjeri se za svako mjesto posebno. Zaslon
+- Karta prikazuje mjesto i 4 stajališta uokolo (postavka Kadar: 2, 4 ili 6
+  stajališta odavde); polumjer kadra mjeri se za svako mjesto posebno, unutar
+  čvrstih granica svakog koraka (na Trgu bana Jelačića 0,7 / 1 / 1,3 km). Zaslon
   postavljen na cijeli grad drži prozor cijeloga grada. Karta ističe ono o
   čemu govori rečenica u zaglavlju, bez pomicanja kamere; obuhvat baštine nije
   ulaz. Nema automatskih obilazaka ni kontrola istraživanja na zaslonu;
   osobno istraživanje dostupno je na telefonu.
-- Uz kartu stoji popis „U blizini · 2 km · ~15 min” (naslov ispisuje
-  izmjereni polumjer kruga i vrijeme hoda; primjer vrijedi za krug od 2 km):
+- Uz kartu stoji popis „U blizini · 1 km · ~8 min” (naslov ispisuje
+  izmjereni polumjer kruga i vrijeme hoda; primjer vrijedi za krug od 1 km):
   prvi je redak polazaka, s najviše tri polaska jedan do drugoga, svaki s
   brojem linije i vremenom, a s odredištem kad za njega stane; plavo „za N
   min” za praćeno vozilo, odnosno plavo vrijeme sata kad odbroj ne stane u
@@ -112,7 +113,7 @@ zaokruženi i sažeti kao u skupu za Grad.
    zaslona. Kad je odabrana ulica, mjesto postaje najbliže tramvajsko
    stajalište unutar 400 m, inače najbliže autobusno stajalište unutar
    300 m, inače sama adresa. Redak ispod polja kaže što će zaslon prikazati:
-   za odabrano mjesto „Na zaslonu: Kvaternikov trg i 6 stajališta uokolo”,
+   za odabrano mjesto „Na zaslonu: Kvaternikov trg i 4 stajališta uokolo”,
    a za prazno polje „Na zaslonu: cijeli grad.” Upisani tekst koji nije
    odabran među prijedlozima vrijedi samo kad je točno ime stajališta ili
    jedne ulice; inače se ispod polja pojavljuje rečenica da takvog
@@ -123,7 +124,7 @@ zaokruženi i sažeti kao u skupu za Grad.
    i dosad, i dobiva redovnu postavu zaslona koja vrijedi 24 sata: prozor
    cijeloga grada, bez stajališta, a za popis i polaske mjesto je
    Trg bana J. Jelačića. S odabranim mjestom šalje `{ place, frame }`
-   (stajalište kao `stopId`, adresa kao točka unutar Zagreba, kadar 6). Ime
+   (stajalište kao `stopId`, adresa kao točka unutar Zagreba, kadar 4). Ime
    i točku stajališta poslužitelj uzima iz vlastite tablice, a područje
    (`area`, za statistiku) izvodi iz mjesta, inače `zagreb`. Postava sama ne
    daje otključanu sesiju.
@@ -139,7 +140,7 @@ zaokruženi i sažeti kao u skupu za Grad.
 
    Retci su *Mjesto* (**Promijeni** otvara isto polje
    „Adresa ili stajalište” i gumb **Cijeli grad** za povratak na prozor
-   cijeloga grada), *Kadar* („Kadar: 6 stajališta odavde”, redom 4, 6 i 8),
+   cijeloga grada), *Kadar* („Kadar: 4 stajališta odavde”, redom 2, 4 i 6),
    *Prikaz* („Prikaz: karta” ili „Prikaz: shema”), *Tema*, *Ritam*
    („Ritam: 20 s”, redom 20, 30 i 60 s) i *Zaslon* (do kada vrijedi i
    „Zaboravi zaslon” s potvrdom). Kadar, Prikaz, Tema i Ritam imaju po jedan
@@ -225,7 +226,7 @@ artefakta), njih 29 u gradu i 12 na zadnjoj snimci; prozor cijeloga
 grada na zaslonu ne imenuje nijedno stajalište osim mjesta zaslona. Broj linija nije
 mjerilo: 111 od 114 tramvajskih stajališta vidi dvije ili više tramvajskih
 linija, pa bi "dva tramvaja" imenovalo gotovo sve. Od 13,5 naviše sva se
-imena vraćaju onakva kakva su izvedena za kadar od 2,8 km.
+imena vraćaju onakva kakva su izvedena za kadar od 2,8 km (tadašnji Kadar 8).
 Autobusi -- kapsule i njihove linije -- pridružuju se tramvajima tek kad je
 kamera na zumu 14 ili bliže; tristo kapsula nad cijelim gradom zakrilo bi
 tramvaje o kojima slika govori. Brojevi vozila prorjeđuju se pri
@@ -233,14 +234,22 @@ preklapanju, a položaji ostaju označeni točkama.
 
 Zaslon s izabranim mjestom, stajalištem ili adresom, otvara kartu na kadru
 oko tog mjesta: kadar obuhvaća onoliko stajališta koliko kaže postavka
-Kadar, 4, 6 ili 8, zadano 6. Polumjer kadra mjeri se za svako mjesto
+Kadar, 2, 4 ili 6, zadano 4. Polumjer kadra mjeri se za svako mjesto
 posebno, kao udaljenost do N-tog stajališta niz linije tramvaja koji ondje
 staju (autobusna stajališta broje se samo kad u krugu od 3 km nema nijednog
-tramvajskog stajališta), i uvijek je između 500 m i 3 km; tablica
-1,3 / 2 / 2,7 km vrijedi samo dok stajališta nisu učitana. Kamera, krug
-popisa „U blizini” i naslov tog popisa čitaju isti izmjereni broj, pa naslov
-ispisuje izmjerenu udaljenost i vrijeme hoda, na primjer
-„U blizini · 2 km · ~15 min”.
+tramvajskog stajališta). Od udaljenosti u svim smjerovima uzima se 25.
+percentil, a ne medijan, pa jedan ili dva duga smjera ne šire kadar. Svaki
+korak ima i čvrste granice: Kadar 2 od 400 do 700 m, Kadar 4 od 650 m do
+1 km, Kadar 6 od 900 m do 1,3 km, a širi kadar nikad ne obuhvaća manje od
+užega. Na Trgu bana Jelačića to je 0,7 / 1 / 1,3 km, isto na Črnomercu, a na
+Kvaternikovu trgu 0,64 / 1 / 1,3 km; većina tramvajskih stajališta stoji na
+gornjoj granici koraka. Vlasnik je 5. listopada 2026. tadašnji Kadar 4 / 6 / 8
+(na Trgu 1,5 / 2,2 / 2,8 km) ocijenio preširokim: novi Kadar 6 nešto je uži od
+staroga Kadra 4. Tablica 650 m / 950 m / 1,25 km vrijedi samo dok stajališta
+nisu učitana. Ranije spremljen Kadar 8 čita se kao zadani Kadar 4, bez
+prepisivanja zapisa. Kamera, krug popisa „U blizini” i naslov tog popisa
+čitaju isti izmjereni broj, pa naslov ispisuje izmjerenu udaljenost i vrijeme
+hoda, na primjer „U blizini · 1 km · ~8 min”.
 Kadar je susjedstvo: autobusi i autobusne linije na kadru su u svako doba
 dana; svaka BAJS stanica je disk s brojem raspoloživih bicikala, a kad
 bicikala nema, mala tirkizna točka bez broja; siv disk bez broja kad broj nije poznat ili stanica ne
@@ -249,7 +258,7 @@ programom večeras, i to s imenom; od stajališta imenuju se samo mjesto
 zaslona i tramvajska čvorišta unutar polumjera kadra, a ulice se ne imenuju.
 Izvan polumjera kadra ne crta se nijedno stajalište, disk, kulturno mjesto ni
 ime. Imena slijede
-kadar, a ne zum, pa Kadar 4, 6 ili 8 ne mijenja što se imenuje. Na karti
+kadar, a ne zum, pa Kadar 2, 4 ili 6 ne mijenja što se imenuje. Na karti
 nema oznake „+N”: nema geografskih skupina mjesta, a spojena oznaka vozila
 ispisuje svaku liniju. Legenda uz kartu opisuje ono što karta crta, bez
 upitnika: „Tramvajska linija”, uz disk s brojem „BAJS: slobodni bicikli”, uz
@@ -287,7 +296,7 @@ a sadržaj se može ponijeti samo skeniranjem.
 
 Desni stupac nosi popis „U blizini”, a ispod popisa pozivnicu. Naslov popisa
 ispisuje polumjer kruga i vrijeme hoda, na primjer
-„U blizini · 2,2 km · ~16 min”. Popis je jedna vremenska os oko mjesta. Prvo
+„U blizini · 1,3 km · ~10 min”. Popis je jedna vremenska os oko mjesta. Prvo
 idu polasci, najviše tri: plavo „za N min” za praćeno vozilo u idućih deset
 minuta, a sivi sat za vozni red i za svaki kasniji polazak. Odmah iza polazaka
 stoji najviše jedna ZET-ova obavijest, s riječima „ZET javlja” umjesto
