@@ -26,7 +26,9 @@ const overlaps = (a: Box, b: Box): boolean =>
 interface Surface { name: string; head: string; first: string; wordmark: string; still: string }
 /** The three headers that carry the wordmark: what is measured, and what must not move at all. */
 const PHONE_HEAD: Surface = { name: 'phone', head: '.ki-head', first: '[data-testid=dash-view] > :first-child', wordmark: '.ki-wordmark', still: '.ki-head > [data-key=session], .ki-head > [data-key=safety], .ki-tabbar' };
-const DESK_HEAD: Surface = { name: 'desk', head: '.ki-head', first: '[data-testid=dash-view] > :first-child', wordmark: '.ki-wordmark', still: '.ki-head > [data-key]' };
+// The desk's far end: share, session, Još and Sigurnost. The weather chip stands right after the mark's own slot (5 Oct
+// 2026), so it moves by the mark's width when DEV is on, and the spacer between them has no height.
+const DESK_HEAD: Surface = { name: 'desk', head: '.ki-head', first: '[data-testid=dash-view] > :first-child', wordmark: '.ki-wordmark', still: '.ki-head > [data-key]:not([data-key=weather]):not([data-key=space]):not([data-key=wordmark])' };
 const WALL_HEAD: Surface = { name: 'wall', head: '.k-head', first: '[data-testid=kiosk-stage]', wordmark: '.k-brand', still: '.k-head-when, .k-head-when > *' };
 
 interface Geometry {
